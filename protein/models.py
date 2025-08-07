@@ -30,6 +30,7 @@ class Protein(models.Model):
     name = models.CharField(max_length=200)
     cancer = models.ManyToManyField('CancerExpression')
     sequence = models.TextField()
+    sense = models.CharField(max_length=20, null=True)
 
     def entry_short(self):
         return self.entry_name.split("_")[0].upper()
