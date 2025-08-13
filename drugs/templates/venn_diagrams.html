@@ -95,13 +95,13 @@
   </div>
 
   <!-- Table Row (Unaffected by Flex) -->
-  <div style="font-size: 11px; white-space: nowrap; display: none;" id="table-container">
+  <div style="font-size: 11px; white-space: nowrap; display: none;margin-top:50px" id="table-container">
     <div class="row mt-4">
       <div class="col-md-12" style="margin-bottom: 50px;">
         <table width="100%" class="display compact" id="receptor_table">
           <thead>
             <tr>
-              <td colspan="18" style="text-align: center" data-dt-order="disable"></td>
+              <th colspan="18" style="text-align: center" data-dt-order="disable"></th>
             </tr>
             <tr>
               {% if layout == "drugs" %}
@@ -278,14 +278,16 @@
 <script src="{% static 'home/js/canvas2svg.js' %}"></script>
 <script src="{% static 'home/js/jvenn.js' %}"></script>
 <script src="{% static 'home/js/nv.d3.min.js' %}"></script>
+<script src="{% static 'home/js/jszip.min.js' %}"></script> <!-- For Excel -->
 <script src="{% static 'home/js/select2_4.1.0-rc.0_full.js' %}"></script>
 <script src="{% static 'home/js/NewDrugsBrowser_datatables.min.js' %}"></script>
 <script src="{% static 'home/js/NorgesDTFilterBuilder.js' %}"></script>
-<script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/3.0.0/js/buttons.html5.min.js"></script>
 <script src="{% static 'home/js/selection.js' %}"></script>
 <script src="{% static 'home/js/compoundPreviewTooltip.js' %}"></script> <!-- Needed for the hover display of ligands-->
 <script src="{% static 'home/js/openchemlib-full.js' %}"></script> <!-- Dependency for the hover display of ligands-->
 <script src="{% static 'home/js/PeptideLayoutEngine.js' %}"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 
 <script>
   ! function($) {
@@ -301,7 +303,7 @@
 
 <script type="text/javascript" charset="utf-8">
   $(document).ready(function(){
-    paper.install(window);
+    // paper.install(window);
     $('[data-toggle="popover"]').popover({
       trigger: 'hover',
       html: true,
@@ -738,9 +740,224 @@ $(document).ready(function () {
         };
     }
 
+// --- helper: clean a <th> into plain text (no <br>, no icons) ---
+function cleanHeaderCell(node) {
+  return $(node)
+    .clone()
+    .find('.glyphicon, [data-toggle="popover"]').remove().end() // drop icons/popovers
+    .html()
+    .replace(/<br\s*\/?>/gi, ' ')     // <br> -> space
+    .replace(/<\/?[^>]+>/g, '')       // strip all HTML tags
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// --- helper: get the real data header row from THEAD (skip empty/super/filter) ---
+function getCleanHeaders() {
+  const $thead = $('#receptor_table thead');
+  const $headerRow = $thead.find('tr').filter(function () {
+    return $(this).find('th:visible').filter(function () {
+      return $(this).text().trim().length > 0;
+    }).length > 0;
+  }).last();
+  return $headerRow.find('th:visible').toArray().map(th => cleanHeaderCell(th));
+}
+
+// --- Excel export button ---
+const excelExportButton = {
+  extend: 'excelHtml5',
+  text: 'Export Excel',
+  className: 'btn btn-success',
+  filename: 'GPCRdb_export',
+  title: null,
+  exportOptions: {
+    columns: ':visible',
+    format: {
+      // prevent Buttons from writing its own header text cells
+      header: function () { return ''; }
+    }
+  },
+  customizeData: function (data) {
+    const headers = getCleanHeaders();
+    data.header = headers;
+
+    // keep body aligned with header count
+    const colCount = headers.length;
+    data.body = (data.body || []).map(row => {
+      row = Array.isArray(row) ? row : [];
+      if (row.length > colCount) return row.slice(0, colCount);
+      while (row.length < colCount) row.push('');
+      return row;
+    });
+  },
+  customize: function (xlsx) {
+    const sheet = xlsx.xl.worksheets['sheet1.xml'];
+    const $sheet = $(sheet);
+    const $sheetData = $sheet.find('sheetData');
+
+    // 1) Remove ALL header rows Buttons created (one per THEAD row)
+    const theadRowCount = $('#receptor_table thead tr').length;
+    for (let r = 1; r <= theadRowCount; r++) {
+      $sheet.find(`row[r="${r}"]`).remove();
+    }
+
+    // 2) Build and prepend a clean header row using the proper XML namespace
+    const headers = getCleanHeaders();
+
+    function numToCol(n) {
+      let s = '';
+      while (n > 0) {
+        const m = (n - 1) % 26;
+        s = String.fromCharCode(65 + m) + s;
+        n = Math.floor((n - 1) / 26);
+      }
+      return s;
+    }
+
+    const doc = sheet;                                   // XMLDocument
+    const ns  = doc.documentElement.namespaceURI;        // Excel worksheet namespace
+
+    const rowNode = doc.createElementNS(ns, 'row');
+    rowNode.setAttribute('r', '1');
+
+    headers.forEach((text, i) => {
+      const colRef = numToCol(i + 1) + '1';
+
+      const c  = doc.createElementNS(ns, 'c');
+      c.setAttribute('r', colRef);
+      c.setAttribute('t', 'inlineStr');                 // inline string
+
+      const is = doc.createElementNS(ns, 'is');
+      const t  = doc.createElementNS(ns, 't');
+      t.appendChild(doc.createTextNode(text));
+      is.appendChild(t);
+      c.appendChild(is);
+      rowNode.appendChild(c);
+    });
+
+    // insert as the first row under <sheetData>
+    $sheetData[0].insertBefore(rowNode, $sheetData[0].firstChild);
+
+    // 3) Renumber all rows & cell refs
+    let rIdx = 1;
+    $sheet.find('worksheet sheetData row').each(function () {
+      const $r = $(this);
+      $r.attr('r', rIdx);
+      $r.find('c').each(function () {
+        const $c = $(this);
+        const col = $c.attr('r').replace(/[0-9]/g, '');
+        $c.attr('r', col + rIdx);
+      });
+      rIdx++;
+    });
+
+    // 4) Fix worksheet dimensions (A1:LASTCOL LASTROW)
+    const lastRow = rIdx - 1;
+    const colCount = $sheet.find('worksheet sheetData row:first c').length;
+    const lastCol = (function numToCol2(n) {
+      let s = '';
+      while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+      return s;
+    })(colCount);
+
+    $sheet.find('worksheet dimension').attr('ref', `A1:${lastCol}${lastRow}`);
+  }
+};
+
+// Excel column letters
+function numToCol(n) {
+  let s = '';
+  while (n > 0) {
+    const m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+// ---- NEW: Large export via ExcelJS (no recursion) ----
+function exportLargeViaExcelJS(filename) {
+  if (!window.ExcelJS) {
+    alert('ExcelJS not loaded. Add the ExcelJS script tag to use large export.');
+    return;
+  }
+
+  const dt = $('#receptor_table').DataTable();
+  const headers = getCleanHeaders();
+  const visibleCols = dt.columns(':visible').indexes().toArray();
+
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Data');
+
+  // header
+  ws.addRow(headers);
+  // (optional) modest column widths
+  headers.forEach((h, i) => {
+    ws.getColumn(i + 1).width = Math.min(Math.max(String(h).length + 2, 10), 40);
+  });
+
+  // add rows (orthogonal export)
+  const rowApi = dt.rows({ search: 'applied' }); // whatever subset you want
+  const idxs = rowApi.indexes().toArray();
+
+  // Iterate without jQuery recursion
+  for (let r = 0; r < idxs.length; r++) {
+    const rowIdx = idxs[r];
+    const out = new Array(visibleCols.length);
+    for (let c = 0; c < visibleCols.length; c++) {
+      const colIdx = visibleCols[c];
+      // Use DataTables to render "export" value for each cell
+      const val = dt.cell(rowIdx, colIdx).render('export');
+      // Strip any straggling HTML just in case
+      out[c] = (typeof val === 'string')
+        ? val.replace(/<br\s*\/?>/gi, ' ').replace(/<\/?[^>]+>/g, '').trim()
+        : (val == null ? '' : val);
+    }
+    ws.addRow(out);
+  }
+
+  wb.xlsx.writeBuffer().then(buf => {
+    const blob = new Blob([buf], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (filename || 'GPCRdb_export') + '.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(a.href);
+      document.body.removeChild(a);
+    }, 1000);
+  });
+}
+
+// ---- Button: Auto fallback for large tables ----
+// threshold: switch to ExcelJS if too many rows (tweak as you like)
+const BIG_EXPORT_THRESHOLD = 8000;
+
+const excelLargeButton = {
+  text: 'Export Excel (large)',
+  className: 'btn btn-success',
+  action: function () {
+    const dt = $('#receptor_table').DataTable();
+    const rowCount = dt.rows({ search: 'applied' }).count();
+    if (rowCount === 0) return;
+
+    // Always use ExcelJS here (button is explicitly for large export)
+    exportLargeViaExcelJS('GPCRdb_export');
+  }
+};
+
+
+
+
+
     const buttonsArray = [
       { text: 'Reset filters', action: function () { reset_all(); } },
       controlTableButton(layout, hideColumns), // Use the new function to create the control table button
+      excelExportButton, // excel download button
+      excelLargeButton        
     ];
 
     // Initialize or reinitialize DataTable
