@@ -81,6 +81,7 @@ def Venn(request, origin="both"):
             'ligand__name',
             'ligand__ligand_type__name',
             'ligand__smiles',
+            'ligand__inchikey',
             'ligand__mw',
             'ligand__sequence',
             'moa__name',
@@ -111,6 +112,7 @@ def Venn(request, origin="both"):
             'ligand__ligand_type__name': 'Drug type',
             'moa__name': 'Modality',
             'ligand__smiles': 'raw_smiles',
+            'ligand__inchikey': 'InChIKey',
             'ligand__mw': 'mw',
             'ligand__sequence': 'sequence',
             'indication__slug': 'Indication Slug',
@@ -126,6 +128,54 @@ def Venn(request, origin="both"):
 
         # Merge the extra DataFrame with the main DataFrame
         df = pd.concat([df, extra_df], axis=1)
+
+        # 4) add a human-readable SMILES column as a copy so we can show it in the table
+        df['SMILES'] = df['raw_smiles']    # <-- NEW: visible table column
+
+        # 5) ChEMBL merge: query LigandID for Chembl (web_resource id = 10)
+        unique_ligand_ids = df['LigandID'].dropna().unique().tolist()
+
+        # Fetch ChEMBL + PubChem IDs in one go
+        resource_data = LigandID.objects.filter(
+            ligand__in=unique_ligand_ids,
+            web_resource__in=[4, 10]   # 4 = PubChem, 10 = ChEMBL
+        ).values('ligand', 'web_resource', 'index')
+
+        resource_df = pd.DataFrame(list(resource_data))
+
+        if not resource_df.empty:
+            # pivot so we get columns for each resource
+            resource_df = resource_df.pivot_table(
+                index='ligand',
+                columns='web_resource',
+                values='index',
+                aggfunc='first'   # in case duplicates, just take first
+            ).reset_index()
+
+            resource_df.rename(columns={
+                'ligand': 'LigandID',
+                10: 'ChEMBL',
+                4: 'PubChem'
+            }, inplace=True)
+
+            df = df.merge(resource_df, on='LigandID', how='left')
+        else:
+            df['ChEMBL'] = ""
+            df['PubChem'] = ""
+
+        # 6) tidy up
+        df['Approved'] = df['Approved'].apply(lambda x: 'Yes' if x == "Approved" else 'No')
+        df.dropna(subset=['LigandID'], inplace=True)
+
+        df.fillna({
+            'Ligand name': 'Unknown',
+            'Phase': 'N/A',
+            'Approved': 'No',
+            'InChIKey': '',
+            'SMILES': '',
+            'ChEMBL': '',
+            'PubChem': ''
+        }, inplace=True)
 
         # Convert 'Approved' from integer to 'Yes'/'No'
         df['Approved'] = df['Approved'].apply(lambda x: 'Yes' if x == "Approved" else 'No')

@@ -101,11 +101,11 @@
         <table width="100%" class="display compact" id="receptor_table">
           <thead>
             <tr>
-              <th colspan="18" style="text-align: center" data-dt-order="disable"></th>
+              <th colspan="22" style="text-align: center" data-dt-order="disable"></th>
             </tr>
             <tr>
               {% if layout == "drugs" %}
-              <th colspan="8" style="text-align:center">
+              <th colspan="12" style="text-align:center">
                 Agents/drugs
                 <span class="glyphicon glyphicon-info-sign"
                       data-html="true"
@@ -120,7 +120,7 @@
               <th colspan="5" style="text-align:center;border-left: 1px solid #cccccc;">Diseases</th>
               {% else %}
               <th colspan="5" style="text-align:center;">Targets</th>
-              <th colspan="8" style="text-align:center">
+              <th colspan="11" style="text-align:center">
                 Agents/drugs
                 <span class="glyphicon glyphicon-info-sign"
                       data-html="true"
@@ -168,6 +168,10 @@
                   </span>
                 </div>
               </th>
+              <th style="text-align: center;">ChEMBL</th>
+              <th style="text-align: center;">PubChem</th>
+              <th style="text-align: center;">InChIKey</th>
+              <th style="text-align: center;">SMILES</th>
               <th style="text-align: center;border-left: 1px solid #cccccc;">Gene</th>
               <th style="text-align: center; min-width: 90px;width: 90px;max-width: 90px;">Protein</th>
               <th style="text-align: center;">Receptor<br>family</th>
@@ -225,6 +229,10 @@
             </tr>
             <tr class="filter-row">
               {% if layout == "drugs" %}
+              <th class="expand" style="text-align: center;" data-dt-order="disable"></th>
+              <th class="expand" style="text-align: center;" data-dt-order="disable"></th>
+              <th class="expand" style="text-align: center;" data-dt-order="disable"></th>
+              <th class="expand" style="text-align: center;" data-dt-order="disable"></th>
               <th class="expand" style="text-align: center;" data-dt-order="disable"></th>
               <th class="expand" style="text-align: center;" data-dt-order="disable"></th>
               <th class="expand" style="text-align: center;" data-dt-order="disable"></th>
@@ -429,6 +437,11 @@ $(document).ready(function () {
         { data: 'ATC Code', name: 'ATC Code', visible: !hideColumns },
         { data: "In trial", name: "In trial" },
         { data: "Approved", name: "Approved" },
+        // ---- add after "Approved"
+        { data: "ChEMBL", name: "ChEMBL"},
+        { data: "PubChem", name: "PubChem"},
+        { data: "InChIKey", name: "InChIKey" },
+        { data: "SMILES", name: "SMILES" },
         { data: "Gene name", name: "Gene name", render: function (data, type, row, meta) {
             if (type === 'display') {
                 const originalData = data; 
