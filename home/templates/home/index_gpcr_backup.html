@@ -1,0 +1,335 @@
+{% extends "home/base.html" %}
+{% load static %}
+{% load humanize %}
+
+{% block content %}
+
+    <!-- Carousel -->
+    <div class="row">
+
+        <div class='col-md-12'>
+            <div id="carousel-example-generic" class="carousel slide" data-ride="carousel" data-interval="30000">
+                <!-- Indicators -->
+                <ol class="carousel-indicators">
+                    <li data-target="#carousel-example-generic" data-slide-to="0" class="active"></li>
+                    <li data-target="#carousel-example-generic" data-slide-to="1"></li>
+                    <li data-target="#carousel-example-generic" data-slide-to="2"></li>
+                    <li data-target="#carousel-example-generic" data-slide-to="3"></li>
+                    <li data-target="#carousel-example-generic" data-slide-to="4"></li>
+                    <li data-target="#carousel-example-generic" data-slide-to="5"></li>
+                    <li data-target="#carousel-example-generic" data-slide-to="6"></li>
+                </ol>
+
+                <!-- Wrapper for carousel slides -->
+                <div class="carousel-inner" role="listbox">
+
+                    <div class="item active">
+                        <a href='https://academic.oup.com/nar/article/51/D1/D395/6827106?login=true' target="_blank">
+                          <img src="{% static 'home/carousel/carousel_datamapper.png' %}">
+                        </a>
+                        <div class="carousel-caption">
+                            <h3><a href="/mapper/" target="_blank">Data Mapper</a> tool</h3>
+                            <p>Map your own data in interactive plots</p>
+                        </div>
+                    </div>
+
+                    <div class="item">
+                        <a href='https://academic.oup.com/nar/article/51/D1/D395/6827106?login=true' target="_blank">
+                          <img src="{% static 'home/carousel/carousel_odorant.png' %}">
+                        </a>
+                        <div class="carousel-caption">
+                            <h3>Odorant receptors</h3>
+                            <p>All human ORs and major model organisms</p>
+                        </div>
+                    </div>
+
+                    <div class="item">
+                      <a href='https://academic.oup.com/nar/article/51/D1/D395/6827106?login=true' target="_blank">
+                        <img src="{% static 'home/carousel/carousel_structure_models.png' %}">
+                      </a>
+                        <div class="carousel-caption">
+                            <h3>Structure models</h3>
+                            <p>Inactive-/active state GPCRs and physiological ligand complexes</p>
+                        </div>
+                    </div>
+
+                    <div class="item">
+                        <a href='https://www.biorxiv.org/content/10.1101/2025.01.11.632537v1' target="_blank">
+                          <img src="{% static 'home/carousel/carousel_drugs.png' %}">
+                        </a>
+                        <div class="carousel-caption">
+                            <h3><a href="/drugs/overview" target="_blank">New drug resource</a></h3>
+                            <p>Agents in trial, approved drugs, target and diseases</p>
+                        </div>
+                    </div>
+
+                    <div class="item">
+                      <a href="https://docs.gpcrdb.org/structure_comparison.html#structure-comparison-tool" target="_blank">
+                        <img src="{% static 'home/carousel/struct_comparison_tool.png' %}">
+                      </a>
+                        <div class="carousel-caption">
+                            <h3><a href="/structure_comparison/comparative_analysis" target="_blank">Structure analysis</a> resource</h3>
+                            <p>Structure comparison tool and similarity trees.</p>
+                        </div>
+                    </div>
+
+                    <div class="item">
+                      <a href='https://academic.oup.com/nar/article/51/D1/D395/6827106?login=true' target="_blank">
+                        <img src="{% static 'home/carousel/carousel_similarity_structure.png' %}">
+                      </a>
+                        <div class="carousel-caption">
+                            <h3>Structure similarity search</h3>
+                            <p>Search all of GPCRdb’s structures and models</p>
+                        </div>
+                    </div>
+
+                    <div class="item">
+                      <a href='https://academic.oup.com/nar/article/51/D1/D395/6827106?login=true' target="_blank">
+                        <img src="{% static 'home/carousel/carousel_ligand_search.png' %}">
+                      </a>
+                        <div class="carousel-caption">
+                            <h3>Ligand search</h3>
+                            <p>Find ligands by name, database identifier, similarity or substructure</p>
+                        </div>
+                    </div>
+
+                    <!-- Controls -->
+                    <a class="left carousel-control" href="#carousel-example-generic" role="button" data-slide="prev">
+                        <span class="glyphicon glyphicon-chevron-left" aria-hidden="true"></span>
+                        <span class="sr-only">Previous</span>
+                    </a>
+                    <a class="right carousel-control" href="#carousel-example-generic" role="button" data-slide="next">
+                        <span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span>
+                        <span class="sr-only">Next</span>
+                    </a>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">&nbsp;
+        </div>
+    </div>
+
+    <!-- GPCRdb intro -->
+    <div class="row">
+
+        <div class="col-md-9">
+            <div class="panel panel-primary">
+                <div class="panel-body">
+                    <div class="col-md-4">
+                      <br />
+                        <p style='text-align:center'>
+                        <img style="height:90%; " src="{% static 'home/logo/gpcr/main.png' %}">
+                        </p>
+                        <p style='text-align:center; font-size: 20px; margin-top:0px;'>
+                        GPCRdb
+                        </p>
+                    </div>
+                    <!-- <div class="col-md-1">
+                    </div> -->
+                    <div class="col-md-4" id='center_menu'>
+                        <p style='text-align:justify'>
+                            GPCRdb offers:<br/>
+                            <ul>
+                              <li>Reference data</li>
+                              <li>Analysis tools</li>
+                              <li>Visualization</li>
+                              <li>Experiment design</li> <!-- need to add popup image onclick -->
+                              <li>Data deposition</li>
+                              <li><a href='https://gpcrdb.org/cite_gpcrdb' target='_blank'>References</a></li>
+                            <!-- GPCRdb contains reference data, interactive
+                            visualisation and experiment design tools for G protein-coupled receptors (GPCRs). GPCRdb
+                            curates sequence alignments, structures and receptor mutations from literature. Interactive
+                            diagrams visualise receptor residues (e.g. snakeplot and helix box plot) and relationships
+                            (e.g phylogenetic trees). See the GPCRdb graphical <a href="/static/home/poster/overview.pdf">overview</a>,
+                            <a href="https://files.gpcrdb.org/video/GPCRdb-David_Gloriam.mp4">video</a>,
+                            <a onclick="citation_tool(window.location.href);" href="#">articles</a> or
+                            <a href="https://docs.gpcrdb.org/">documentation</a>. -->
+                        </p>
+
+                    </div>
+
+                    <div class="col-md-4">
+                        <p style="text-align:justify">
+                          <br />
+                           G protein-coupled receptors (GPCRs) are cell-surface receptors mediating the responses of 2/3<sup>rds</sup> of human hormones<sup><a href='https://doi.org/10.1016/j.cell.2019.10.010' target='_blank'>1</a></sup> and 1/3<sup>rd</sup> of
+                           drugs<sup><a href='https://doi.org/10.1038/s41573-025-01139-y' target='_blank'>2</a></sup>.
+                           Each GPCR can bind several transducers, G proteins, GPCR kinases (GRKs) and arrestins
+                           leading to distinct intracellular signaling networks and functional outcomes.
+                        </p>
+                    </div>
+                </div>
+            </div>
+                <!-- Stats -->
+                <div class="col-md-4">
+                    <div class="panel panel-primary">
+                        <div class="panel-body">
+                            <h3>Data</h3>
+                            <ul class="stats_list">
+                                {% for stat in release_statistics %}
+                                    <li>
+                                        {{ stat.value| safe }} {{ stat.statistics_type | safe }}
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Release Notes -->
+                <div class="col-md-4" id='releases'>
+                    <div class="panel panel-primary">
+                        <div class="panel-body">
+                            <h3>Latest <a href="/pages/releasenotes">release</a></h3>
+                            <strong>{{ release_notes.date }}</strong>
+                            {{ release_notes.html|safe }}
+                            <br />
+                            <strong><a href="/pages/releasenotes">All releases</a></strong>
+                        </div>
+                    </div>
+
+                    <!-- <div class="panel panel-primary">
+                        <div class="panel-body">
+                            <a href="https://youtu.be/EZAQYeR49zI" target="_blank"><img style="width: 100%;" src="{% static '/home/images/GPCRdb_youtube_introduction.png' %}". ></img></a>
+                        </div>
+                    </div> -->
+
+                </div>
+
+                <!-- Publications -->
+                <div class="col-md-4">
+                    <div class="panel panel-primary">
+                        <div class="panel-body">
+                            <h3>Publications</h3>
+                            <div style='max-height: 470px; overflow-y: scroll;'>
+                                <div><b>Latest GPCRdb article</b></div>
+                                <p>
+                                    GPCRdb in 2025: adding odorant receptors, data mapper, structure similarity search and models of physiological ligand complexes.<br />
+                                    <a href='https://doi.org/10.1093/nar/gkae1065' target='_blank'><i>Nucleic Acids Research</i>, 2024</a><br />
+                                </p>
+
+                                <div><b>Structure analysis platform</b></div>
+                                <p>
+                                    An online GPCR structure analysis platform.<br />
+                                    <a href='https://doi.org/10.1038/S41594-021-00675-6' target='_blank'><i>Nature Structural & Molecular Biology</i>, 2021</a><br />
+                                </p>
+
+                                <div><b>Drug resource</b></div>
+                                <p>
+                                    GPCR drug discovery: new agents, targets and indications.<br />
+                                    <a href='https://doi.org/10.1038/s41573-025-01139-y' target='_blank'><i>Nature Reviews Drug Discovery</i>, 2025</a><br />
+                                </p>
+
+                                <div><b>Generic residue numbers</b></div>
+                                <p>
+                                    Generic GPCR residue numbers - aligning topology maps while minding the gaps.<br />
+                                    <a href='https://doi.org/10.1038/10.1016/J.TIPS.2014.11.001 ' target='_blank'><i>Trends in pharmacological sciences</i>, 2015</a><br />
+                                </p>
+                            </div>
+                            <div style='height: 30px; margin-top: 10px; position: relative;'>
+                              <span style="position: absolute; bottom 0;"><strong><a href='https://gpcrdb.org/cite_gpcrdb' target='_blank'>All publications</a></strong></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+        </div>
+
+        <div class="col-md-3">
+
+            <div class="panel panel-primary">
+                <div class="panel-body">
+                    <h3>Related resources</h3>
+                    <a href='https://gpcrdb.org/' target='_blank'>GPCRdb</a>, <a href='https://gproteindb.org/' target='_blank'>GproteinDb</a>,
+                    <a href='https://arrestindb.org/' target='_blank'>ArrestinDb</a> and <a href='https://biasedsignalingatlas.org/' target='_blank'>Biased Signaling Atlas</a>
+                    cover related aspects of signal transduction while serving dedicated research communities and use cases.
+                    {% if users %}
+                        {{ users|safe }}
+                    {% endif %}
+                    <br />
+                    <br />
+                    <h4>External GPCR <a href="https://bio.tools/t?domain=gpcr">sites</a></h4>
+                </div>
+            </div>
+
+            <!-- <div class="panel panel-primary">
+                <div class="panel-body">
+                    <h3>
+                        <a class="twitter-timeline" data-height="400" data-theme="light" href="https://twitter.com/gpcrdb"></a>
+                    </h3>
+                    <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+                </div>
+            </div> -->
+
+        </div>
+
+
+
+    </div>
+
+    {#        <!-- Highlighted news -->#}
+    {#        <div class="row">#}
+    {#            <div class="col-md-12">#}
+    {#                <div class="panel panel-primary">#}
+    {#                    <div class="panel-body">#}
+    {#                        <div class='col-md-10'>#}
+    {#                            <h4>GPCR-G protein selectivity</h4>#}
+    {#                            The selective coupling of G-protein-coupled receptors (GPCRs) to specific G proteins is critical to trigger the appropriate physiological response. However, the determinants of selective binding have remained elusive. Here we reveal the existence of a selectivity barcode (that is, patterns of amino acids) on each of the 16 human G proteins that is recognized by distinct regions on the approximately 800 human receptors. Although universally conserved positions in the barcode allow the receptors to bind and activate G proteins in a similar manner, different receptors ...<a href="/news">Read more</a><br>#}
+    {#                            Nature: <a href="http://dx.doi.org/10.1038/nature22070">10.1038/nature22070</a><br>#}
+    {#                            <a href="http://healthsciences.ku.dk/news/2017/05/researchers-show-how-cell-receptors-regulate-specific-physiological-effects/">Press release</a>#}
+    {#                        </div>#}
+    {#                        <div class='col-md-2 text-left'>#}
+    {#                            <img src="{% static 'home/images/news/naturecover.png' %}" style="height:170px;width:170px;">#}
+    {#                            <p class="text-muted small">Photo: MRC Laboratory of Molecular Biology in Cambridge</p>#}
+    {#                        </div>#}
+    {#                    </div>#}
+    {#                </div>#}
+    {#            </div>#}
+    {#        </div>#}
+
+
+
+        {#<!-- News -->#}
+        {#        <div class="col-md-3">#}
+        {#            <div class="panel panel-primary">#}
+        {#                <div class="panel-body">#}
+        {#                    <h3>Latest <a href="/news">news</a></h3>#}
+        {#                    <ul>#}
+        {#                        {% for item in news %}#}
+        {#                        <li><small>{{ item.html|safe }}</small></li>#}
+        {#                        {% endfor %}#}
+        {#                    </ul>#}
+        {#                </div>#}
+        {#            </div>#}
+        {#        </div> #}
+
+
+    <!-- Gloriam Group and Collabs -->
+    {#    <div class="row">#}
+    {#        <div class="col-md-12">#}
+    {#            <div class="panel panel-primary">#}
+    {#                <div class="panel-body">#}
+    {#                    <p class="text-center"> The GPCRdb is developed by the Gloriam <a href="http://gloriamgroup.org" target="_blank">group</a>.#}
+    {#                        It integrates data from the large GPCR community and maintains an active collaboration with the#}
+    {#                        Guide To Pharmacology (IUPHAR), <a href="http://gpcrmd.org/">GPCRmd</a> and the European Research Network on Signal#}
+    {#                        Transduction <a href="https://ernest-gpcr.eu" target="_blank">(ERNEST)</a>.#}
+    {#                        If you use the GPCRdb, please remember to <a onclick="citation_tool(window.location.href);" href="#">cite us</a>.#}
+    {#                    </p>#}
+    {#                    #}
+    {#                </div>#}
+    {#            </div>#}
+    {#        </div>#}
+    {#    </div>#}
+
+{% endblock %}
+
+{% block addon_js %}
+<script>
+    $(".release-notes").find("li").addClass("hidden");
+    $(".gpcrdb").removeClass("hidden");
+    $(".all").removeClass("hidden")
+</script>
+{% endblock %}

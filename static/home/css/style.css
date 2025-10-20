@@ -6,6 +6,13 @@ h4 {
   margin-top: 0;
 }
 
+/* Edge-to-edge content in our main wrapper */
+#content.container-fluid {
+  max-width: 100% !important;   /* ignore the fixed widths */
+  padding-left: 0    !important; /* kill the 15px gutter */
+  padding-right: 0   !important;
+}
+
 /* Allow wider menu bar for smaller screens */
 @media (max-width: 1600px) {
   .navbar .container {
