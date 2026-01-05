@@ -4,31 +4,50 @@
 
 {% block content %}
 <div class="container">
-  <h3>Structure similarity</h3>
+  <h3>GPCR sequence & structure similarity (t-SNE)</h3>
   <div id="sim-status">Loading…</div>
 
-  <!-- state toggle -->
+  <!-- dataset toggle -->
   <div style="margin:8px 0;">
-    <button class="btn btn-primary btn-sm state-btn" data-state="inactive">Inactive</button>
-    <button class="btn btn-default btn-sm state-btn" data-state="active">Active</button>
+    <span style="margin-right:4px;">Dataset:</span>
+    <button class="btn btn-primary btn-sm dataset-btn" data-dataset="sequence">Sequence</button>
+    <button class="btn btn-default btn-sm dataset-btn" data-dataset="inactive">Inactive structures</button>
+    <button class="btn btn-default btn-sm dataset-btn" data-dataset="active">Active structures</button>
   </div>
 
+  <!-- colour-by controls -->
   <div style="margin:8px 0;">
+    <span style="margin-right:4px;">Colour by:</span>
     <button class="btn btn-primary btn-sm colorby" data-key="Class">Class</button>
-    <button class="btn btn-default  btn-sm colorby" data-key="Ligand type">Ligand type</button>
+    <button class="btn btn-default  btn-sm colorby" data-key="Chemotype">Chemotype</button>
     <button class="btn btn-default  btn-sm colorby" data-key="Receptor family">Receptor family</button>
-    <button class="btn btn-default btn-sm colorby" data-key="Physiological ligand">Physiological ligand</button>
-    <button class="btn btn-default btn-sm colorby" data-key="Sense">Sense</button>
+    <button class="btn btn-default  btn-sm colorby" data-key="Modality">Modality</button>
+    <button class="btn btn-default  btn-sm colorby" data-key="Sense">Sense</button>
   </div>
 
+  <!-- shape-by controls -->
   <div style="margin:4px 0 8px;">
     <span style="margin-right:4px;">Shape by:</span>
-    <button class="btn btn-primary btn-xs shapeby" data-key="Class">Class</button>
+    <button class="btn btn-primary btn-xs shapeby" data-key="None">None</button>
+    <button class="btn btn-default btn-xs shapeby" data-key="Class">Class</button>
   </div>
 
-  <!-- NEW: external plot title that we update from JS -->
+  <!-- class region toggle -->
+  <div style="margin:4px 0 12px;">
+    <span style="margin-right:4px;">Class regions:</span>
+    <button id="class-region-toggle" class="btn btn-primary btn-xs" data-active="1">
+      On
+    </button>
+  </div>
+
+  <!-- NEW: download button -->
+  <button id="download-btn" class="btn btn-default btn-xs" style="margin-left:12px;">
+    Download SVG
+  </button>
+
+  <!-- plot title -->
   <h4 id="plot-title" class="text-center" style="margin: 10px 0 5px;">
-    Inactive structures
+    Sequence similarity
   </h4>
 
   <div id="plot" style="min-height: 540px;"></div>
@@ -42,11 +61,12 @@
   const statusEl    = document.getElementById('sim-status');
   const plotTitleEl = document.getElementById('plot-title');
   const plotDiv     = document.getElementById('plot');
+  const regionBtn   = document.getElementById('class-region-toggle');
+  const downloadBtn = document.getElementById('download-btn');   // NEW
 
-  const EMBED_URLS = {
-    inactive: "{{ inactive_embed_url }}",
-    active:   "{{ active_embed_url }}",
-  };
+  const EMBED_URL = "{{ embed_url }}";
+
+  /* ---------- colour constants ---------- */
 
   const PALETTE = [
     '#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd',
@@ -65,76 +85,41 @@
     'Other': '#bcbd22'
   };
 
-  const PHYSIO_COLORS = {
-    'Peptide/protein': '#1b9e77',
-    'Small-molecule':  '#d95f02',
-    'Ion':             '#7570b3',
-    'Orphan':         '#7f7f7f',
-    'Other':           '#666666'
+  const MODALITY_COLORS = {
+    'Ion receptors':            '#7570b3',
+    'Peptide receptors':        '#1b9e77',
+    'Protein receptors':        '#66a61e',
+    'Small molecule receptors': '#d95f02',
+    'Orphan receptors':         '#7f7f7f',
+    'Other':                    '#666666'
   };
 
   const SENSE_COLORS = {
     'non-sensory': '#1f78b4',
     'odorant':     '#e31a1c',
     'taste':       '#33a02c',
-    'unknown':     '#b2b2b2',
-    'vision':      '#6a3d9a'
+    'vision':      '#6a3d9a',
+    'unknown':     '#b2b2b2'
   };
-
-  const GROUP_GRADIENTS = {
-    'Peptide/protein': [
-      '#006d2c','#238b45','#41ab5d','#74c476','#a1d99b','#c7e9c0'
-    ],
-    'Small-molecule': [
-      '#7f2704','#a63603','#d94801','#f16913','#fd8d3c','#fdae6b'
-    ],
-    'Ion': [
-      '#08519c','#2171b5','#4292c6','#6baed6','#9ecae1','#c6dbef'
-    ],
-    'Orphan': [
-      '#3f3f3f','#525252','#737373','#969696','#bdbdbd','#d9d9d9'
-    ],
-    'Other': [
-      '#7f3b08','#b35806','#e08214','#fdb863','#fee0b6','#f7f7f7'
-    ]
-  };
-
-  const PHYSIO_GROUP_ORDER = [
-    'Peptide/protein',
-    'Small-molecule',
-    'Ion',
-    'Orphan'
-  ];
 
   const CLASS_ORDER = ['A','B1','B2','C','F','O1','O2','T2'];
 
-  /* ---------------- small helpers ---------------- */
+  /* ---------- helpers ---------- */
 
-  function plain(html) {
-    const div = document.createElement('div');
-    div.innerHTML = html || '';
-    return (div.textContent || div.innerText || '').trim();
-  }
+  function normalizeModality(raw) {
+    let s = (raw || '').toString().trim();
+    if (!s) return 'Orphan receptors';
+    s = s.replace(/\s+/g, ' ').toLowerCase();
 
-  function normEntry(entry) {
-    const raw = String(entry || '').toUpperCase();
-    return raw.replace(/_HUMAN$/i, '');
-  }
+    if (s.includes('ion'))        return 'Ion receptors';
+    if (s.includes('peptide'))    return 'Peptide receptors';
+    if (s.includes('protein'))    return 'Protein receptors';
+    if (s.includes('small') ||
+        s.includes('molecule'))   return 'Small molecule receptors';
+    if (s.includes('orphan') ||
+        s === 'unknown')          return 'Orphan receptors';
 
-  function getCategory(point, key, meta) {
-    if (key === 'Physiological ligand')
-      return meta.physio_ligand_consensus || 'Unknown';
-
-    if (key === 'Class')
-      return meta.protein_class   || point.Class            || 'Other';
-    if (key === 'Ligand type')
-      return meta.ligand_type     || point['Ligand type']   || 'Unknown';
-    if (key === 'Receptor family')
-      return meta.receptor_family || point['Receptor family'] || 'Unknown';
-    if (key === 'Sense')
-      return meta.sense           || point.Sense            || 'unknown';
-
-    return 'Unknown';
+    return 'Other';
   }
 
   function normClassCodeFromString(cls) {
@@ -148,21 +133,35 @@
     if (s.includes('CLASS C'))  return 'C';
     if (s.includes('CLASS F'))  return 'F';
     if (s.includes('CLASS A'))  return 'A';
-    return 'Other';
+    return s; // already a plain code
   }
 
-  function normClassCode(meta) {
-    return normClassCodeFromString(meta.protein_class);
+  function getCategory(point, key) {
+    if (key === 'Modality')
+      return point.Modality || 'Unknown';
+    if (key === 'Class')
+      return point.Class || 'Other';
+    if (key === 'Chemotype')
+      return point.Chemotype || 'Unknown';
+    if (key === 'Receptor family')
+      return point['Receptor family'] || 'Unknown';
+    if (key === 'Sense')
+      return point.Sense || 'unknown';
+    return 'Unknown';
   }
 
-  function getShapeCategory(meta, shapeKey) {
-    // we only actually use 'Class' now
-    return normClassCode(meta) || 'Other';
+  function getShapeCategory(point, shapeKey) {
+    if (shapeKey === 'Class')
+      return normClassCodeFromString(point.Class);
+    // shape-by None
+    return 'None';
   }
 
-  function getShapeFor(shapeCat, shapeKey) {
-    // shapeKey is always 'Class' in current UI
-    switch (shapeCat) {
+  function getShapeFor(clsCode, shapeKey) {
+    if (shapeKey !== 'Class') {
+      return 'circle';   // all circles when shape-by None
+    }
+    switch (clsCode) {
       case 'A':  return 'circle';
       case 'B1': return 'star-triangle-up';
       case 'B2': return 'star-triangle-down';
@@ -175,513 +174,364 @@
     }
   }
 
-    function physioGroupForConsensus(consensus) {
-    const s = (consensus || '').trim().toLowerCase();
-
-    // empty / unknown / orphan → Orphan group
-    if (!s || s === 'unknown' || s === 'orphan') {
-      return 'Orphan';
-    }
-
-    if (s === 'ion') {
-      return 'Ion';
-    }
-
-    // Small-molecule categories
-    if (s.includes('small-molecule')) {
-      return 'Small-molecule';
-    }
-
-    // Cleaved-endterm | PPI should behave like peptide/protein group
-    if (s === 'cleaved-endterm | ppi') {
-      return 'Peptide/protein';
-    }
-
-    // Anything explicitly mentioning peptide / protein
-    if (s.includes('peptide') || s.includes('protein')) {
-      return 'Peptide/protein';
-    }
-
-    return 'Other';
-  }
-
-
-  function physioGroupOrderIndex(groupLabel) {
-    const idx = PHYSIO_GROUP_ORDER.indexOf(groupLabel);
-    return idx === -1 ? 99 : idx;
-  }
-
-  function chooseBucketColor(colorKey, bucket, groupColorMaps, defaultColorMap) {
-    const g = bucket.physioGroup || 'Other';
-
-    if (colorKey === 'Class') {
-      const code = normClassCodeFromString(bucket.colorCat) || 'Other';
+  function colorForCategory(key, cat, point) {
+    if (key === 'Class') {
+      const code = normClassCodeFromString(cat);
       return CLASS_COLORS[code] || CLASS_COLORS['Other'] || '#999999';
     }
 
-    if (colorKey === 'Physiological ligand') {
-      const grp = physioGroupForConsensus(bucket.physio) || g;
-      return PHYSIO_COLORS[grp] || '#999999';
+    if (key === 'Modality') {
+      const grp = normalizeModality(cat);
+      return MODALITY_COLORS[grp] || '#999999';
     }
 
-    if (colorKey === 'Sense') {
-      const s = (bucket.colorCat || '').trim().toLowerCase();
+    if (key === 'Sense') {
+      const s = String(cat || '').toLowerCase();
       if (s in SENSE_COLORS) return SENSE_COLORS[s];
       return SENSE_COLORS['unknown'];
     }
 
-    if ((colorKey === 'Ligand type' || colorKey === 'Receptor family') &&
-        groupColorMaps && groupColorMaps[g] && groupColorMaps[g].has(bucket.colorCat)) {
-      return groupColorMaps[g].get(bucket.colorCat);
-    }
-
-    if (defaultColorMap && defaultColorMap.has(bucket.colorCat)) {
-      return defaultColorMap.get(bucket.colorCat);
-    }
-    return '#999999';
+    // Chemotype / Receptor family: colours assigned later by palette
+    return null;
   }
 
-  function compareBuckets(a, b) {
-    const ga = physioGroupOrderIndex(a.physioGroup);
-    const gb = physioGroupOrderIndex(b.physioGroup);
-    if (ga < gb) return -1;
-    if (ga > gb) return 1;
-
-    if (a.shapeCat < b.shapeCat) return -1;
-    if (a.shapeCat > b.shapeCat) return 1;
-    if (a.colorCat < b.colorCat) return -1;
-    if (a.colorCat > b.colorCat) return 1;
-    return 0;
-  }
-
-  let currentState  = 'inactive';
-  let colorKey      = 'Class';
-  let shapeKey      = 'Class';
-  const dataCache   = {};
-  let legendHandlersAttached = false;
-
-  /* --------------------- buildTraces --------------------- */
-
-  function buildTraces(points, proteins, key, shapeKey) {
-    const GROUP_BY_PHYSIO_KEYS = [
-      'Class',
-      'Ligand type',
-      'Receptor family',
-      'Physiological ligand',
-      'Sense'
-    ];
-    const shouldGroupByPhysio = GROUP_BY_PHYSIO_KEYS.includes(key);
-
-    const colorCats            = new Set();
-    const perPointColor        = [];
-    const perPointShapeCat     = [];
-    const perPointPhysio       = [];
-    const perPointPhysioGroup  = [];
-
-    for (let i = 0; i < points.length; i++) {
-      const p    = points[i];
-      const meta = proteins[p.label] || {};
-      const cCat = getCategory(p, key, meta) || 'Unknown';
-      const sCat = getShapeCategory(meta, shapeKey);
-      const physio = meta.physio_ligand_consensus || 'Unknown';
-      const group  = physioGroupForConsensus(physio);
-
-      perPointColor.push(cCat);
-      perPointShapeCat.push(sCat);
-      perPointPhysio.push(physio);
-      perPointPhysioGroup.push(group);
-      colorCats.add(cCat);
+  // download plot (SVG) without legend
+  downloadBtn.addEventListener('click', async () => {
+    if (!plotDiv || !plotDiv.data || !plotDiv.data.length) {
+      alert('No plot to download yet.');
+      return;
     }
 
-    const colorCatList = Array.from(colorCats).sort();
-    const colorMap = new Map(colorCatList.map((c,i) => [c, PALETTE[i % PALETTE.length]]));
+    const origText = downloadBtn.textContent;
+    downloadBtn.disabled = true;
+    downloadBtn.textContent = 'Preparing…';
 
-    const bucketsById = {};
+    try {
+      const layout = plotDiv.layout || {};
+      const oldShowLegend = layout.showlegend;
 
-    for (let i = 0; i < points.length; i++) {
-      const p    = points[i];
-      const meta = proteins[p.label] || {};
+      // hide legend
+      await Plotly.relayout(plotDiv, { showlegend: false });
 
-      const colorCat    = perPointColor[i];
-      const classCode   = perPointShapeCat[i];
-      const physio      = perPointPhysio[i];
-      const physioGroup = perPointPhysioGroup[i];
+      // export as SVG (tweak width/height if you want)
+      const url = await Plotly.toImage(plotDiv, {
+        format: 'svg',
+        width:  900,
+        height: 700
+      });
 
-      const id = colorCat + '|||' + classCode + '|||' + physioGroup;
+      // restore legend state
+      await Plotly.relayout(plotDiv, { showlegend: oldShowLegend });
 
-      if (!bucketsById[id]) {
-        bucketsById[id] = {
-          id,
-          colorCat,
-          shapeCat: classCode,
-          physio,
-          physioGroup,
+      // trigger download
+      const a = document.createElement('a');
+      a.href = url;
+      const baseName = (datasetTitle(currentDataset) || 'tsne')
+        .replace(/\s+/g, '_')
+        .toLowerCase();
+      a.download = baseName + '.svg';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+    } catch (e) {
+      console.error('Download failed', e);
+      alert('Download failed: ' + e.message);
+    } finally {
+      downloadBtn.disabled = false;
+      downloadBtn.textContent = origText;
+    }
+  });
+
+  /* ---------- build traces ---------- */
+
+  let showClassRegions = true;
+
+  function buildTraces(points, colorKey, shapeKey) {
+    const tracesByCombo = new Map();
+    const paletteMap = new Map();  // for Chemotype / Receptor family
+    let paletteIdx = 0;
+
+    points.forEach(p => {
+      const cCat      = getCategory(p, colorKey);
+      const shapeCat  = getShapeCategory(p, shapeKey);
+      let color       = colorForCategory(colorKey, cCat, p);
+
+      if (color === null) {
+        if (!paletteMap.has(cCat)) {
+          paletteMap.set(cCat, PALETTE[paletteIdx % PALETTE.length]);
+          paletteIdx += 1;
+        }
+        color = paletteMap.get(cCat);
+      }
+
+      const key = cCat + '|' + shapeCat;
+      if (!tracesByCombo.has(key)) {
+        tracesByCombo.set(key, {
+          name: cCat,
+          cls:  shapeCat,
+          color: color,
           xs: [],
           ys: [],
           texts: []
-        };
+        });
       }
+      const bucket = tracesByCombo.get(key);
+      bucket.xs.push(p.x);
+      bucket.ys.push(p.y);
 
-      const entry = normEntry(meta.protein_entry);
-      const name  = plain(meta.protein_name);
-      const pdb   = meta.pdb_code || p.label || '';
+      const label    = p.label || '';
+      const uni      = p.uniprot || '';
+      const modality = p.Modality || '';
+      const sense    = p.Sense || '';
+      const lines = [];
+      if (label)    lines.push('Label: ' + label);
+      if (uni)      lines.push('UniProt: ' + uni);
+      if (modality) lines.push('Modality: ' + modality);
+      if (sense)    lines.push('Sense: ' + sense);
+      lines.push(colorKey + ': ' + cCat);
+      bucket.texts.push(lines.join('<br>'));
+    });
 
-      const sense = meta.sense || '';
-      const senseLine = sense ? `Sense: ${sense}<br>` : '';
-
-      const consensus = physio;
-      const rawList   = Array.isArray(meta.physio_ligand_types_raw)
-        ? meta.physio_ligand_types_raw.filter(Boolean).join(', ')
-        : '';
-      const physioLine = consensus
-        ? `Physiological ligand: ${consensus}${rawList ? ` <span style="color:#666">(${rawList})</span>` : ''}<br>`
-        : '';
-
-      const line1 = (entry && name) ? `${entry} — ${name}` : (entry || name || pdb);
-      const line2 = `PDB: ${pdb}`;
-      const line3 = `${key}: ${colorCat}`;
-
-      bucketsById[id].texts.push(`${line1}<br>${physioLine}${senseLine}${line2}<br>${line3}`);
-      bucketsById[id].xs.push(p.x);
-      bucketsById[id].ys.push(p.y);
-    }
-
-    const bucketList = [];
-    for (const id in bucketsById) {
-      const b = bucketsById[id];
-      bucketList.push({
-        id: b.id,
-        colorCat: b.colorCat,
-        shapeCat: b.shapeCat,
-        physio: b.physio,
-        physioGroup: b.physioGroup,
-        xs: b.xs,
-        ys: b.ys,
-        texts: b.texts
+    const traces = [];
+    for (const [, b] of tracesByCombo.entries()) {
+      traces.push({
+        x: b.xs,
+        y: b.ys,
+        type: 'scatter',
+        mode: 'markers',
+        marker: {
+          size: 9,
+          line: { width: 0.5, color: '#000' },
+          color: b.color,
+          symbol: getShapeFor(b.cls, shapeKey)
+        },
+        name: b.name,
+        hoverinfo: 'text',
+        text: b.texts,
+        showlegend: true,
+        _classCode: b.cls,
+        _colorCat: b.name
       });
     }
 
-    let groupColorMaps = null;
-    if (key === 'Ligand type' || key === 'Receptor family') {
-      groupColorMaps = {};
-      const catsByGroup = {};
-      for (const b of bucketList) {
-        const g = b.physioGroup || 'Other';
-        if (!catsByGroup[g]) catsByGroup[g] = new Set();
-        catsByGroup[g].add(b.colorCat);
-      }
-      for (const g in catsByGroup) {
-        const cats = Array.from(catsByGroup[g]).sort();
-        const palette = GROUP_GRADIENTS[g] || PALETTE;
-        const m = new Map();
-        cats.forEach((c, i) => {
-          m.set(c, palette[i % palette.length]);
-        });
-        groupColorMaps[g] = m;
-      }
-    }
-
-    const traces = [];
-
-    if (shouldGroupByPhysio) {
-
-      const legendProxyTraces = {}; // physio|colorCat → index of proxy legend trace
-
-      for (const groupLabel of PHYSIO_GROUP_ORDER) {
-        const groupBuckets = bucketList
-          .filter(b => b.physioGroup === groupLabel)
-          .sort(compareBuckets);
-
-        if (!groupBuckets.length) continue;
-
-        /* -------------------- HEADER -------------------- */
-        traces.push({
-          x: [NaN], y: [NaN],
-          type: 'scatter',
-          mode: 'markers',
-          marker: { size: 0, color: 'rgba(0,0,0,0)' },
-          name: `<b>${groupLabel}</b>`,
-          hoverinfo: 'skip',
-          showlegend: true,
-          _kind: 'header',
-          _physioGroup: groupLabel
-        });
-
-        /* -------------------- CATEGORY PROXIES -------------------- */
-        // Determine category list for this physio group
-        const cats = [...new Set(groupBuckets.map(b => b.colorCat))].sort();
-
-        for (const cat of cats) {
-          const color = chooseBucketColor(key, {colorCat:cat, physioGroup:groupLabel}, groupColorMaps, colorMap);
-
-          traces.push({
-            x: [NaN, NaN],
-            y: [NaN, NaN],
-            type: 'scatter',
-            mode: 'lines',
-            line: { width: 8, color: color },
-            name: cat,
-            hoverinfo: 'skip',
-            showlegend: true,
-            _kind: 'legend-proxy',
-            _physioGroup: groupLabel,
-            _colorCat: cat
-          });
-        }
-
-        /* -------------------- REAL BUCKET TRACES -------------------- */
-        for (const b of groupBuckets) {
-          const color = chooseBucketColor(key, b, groupColorMaps, colorMap);
-
-          traces.push({
-            x: b.xs,
-            y: b.ys,
-            type: 'scatter',
-            mode: 'markers',
-            marker: {
-              size: 9,
-              line: { width: 0.5, color: '#000' },
-              color: color,
-              symbol: getShapeFor(b.shapeCat, shapeKey)
-            },
-            name: b.colorCat,
-            hoverinfo: 'text',
-            text: b.texts,
-            showlegend: false, // REAL traces do not appear in legend
-            _kind: 'bucket',
-            _physioGroup: groupLabel,
-            _colorCat: b.colorCat,
-            _classCode: b.shapeCat
-          });
-        }
-      }
-
-    } else {
-      /* ---------------- SIMPLE LEGEND ---------------- */
-
-      const cats = [...new Set(bucketList.map(b => b.colorCat))].sort();
-
-      for (const cat of cats) {
-        const sample = bucketList.find(b => b.colorCat === cat);
-        const color = chooseBucketColor(key, sample, groupColorMaps, colorMap);
-
-        traces.push({
-          x:[NaN,NaN],
-          y:[NaN,NaN],
-          type:'scatter',
-          mode:'lines',
-          line:{ width:8, color:color },
-          name: cat,
-          hoverinfo:'skip',
-          showlegend:true,
-          _kind:'legend-proxy',
-          _colorCat:cat
-        });
-      }
-
-      for (const b of bucketList) {
-        const color = chooseBucketColor(key, b, groupColorMaps, colorMap);
-
-        traces.push({
-          x: b.xs,
-          y: b.ys,
-          type:'scatter',
-          mode:'markers',
-          marker:{
-            size: 9,
-            line:{ width:0.5, color:'#000' },
-            color: color,
-            symbol: getShapeFor(b.shapeCat, shapeKey)
-          },
-          name:b.colorCat,
-          hoverinfo:'text',
-          text:b.texts,
-          showlegend:false,
-          _kind:'bucket',
-          _physioGroup:b.physioGroup,
-          _colorCat:b.colorCat,
-          _classCode:b.shapeCat
-        });
-      }
-    }
-
-  
-
-    // Class legend (always shown, per your Option 1)
-    traces.push({
-      x: [NaN],
-      y: [NaN],
-      type: 'scatter',
-      mode: 'markers',
-      marker: { size: 0, color: 'rgba(0,0,0,0)' },
-      name: '<b>Class</b>',
-      hoverinfo: 'skip',
-      showlegend: true,
-      _kind: 'class-header'
-    });
-
-    CLASS_ORDER.forEach(cls => {
+    // Add class legend only when shapes encode class
+    if (shapeKey === 'Class') {
       traces.push({
         x: [NaN],
         y: [NaN],
         type: 'scatter',
         mode: 'markers',
-        marker: {
-          size: 9,
-          color: '#000',
-          symbol: getShapeFor(cls, 'Class')
-        },
-        name: cls,
+        marker: { size: 0, color: 'rgba(0,0,0,0)' },
+        name: '<b>Class (shape)</b>',
         hoverinfo: 'skip',
-        showlegend: true,
-        _kind: 'classLegend',
-        _classCode: cls
+        showlegend: true
+      });
+
+      CLASS_ORDER.forEach(cls => {
+        traces.push({
+          x: [NaN],
+          y: [NaN],
+          type: 'scatter',
+          mode: 'markers',
+          marker: {
+            size: 9,
+            color: '#000',
+            symbol: getShapeFor(cls, 'Class')
+          },
+          name: cls,
+          hoverinfo: 'skip',
+          showlegend: true
+        });
+      });
+    }
+
+        // ---------- optional class regions (ellipses + labels) ----------
+    if (showClassRegions) {
+      const byClass = {};
+      points.forEach(p => {
+        const code = normClassCodeFromString(p.Class);
+        if (!code) return;
+        if (!byClass[code]) byClass[code] = { xs: [], ys: [] };
+        byClass[code].xs.push(p.x);
+        byClass[code].ys.push(p.y);
+      });
+
+      const classes = Object.keys(byClass);
+          classes.forEach(code => {
+      const xs = byClass[code].xs;
+      const ys = byClass[code].ys;
+      const n  = xs.length;
+      if (!n) return;
+
+      // centroid
+      const cx = xs.reduce((a,b) => a + b, 0) / n;
+      const cy = ys.reduce((a,b) => a + b, 0) / n;
+
+      // covariance matrix
+      let sxx = 0, syy = 0, sxy = 0;
+      for (let i = 0; i < n; i++) {
+        const dx = xs[i] - cx;
+        const dy = ys[i] - cy;
+        sxx += dx * dx;
+        syy += dy * dy;
+        sxy += dx * dy;
+      }
+      if (n > 1) {
+        sxx /= (n - 1);
+        syy /= (n - 1);
+        sxy /= (n - 1);
+      }
+
+      // eigenvalues of 2x2 covariance matrix
+      const trace = sxx + syy;
+      const det   = sxx * syy - sxy * sxy;
+      const disc  = Math.max(trace * trace / 4 - det, 0);
+      const root  = Math.sqrt(disc);
+      let eig1 = trace / 2 + root; // largest
+      let eig2 = trace / 2 - root; // smallest
+      if (eig1 < eig2) {
+        const tmp = eig1; eig1 = eig2; eig2 = tmp;
+      }
+
+      // eigenvector for largest eigenvalue (orientation of major axis)
+      let vx, vy;
+      if (Math.abs(sxy) > 1e-12) {
+        vx = eig1 - syy;
+        vy = sxy;
+      } else {
+        if (sxx >= syy) {
+          vx = 1; vy = 0;
+        } else {
+          vx = 0; vy = 1;
+        }
+      }
+      const norm = Math.sqrt(vx*vx + vy*vy) || 1.0;
+      vx /= norm;
+      vy /= norm;
+
+      // second eigenvector is perpendicular
+      const ux = -vy;
+      const uy =  vx;
+
+      // project all points into this basis and find extremes
+      const majors = new Array(n);
+      const minors = new Array(n);
+      let maxMajor = 0;
+      let maxMinor = 0;
+      for (let i = 0; i < n; i++) {
+        const dx = xs[i] - cx;
+        const dy = ys[i] - cy;
+        const projMajor = dx * vx + dy * vy; // along (vx,vy)
+        const projMinor = dx * ux + dy * uy; // along (ux,uy)
+        majors[i] = projMajor;
+        minors[i] = projMinor;
+        const aAbs = Math.abs(projMajor);
+        const bAbs = Math.abs(projMinor);
+        if (aAbs > maxMajor) maxMajor = aAbs;
+        if (bAbs > maxMinor) maxMinor = bAbs;
+      }
+
+      // compute how much we need to scale the axes so that
+      // (u^2 + v^2) <= 1 for all points, where u = major/maxMajor, v = minor/maxMinor
+      let maxEllipse = 0;
+      if (maxMajor === 0) maxMajor = 0.1;
+      if (maxMinor === 0) maxMinor = 0.1;
+      for (let i = 0; i < n; i++) {
+        const u = majors[i] / maxMajor;
+        const v = minors[i] / maxMinor;
+        const val = u*u + v*v;
+        if (val > maxEllipse) maxEllipse = val;
+      }
+      const baseScale = Math.sqrt(maxEllipse || 1);
+
+      // final axis lengths with gentle padding
+      const PADDING = 1.05;
+      const a = maxMajor * baseScale * PADDING;
+      const b = maxMinor * baseScale * PADDING;
+
+      // build ellipse points (x = cx + a*cos t * v + b*sin t * u)
+      const nSeg = 80;
+      const exs = [];
+      const eys = [];
+      for (let k = 0; k <= nSeg; k++) {
+        const t = 2 * Math.PI * (k / nSeg);
+        const cosT = Math.cos(t);
+        const sinT = Math.sin(t);
+        const px = cx + a * cosT * vx + b * sinT * ux;
+        const py = cy + a * cosT * vy + b * sinT * uy;
+        exs.push(px);
+        eys.push(py);
+      }
+
+      const color = CLASS_COLORS[code] || '#999999';
+
+      // ellipse outline
+      traces.push({
+        x: exs,
+        y: eys,
+        type: 'scatter',
+        mode: 'lines',
+        line: { width: 2, color: color },
+        name: 'Class ' + code + ' region',
+        hoverinfo: 'skip',
+        showlegend: false
+      });
+
+      // place label slightly outside along major axis
+      const labelOffset = 1.05;
+      const labelX = cx + a * labelOffset * vx;
+      const labelY = cy + a * labelOffset * vy;
+
+      traces.push({
+        x: [labelX],
+        y: [labelY],
+        type: 'scatter',
+        mode: 'text',
+        text: ['Class ' + code],
+        textposition: 'middle center',
+        textfont: { color: '#000000', size: 12 },
+        hoverinfo: 'skip',
+        showlegend: false
       });
     });
 
+    }
+
+    // >>> these two lines were missing <<<
     return traces;
   }
 
-  /* ---------------- legend click handlers ---------------- */
 
-function attachLegendHandlersOnce() {
-  if (legendHandlersAttached || !plotDiv) return;
-  legendHandlersAttached = true;
+  /* ---------- data + rendering ---------- */
 
-  plotDiv.on('plotly_legendclick', function (ev) {
-    const data  = ev.data || [];
-    const trace = data[ev.curveNumber];
-    if (!trace) return true;
+  let datasets = {
+    sequence: [],
+    inactive: [],
+    active:   []
+  };
+  let currentDataset = 'sequence';
+  let colorKey = 'Class';
+  let shapeKey = 'None';
 
-    const xRange = (plotDiv.layout && plotDiv.layout.xaxis && plotDiv.layout.xaxis.range)
-      ? plotDiv.layout.xaxis.range.slice()
-      : null;
-    const yRange = (plotDiv.layout && plotDiv.layout.yaxis && plotDiv.layout.yaxis.range)
-      ? plotDiv.layout.yaxis.range.slice()
-      : null;
+  function datasetTitle(ds) {
+    if (ds === 'sequence') return 'Sequence similarity';
+    if (ds === 'inactive') return 'Inactive structures';
+    if (ds === 'active')   return 'Active structures';
+    return '';
+  }
 
-    function applyVisibility(targetIdxs) {
-      if (!targetIdxs.length) return false;
-
-      let anyVisible = false;
-      let anyHidden  = false;
-      for (const i of targetIdxs) {
-        const t = data[i];
-        const vis = t.visible;
-        if (vis === 'legendonly' || vis === false || vis === 'none') {
-          anyHidden = true;
-        } else {
-          anyVisible = true;
-        }
-      }
-      const newVisible = (anyVisible && !anyHidden) ? 'legendonly' : true;
-
-      Plotly.restyle(plotDiv, { visible: newVisible }, targetIdxs).then(function () {
-        if (xRange && yRange) {
-          return Plotly.relayout(plotDiv, {
-            'xaxis.range': xRange,
-            'yaxis.range': yRange
-          });
-        }
-      });
-
-      return false;
+  function render() {
+    const pts = datasets[currentDataset] || [];
+    if (!pts.length) {
+      statusEl.textContent = 'No data for ' + currentDataset;
+      return;
     }
+    statusEl.textContent = '';
 
-    /* ----- 1) Physio headers: toggle whole group (buckets + proxies) ----- */
-    if (trace._kind === 'header') {
-      const group = trace._physioGroup;
-      const idxs  = [];
-      for (let i = 0; i < data.length; i++) {
-        const t = data[i];
-        if (!t) continue;
-        if (t._kind === 'bucket' && t._physioGroup === group) {
-          idxs.push(i);
-        }
-        if (t._kind === 'legend-proxy' && t._physioGroup === group) {
-          idxs.push(i);
-        }
-      }
-      return applyVisibility(idxs);
-    }
+    plotTitleEl.textContent = datasetTitle(currentDataset);
 
-    /* ----- 2) Color legend proxies (the lines): toggle buckets + this proxy ----- */
-    if (trace._kind === 'legend-proxy') {
-      const group = trace._physioGroup || null; // may be null in simple legend mode
-      const cat   = trace._colorCat;
-      const idxs  = [];
-
-      // all buckets of this category (and group, if defined)
-      for (let i = 0; i < data.length; i++) {
-        const t = data[i];
-        if (!t || t._kind !== 'bucket') continue;
-        if (t._colorCat !== cat) continue;
-        if (group !== null && t._physioGroup !== group) continue;
-        idxs.push(i);
-      }
-      // include the proxy itself so its line greys out
-      idxs.push(ev.curveNumber);
-
-      return applyVisibility(idxs);
-    }
-
-    /* ----- 3) Class legend entries: toggle by class code ----- */
-    // toggle all receptors of a given class
-    if (trace._kind === 'classLegend') {
-      const code = trace._classCode;
-      const idxs = [];
-      for (let i = 0; i < data.length; i++) {
-        const t = data[i];
-        if (t && t._kind === 'bucket' && t._classCode === code) {
-          idxs.push(i);
-        }
-      }
-
-      // also toggle the legend item itself so it greys out
-      idxs.push(ev.curveNumber);
-
-      return applyVisibility(idxs);
-    }
-
-    /* ----- 4) Class header: do nothing ----- */
-    if (trace._kind === 'class-header') {
-      return false;
-    }
-
-    // All other traces: default behaviour
-    return true;
-  });
-
-  plotDiv.on('plotly_legenddoubleclick', function (ev) {
-    const data  = ev.data || [];
-    const trace = data[ev.curveNumber];
-    if (!trace) return true;
-
-    // prevent "show only this trace" for our custom legend items
-    if (trace._kind === 'header' ||
-        trace._kind === 'legend-proxy' ||
-        trace._kind === 'classLegend' ||
-        trace._kind === 'class-header') {
-      return false;
-    }
-    return true;
-  });
-}
-
-
-  /* ---------------- render & fetch ---------------- */
-
-  function render(state) {
-    const cached = dataCache[state];
-    if (!cached) return;
-
-    currentState = state;
-
-    plotTitleEl.textContent = (state === 'inactive')
-      ? 'Inactive structures'
-      : 'Active structures';
-
-    const traces = buildTraces(cached.points, cached.proteins, colorKey, shapeKey);
+    const traces = buildTraces(pts, colorKey, shapeKey);
     const layout = {
       xaxis: { visible: false, showgrid: false, scaleanchor: 'y' },
       yaxis: { visible: false, showgrid: false },
@@ -693,77 +543,36 @@ function attachLegendHandlersOnce() {
         orientation: 'v',
         font: { family: 'Source Code Pro, monospace' }
       },
-      margin: { l: 40, r: 200, t: 10, b: 40 },
+      margin: { l: 40, r: 220, t: 10, b: 40 },
       paper_bgcolor: '#fff',
       plot_bgcolor: '#fff'
     };
 
     Plotly.react(plotDiv, traces, layout, { displayModeBar: true, responsive: true });
-    attachLegendHandlersOnce();
-    requestAnimationFrame(() => { try { Plotly.Plots.resize(plotDiv); } catch(e){} });
+    requestAnimationFrame(() => {
+      try { Plotly.Plots.resize(plotDiv); } catch (e) {}
+    });
   }
 
-  async function fetchState(state, { renderAfter = false } = {}) {
-    if (dataCache[state]) {
-      if (renderAfter) {
-        statusEl.textContent = '';
-        render(state);
-      }
-      return;
-    }
+  /* ---------- UI wiring ---------- */
 
-    const url = EMBED_URLS[state];
-    try {
-      const res = await fetch(url, { headers: { 'Accept': 'application/json' }});
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-
-      if (!data.tsne || data.tsne.error) {
-        if (renderAfter) {
-          statusEl.textContent = data.tsne ? ('Embedding error: ' + data.tsne.error) : 'No embedding';
-        }
-        return;
-      }
-
-      const points   = data.tsne.points || [];
-      const proteins = data.proteins     || {};
-      if (!points.length) {
-        if (renderAfter) statusEl.textContent = 'No points to plot.';
-        return;
-      }
-
-      dataCache[state] = { points, proteins };
-
-      if (renderAfter) {
-        statusEl.textContent = '';
-        render(state);
-      }
-
-    } catch (e) {
-      console.error('fetchState error for', state, e);
-      if (renderAfter) statusEl.textContent = 'Failed to load data: ' + e.message;
-    }
-  }
-
-  /* ---------------- UI wiring ---------------- */
-
-  document.querySelectorAll('.state-btn').forEach(btn => {
+  // dataset toggle
+  document.querySelectorAll('.dataset-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const state = btn.getAttribute('data-state');
-      if (!state || state === currentState) return;
-
-      document.querySelectorAll('.state-btn').forEach(b => {
+      const ds = btn.getAttribute('data-dataset');
+      if (!ds || ds === currentDataset) return;
+      document.querySelectorAll('.dataset-btn').forEach(b => {
         b.classList.remove('btn-primary');
         b.classList.add('btn-default');
       });
       btn.classList.remove('btn-default');
       btn.classList.add('btn-primary');
-
-      if (dataCache[state]) render(state);
-      else fetchState(state, { renderAfter: true });
+      currentDataset = ds;
+      render();
     });
   });
 
+  // colour-by
   document.querySelectorAll('.colorby').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.colorby').forEach(b => {
@@ -773,15 +582,15 @@ function attachLegendHandlersOnce() {
       btn.classList.remove('btn-default');
       btn.classList.add('btn-primary');
       colorKey = btn.getAttribute('data-key') || 'Class';
-      render(currentState);
+      render();
     });
   });
 
+  // shape-by (None / Class)
   document.querySelectorAll('.shapeby').forEach(btn => {
     btn.addEventListener('click', () => {
-      const key = btn.getAttribute('data-key') || 'Class';
+      const key = btn.getAttribute('data-key') || 'None';
       if (key === shapeKey) return;
-
       document.querySelectorAll('.shapeby').forEach(b => {
         b.classList.remove('btn-primary');
         b.classList.add('btn-default');
@@ -789,30 +598,68 @@ function attachLegendHandlersOnce() {
       btn.classList.remove('btn-default');
       btn.classList.add('btn-primary');
       shapeKey = key;
-      render(currentState);
+      render();
     });
+  });
+
+  // class regions toggle
+  regionBtn.addEventListener('click', () => {
+    const active = regionBtn.getAttribute('data-active') === '1';
+    if (active) {
+      regionBtn.setAttribute('data-active', '0');
+      regionBtn.classList.remove('btn-primary');
+      regionBtn.classList.add('btn-default');
+      regionBtn.textContent = 'Off';
+      showClassRegions = false;
+    } else {
+      regionBtn.setAttribute('data-active', '1');
+      regionBtn.classList.remove('btn-default');
+      regionBtn.classList.add('btn-primary');
+      regionBtn.textContent = 'On';
+      showClassRegions = true;
+    }
+    render();
   });
 
   window.addEventListener('resize', () => {
     try { Plotly.Plots.resize(plotDiv); } catch (e) {}
   });
 
-  /* ---------------- initial load ---------------- */
+  /* ---------- initial load (single fetch) ---------- */
 
   try {
-    statusEl.textContent = 'Loading structures…';
-    await Promise.all([
-      fetchState('inactive'),
-      fetchState('active'),
-    ]);
+    statusEl.textContent = 'Loading data…';
+    const res = await fetch(EMBED_URL, { headers: { 'Accept': 'application/json' }});
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+
+    datasets.sequence = (data.sequence && data.sequence.points) || [];
+    datasets.inactive = (data.structure && data.structure.inactive && data.structure.inactive.points) || [];
+    datasets.active   = (data.structure && data.structure.active   && data.structure.active.points)   || [];
+
+    // --- cosmetic transforms to align with sequence embedding ---
+
+    // Active: flip vertically only (your choice)
+    datasets.active.forEach(p => {
+      p.y = -p.y;
+    });
+
+    // Inactive: flip horizontally AND vertically
+    datasets.inactive.forEach(p => {
+      p.x = -p.x;
+      p.y = -p.y;
+    });
+
     statusEl.textContent = '';
-    render('inactive');
+    render();
   } catch (e) {
     console.error('Initial load error:', e);
     statusEl.textContent = 'Failed to load data: ' + e.message;
   }
 
 })();
-</script>
 
+  
+
+</script>
 {% endblock %}

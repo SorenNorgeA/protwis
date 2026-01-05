@@ -2994,93 +2994,87 @@ class ReceptorSimilarityExportExcel(View):
 # ------------------------------ Structure similarity -----------------------------
 
 class StructureSim(TemplateView):
+    """
+    Serve combined t-SNE embeddings for:
+      - sequence similarity (precomputed HumanGPCRSimilarityAllData_tsne.csv)
+      - structure distance matrices (inactive / active) with auto t-SNE caching.
+
+    All points are annotated using Classification.xlsx, matched by:
+      label  -> prefix before '_' -> uppercased UniProt code.
+      e.g.  'grm3_8TR0'  -> 'GRM3'
+            '5ht1a_8PJK' -> '5HT1A'
+    """
+
     template_name = 'class_similarity/StructureSim.html'
 
-    # --- config ---
-    DATA_FOLDER = 'structure_data'
-    FILES = {
-        'inactive': 'GPCR_structure_clustering_inactiveRep.csv',
-        'active':   'GPCR_structure_clustering_activeStructuresRep.csv',
+    # ---------- config ----------
+
+    # where the structure distance matrices live
+    STRUCTURE_FOLDER = 'structure_data'
+    STRUCTURE_FILES = {
+        'inactive': 'GPCR_structure_clustering_inactiveRep_entry_pdb.xlsx',
+        'active':   'GPCR_structure_clustering_activeStructuresRep_entry_pdb.xlsx',
     }
-    DEFAULT_STATE = 'inactive'
 
-    # NEW: ligand/sense annotation Excel
-    LIGAND_META_FOLDER = 'protein_data'
-    LIGAND_META_FILE = 'Ligand type update plus sense column.xlsx'
+    # where the precomputed sequence t-SNE lives
+    SIMILARITY_FOLDER = 'structure_data'
+    SIMILARITY_TSNE = 'HumanGPCRSimilarityAllData_tsne.csv'
 
-    CACHE_TIMEOUT = 60 * 15  # 15 minutes
-    CACHE_NS = 'structuresim:data'
+    # classification Excel
+    CLASSIFICATION_FOLDER = 'protein_data'
+    CLASSIFICATION_FILE = 'Classification.xlsx'
 
-    # ---------- helpers ----------
-    def _file_path(self, state: str):
-        """Get full path to the CSV for the given state ('inactive' or 'active')."""
+    CACHE_TIMEOUT = 60 * 15  # only used for classification mapping
+    CLASSIFICATION_CACHE_KEY = 'structuresim:classification:v2'
+
+    # ---------- path helpers ----------
+
+    def _structure_matrix_path(self, state):
+        """
+        Full path to the structure distance matrix CSV for 'inactive'/'active'.
+        """
         try:
-            file_name = self.FILES[state]
+            fname = self.STRUCTURE_FILES[state]
         except KeyError:
             raise ValueError(
-                f"Unknown state '{state}'. Expected one of: {', '.join(self.FILES.keys())}"
+                "Unknown state '%s', expected one of: %s"
+                % (state, ", ".join(self.STRUCTURE_FILES.keys()))
             )
-        return os.path.join(settings.DATA_DIR, self.DATA_FOLDER, file_name)
+        return os.path.join(settings.DATA_DIR, self.STRUCTURE_FOLDER, fname)
 
-    def _ligand_meta_path(self):
-        """Full path to the Excel with ligand-type + sense annotations."""
+    def _structure_tsne_path(self, state):
+        """
+        Path to cached t-SNE CSV for given state, e.g.
+        GPCR_structure_clustering_inactiveRep_tsne.csv
+        """
+        base = os.path.splitext(self.STRUCTURE_FILES[state])[0]
+        fname = "%s_tsne.csv" % base
+        return os.path.join(settings.DATA_DIR, self.STRUCTURE_FOLDER, fname)
+
+    def _similarity_tsne_path(self):
+        """
+        Path to precomputed sequence similarity t-SNE CSV.
+        """
         return os.path.join(
-            settings.DATA_DIR,
-            self.LIGAND_META_FOLDER,
-            self.LIGAND_META_FILE,
+            settings.DATA_DIR, self.SIMILARITY_FOLDER, self.SIMILARITY_TSNE
         )
 
-    def _cache_key(self, state: str, extra: str = ''):
-        """Auto-bust on CSV mtime; allow manual ?v=...; separated per state."""
-        p = self._file_path(state)
-        try:
-            mtime = int(os.path.getmtime(p))
-        except Exception:
-            mtime = 0
-        manual = self.request.GET.get('v', '')
-        # bump version for new physio logic
-        return f"{self.CACHE_NS}:v9:{state}:{mtime}:{manual}:{extra}"
+    def _classification_path(self):
+        """
+        Path to Classification.xlsx.
+        """
+        return os.path.join(
+            settings.DATA_DIR,
+            self.CLASSIFICATION_FOLDER,
+            self.CLASSIFICATION_FILE,
+        )
 
-    def _family_lineage_names(self, protein):
-        """
-        Returns (class_name, ligand_type, receptor_family) by walking up family parents:
-          parent^3 = Class, parent^2 = Ligand type, parent^1 = Receptor family
-        """
-        f = getattr(protein, 'family', None)
-        if not f:
-            return None, None, None
-        p1 = getattr(f, 'parent', None)
-        p2 = getattr(p1, 'parent', None) if p1 else None
-        p3 = getattr(p2, 'parent', None) if p2 else None
-        receptor_family = getattr(p1, 'name', None)
-        ligand_type     = getattr(p2, 'name', None)
-        class_name      = getattr(p3, 'name', None)
-        return class_name, ligand_type, receptor_family
-
-    def _canonical_protein_from_structure(self, s, models_by_template):
-        """
-        Prefer canonical protein rows for names/labels:
-          1) structure's protein if it has accession
-          2) else its parent if it has accession
-          3) else StructureModel(main_template=s) protein with accession
-          4) else fallback to structure's protein
-        """
-        p = s.protein_conformation.protein
-        if getattr(p, 'accession', None):
-            return p
-        parent = getattr(p, 'parent', None)
-        if parent and getattr(parent, 'accession', None):
-            return parent
-        for sm in models_by_template.get(s.id, ()):
-            mp = sm.protein
-            if getattr(mp, 'accession', None):
-                return mp
-        return p
+    # ---------- core helpers ----------
 
     def _compute_tsne(self, D):
         """
-        D: numpy (n x n) distance matrix, symmetric, zeros on diagonal.
-        Returns coords (n x 2), with robust defaults for perplexity.
+        D: (n x n) distance matrix, symmetric, zeros on diag.
+        Returns coords (n x 2).
         """
         n = D.shape[0]
         perplexity = max(5.0, min(40.0, (n - 1) / 3.0, n - 2.0))
@@ -3093,390 +3087,330 @@ class StructureSim(TemplateView):
             learning_rate="auto",
             square_distances=True,
         )
-        coords = tsne.fit_transform(D)
-        return coords
+        return tsne.fit_transform(D)
 
-    @staticmethod
-    def _norm_lt(name: str) -> str:
-        """Normalize a ligand type string to coarse buckets: 'peptide', 'small', or 'other'."""
-        s = (name or '').strip().lower()
-        if 'peptide' in s or 'protein' in s:
-            return 'peptide'
-        if ('small' in s and 'molecule' in s) or s == 'small-molecule' or s == 'small molecule':
-            return 'small'
-        return 'other'
+    def _load_classification_meta(self):
+        """
+        Load Classification.xlsx and return mapping:
+          { UNIPROT_CODE (upper) : {
+                'Receptor family': ...,
+                'Chemotype': ...,
+                'Modality': ...,
+                'Class': ...,
+                'Sense': ...
+          }}
 
-    @staticmethod
-    def _uniprot_from_entry(entry_name):
+        Cached in Django cache.
         """
-        Convert GPCRdb entry_name like 'adra1a_human' → 'ADRA1A'.
-        """
-        if not entry_name:
-            return None
-        s = str(entry_name).strip()
-        if not s:
-            return None
-        s = s.split('_')[0]
-        return s.upper()
-
-    def _load_ligand_meta(self):
-        """
-        Load Excel with ligand type / sense info, return:
-          { UNIPROT_CODE (upper) : { 'Ligand type': ..., 'Sense': ..., 'Receptor family': ..., 'Class': ... } }
-        Cached via Django cache.
-        """
-        cache_key = f"{self.CACHE_NS}:ligandmeta:v1"
-        cached = cache.get(cache_key)
+        cached = cache.get(self.CLASSIFICATION_CACHE_KEY)
         if cached is not None:
             return cached
 
-        path = self._ligand_meta_path()
+        path = self._classification_path()
         if not os.path.exists(path):
-            cache.set(cache_key, {}, self.CACHE_TIMEOUT)
+            cache.set(self.CLASSIFICATION_CACHE_KEY, {}, self.CACHE_TIMEOUT)
             return {}
 
         df = pd.read_excel(path)
 
-        # Find column names, being tolerant to line breaks / spacing
+        # tolerant column name picker (handles embedded newlines etc.)
         def pick(*cands):
-            cands = {c.strip() for c in cands}
-            for name in df.columns:
-                s = str(name).strip()
-                if s in cands:
-                    return name
+            names = set([str(c).strip() for c in cands])
+            for col in df.columns:
+                s = str(col).strip()
+                if s in names:
+                    return col
             return None
 
-        col_uni    = pick('GPCRs (UniProt)', 'GPCRs\n(UniProt)')
-        col_lt     = pick('Ligand type')
-        col_sense  = pick('Sense')
-        col_family = pick('Receptor family')
-        col_class  = pick('Class')
+        col_uni      = pick('GPCRs (UniProt)', 'GPCRs\n(UniProt)', 'GPCRs (UniProt)')
+        col_family   = pick('Receptor family')
+        col_chemo    = pick('Chemotype')
+        col_modality = pick('Modality')
+        col_class    = pick('Class')
+        col_sense    = pick('Sense')
 
         if not col_uni:
-            cache.set(cache_key, {}, self.CACHE_TIMEOUT)
+            cache.set(self.CLASSIFICATION_CACHE_KEY, {}, self.CACHE_TIMEOUT)
             return {}
 
         mapping = {}
+
         for _, row in df.iterrows():
-            uni = str(row[col_uni]).strip()
+            uni_val = row[col_uni]
+            if pd.isna(uni_val):
+                continue
+            uni = str(uni_val).strip()
             if not uni or uni.lower() == 'nan':
                 continue
+
             key = uni.upper()
             rec = {}
 
-            if col_lt is not None:
-                v = row[col_lt]
-                if pd.notna(v):
-                    rec['Ligand type'] = str(v).strip()
+            if col_family is not None and pd.notna(row[col_family]):
+                rec['Receptor family'] = str(row[col_family]).strip()
 
-            if col_sense is not None:
-                v = row[col_sense]
-                if pd.notna(v):
-                    rec['Sense'] = str(v).strip()
+            if col_chemo is not None and pd.notna(row[col_chemo]):
+                rec['Chemotype'] = str(row[col_chemo]).strip()
 
-            if col_family is not None:
-                v = row[col_family]
-                if pd.notna(v):
-                    rec['Receptor family'] = str(v).strip()
+            if col_modality is not None and pd.notna(row[col_modality]):
+                rec['Modality'] = str(row[col_modality]).strip()
 
-            if col_class is not None:
-                v = row[col_class]
-                if pd.notna(v):
-                    rec['Class'] = str(v).strip()
+            if col_class is not None and pd.notna(row[col_class]):
+                rec['Class'] = str(row[col_class]).strip()
+
+            if col_sense is not None and pd.notna(row[col_sense]):
+                rec['Sense'] = str(row[col_sense]).strip()
 
             if rec:
                 mapping[key] = rec
 
-        cache.set(cache_key, mapping, self.CACHE_TIMEOUT)
+        cache.set(self.CLASSIFICATION_CACHE_KEY, mapping, self.CACHE_TIMEOUT)
         return mapping
 
-    def _build_payload(self, state: str, want_embed: bool = False):
+    @staticmethod
+    def _label_to_uniprot(label):
         """
-        Read CSV for given state, validate, enrich with DB metadata (canonical protein),
-        compute physiological ligand-type consensus per receptor from ALL Endogenous_GTP,
-        and optionally compute t-SNE embedding on the distance matrix.
-        """
-        cache_key = self._cache_key(state, extra=('embed' if want_embed else 'noembed'))
-        cached = cache.get(cache_key)
-        if cached:
-            return cached
+        Turn a label from t-SNE into a Uniprot-style key used in Classification.xlsx.
 
-        # --- load CSV ---
-        file_path = self._file_path(state)
+        Handles:
+          - '5ht1a'      -> '5HT1A'
+          - '5ht1a_8TR0' -> '5HT1A'
+        """
+        if label is None:
+            return None
+        s = str(label).strip()
+        if not s:
+            return None
+        s = s.split('_', 1)[0]  # prefix before '_'
+        return s.upper()
+
+    # ---------- loading / building data ----------
+
+    def _load_distance_matrix(self, state):
+        """
+        Load a structure distance matrix file (CSV or Excel) and return
+        (path, labels, matrix).
+
+        Handles numeric coercion, simple imputation, symmetrization and
+        zero diagonal.
+
+        Assumes the index/columns are labels like 'grm3_8TR0', 't2r14_9IIW', etc.
+        """
+        file_path = self._structure_matrix_path(state)
         if not os.path.exists(file_path):
-            raise FileNotFoundError(f"File not found: {file_path}")
+            raise FileNotFoundError("File not found: %s" % file_path)
 
-        df = pd.read_csv(file_path, index_col=0)
+        # --- load CSV or Excel depending on extension ---
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext in ('.xlsx', '.xls'):
+            df = pd.read_excel(file_path, index_col=0)
+        else:
+            # let pandas infer separator; index in first column
+            df = pd.read_csv(file_path, index_col=0)
 
-        # --- basic validation ---
         if df.shape[0] != df.shape[1]:
-            raise ValueError("CSV must be a square distance matrix (rows == columns).")
+            raise ValueError(
+                "%s matrix must be square; got %dx%d"
+                % (state, df.shape[0], df.shape[1])
+            )
 
         labels = df.index.astype(str).tolist()
         cols = df.columns.astype(str).tolist()
 
+        # ensure columns follow exactly the same order as index
         if cols != labels:
             try:
                 df = df.loc[labels, labels]
             except Exception:
-                raise ValueError("CSV columns don't match index (PDB codes).")
+                raise ValueError(
+                    "%s matrix columns do not match index labels." % state
+                )
 
-        # force numeric, impute, symmetrize, zero diag
+        # --- numeric cleanup ---
+        # force numeric, impute NaNs by column median, symmetrize, zero diag
         df = df.apply(pd.to_numeric, errors='coerce')
         arr = df.values.astype(float)
+
         if np.isnan(arr).any():
             col_med = np.nanmedian(arr, axis=0)
             inds = np.where(np.isnan(arr))
             arr[inds] = np.take(col_med, inds[1])
+
+        # make symmetric and zero diagonal
         arr = 0.5 * (arr + arr.T)
         np.fill_diagonal(arr, 0.0)
+
         matrix = arr.tolist()
+        return file_path, labels, matrix
 
-        # --- DB fetch: map PDB -> Structure ---
-        codes_upper = [c.upper() for c in labels]
-        structures_qs = (
-            Structure.objects
-            .filter(pdb_code__index__in=codes_upper)
-            .select_related(
-                'pdb_code',
-                'structure_type',
-                'state',
-                'protein_conformation__protein',
-                'protein_conformation__protein__family',
-                'protein_conformation__protein__parent',
-                'protein_conformation__protein__parent__family',
-            )
+    def _build_points_from_tsne_df(self, df_tsne, classification, dataset_name):
+        """
+        Turn a (x,y,cluster,label) dataframe into a list of point dicts
+        annotated with classification metadata.
+        """
+        points = []
+        for _, row in df_tsne.iterrows():
+            label = str(row['label'])
+            uni = self._label_to_uniprot(label)
+            ann = classification.get(uni, {}) if uni else {}
+
+            # cluster may be missing / NaN
+            cl_raw = row['cluster'] if 'cluster' in df_tsne.columns else None
+            cluster = None
+            if cl_raw is not None and not pd.isna(cl_raw):
+                try:
+                    cluster = int(cl_raw)
+                except Exception:
+                    cluster = None
+
+            points.append({
+                "label": label,
+                "uniprot": uni,
+                "x": float(row['x']),
+                "y": float(row['y']),
+                "cluster": cluster,
+                "dataset": dataset_name,
+                "Receptor family": ann.get("Receptor family", ""),
+                "Chemotype": ann.get("Chemotype", ""),
+                "Modality": ann.get("Modality", ""),
+                "Class": ann.get("Class", ""),
+                "Sense": ann.get("Sense", ""),
+            })
+        return points
+
+    def _load_sequence_tsne(self, classification):
+        """
+        Load precomputed HumanGPCRSimilarityAllData_tsne.csv and annotate with classification.
+
+        Expects columns: x, y, label (cluster is optional).
+        """
+        path = self._similarity_tsne_path()
+        if not os.path.exists(path):
+            raise FileNotFoundError("Sequence t-SNE file not found: %s" % path)
+
+        df = pd.read_csv(path)
+        for col in ('x', 'y', 'label'):
+            if col not in df.columns:
+                raise ValueError(
+                    "Sequence t-SNE CSV missing required column '%s'" % col
+                )
+
+        points = self._build_points_from_tsne_df(
+            df, classification, dataset_name="sequence"
         )
-        structures = list(structures_qs)
-        by_pdb = {s.pdb_code.index.upper(): s for s in structures}
 
-        # preload StructureModel by main_template (fallback canonicalization)
-        template_ids = [s.id for s in structures]
-        models_by_template = {}
-        if template_ids:
-            for sm in (
-                StructureModel.objects
-                .filter(main_template_id__in=template_ids)
-                .select_related('protein')
-            ):
-                models_by_template.setdefault(sm.main_template_id, []).append(sm)
-
-        # --- build proteins dict + collect receptor ids for consensus lookup ---
-        proteins = {}
-        unmatched = []
-        label_to_receptor_id = {}
-
-        for original in labels:
-            s = by_pdb.get(original.upper())
-            if not s:
-                unmatched.append(original)
-                continue
-
-            p = self._canonical_protein_from_structure(s, models_by_template)
-
-            stype = getattr(s.structure_type, "type_short", None)
-            stype = stype() if callable(stype) else getattr(s.structure_type, "name", None)
-
-            class_name, ligand_type, receptor_family = self._family_lineage_names(p)
-
-            proteins[original] = {
-                "pdb_code": s.pdb_code.index.upper(),
-                "protein_entry": getattr(p, "entry_name", None),
-                "protein_name": getattr(p, "name", None),
-                "protein_class": class_name,
-                "ligand_type": ligand_type,
-                "protein_family": receptor_family,
-                "receptor_family": receptor_family,
-                "state": getattr(s.state, "slug", None),
-                "structure_type": stype,
-            }
-
-            if getattr(p, "id", None):
-                label_to_receptor_id[original] = p.id
-
-        # --- consensus physiological ligand type per receptor (ALL Endogenous_GTP) ---
-        consensus_map = {}
-        raw_types_map = {}
-        receptor_ids = list(set(label_to_receptor_id.values()))
-        if receptor_ids:
-            lt_rows = (
-                Endogenous_GTP.objects
-                .filter(receptor_id__in=receptor_ids)
-                .values('receptor_id', 'ligand__ligand_type__name')
-                .distinct()
-            )
-            agg = {}
-            raw = {}
-            for row in lt_rows:
-                rid = row['receptor_id']
-                lt = (row['ligand__ligand_type__name'] or '').strip()
-                if rid not in agg:
-                    agg[rid] = set()
-                    raw[rid] = set()
-                agg[rid].add(self._norm_lt(lt))
-                if lt:
-                    raw[rid].add(lt)
-
-            for rid, kinds in agg.items():
-                has_pep = ('peptide' in kinds)
-                has_sml = ('small' in kinds)
-                if has_pep and has_sml:
-                    cat = 'Peptide/protein & small-molecule'
-                elif has_pep:
-                    cat = 'Peptide/protein'
-                elif has_sml:
-                    cat = 'Small-molecule'
-                else:
-                    cat = 'Other'
-                consensus_map[rid] = cat
-                raw_types_map[rid] = sorted(raw.get(rid, []))
-
-        for lab, rid in label_to_receptor_id.items():
-            if rid in consensus_map:
-                proteins[lab]["physio_ligand_consensus"] = consensus_map[rid]
-                proteins[lab]["physio_ligand_types_raw"] = raw_types_map.get(rid, [])
-
-        # --- apply Excel ligand-type + sense overrides ---
-        ligand_meta = self._load_ligand_meta()
-        if ligand_meta:
-            for lab, meta in proteins.items():
-                entry = meta.get("protein_entry")
-                uni = self._uniprot_from_entry(entry)
-                if not uni:
-                    continue
-                ann = ligand_meta.get(uni)
-                if not ann:
-                    continue
-
-                lt = ann.get("Ligand type")
-                if lt:
-                    meta["ligand_type"] = lt
-
-                fam = ann.get("Receptor family")
-                if fam:
-                    meta["protein_family"] = fam
-                    meta["receptor_family"] = fam
-
-                cls = ann.get("Class")
-                if cls:
-                    meta["protein_class"] = cls
-
-                sense = ann.get("Sense")
-                if sense is not None:
-                    meta["sense"] = sense
-            
-        # --- final physio-ligand cleanup based on UPDATED ligand_type ---
-        for lab, meta in proteins.items():
-            lt = (meta.get("ligand_type") or "").strip()
-            lt_low = lt.lower()
-            physio = (meta.get("physio_ligand_consensus") or "").strip()
-
-            # 1) Special cases that should always override
-
-            #    Adhesion receptors → Cleaved-endterm | PPI
-            if lt_low == "adhesion receptors":
-                meta["physio_ligand_consensus"] = "Tethered ligand | PPI"
-
-            #    Ion receptors → Ion
-            elif lt_low == "ion receptors":
-                meta["physio_ligand_consensus"] = "Ion"
-
-            #    Peptide / amino acid / protein receptors → Peptide/protein
-            elif lt_low in {
-                "peptide receptors",
-                "amino acid receptors",
-                "protein receptors",
-            }:
-                meta["physio_ligand_consensus"] = "Peptide/protein"
-
-            #    Light / odorant / tastant receptors → Small-molecule
-            elif lt_low in {
-                "light receptors",
-                "odorant receptors",
-                "tastant receptors",
-            }:
-                meta["physio_ligand_consensus"] = "Small-molecule"
-
-            #    Unknown receptors → Orphan
-            elif lt_low == "unknown receptors":
-                meta["physio_ligand_consensus"] = "Orphan"
-
-            # 2) Anything still missing after all the above → Orphan
-            if not meta.get("physio_ligand_consensus"):
-                meta["physio_ligand_consensus"] = "Orphan"
-
-
-        payload = {
-            "state": state,
-            "labels": labels,
-            "matrix": matrix,
-            "proteins": proteins,
-            "unmatched": unmatched,
+        return {
+            "method": "tsne",
+            "points": points,
+            "n": len(points),
         }
 
-        # --- optional embedding (t-SNE on the distance matrix) ---
-        if want_embed:
-            try:
-                D = np.array(matrix, dtype=float)
-                coords = self._compute_tsne(D)
-                points = []
-                for i, lab in enumerate(labels):
-                    meta = proteins.get(lab, {})
-                    points.append({
-                        "label": lab,
-                        "x": float(coords[i, 0]),
-                        "y": float(coords[i, 1]),
-                        "Class": meta.get("protein_class") or "",
-                        "Ligand type": meta.get("ligand_type") or "",
-                        "Receptor family": meta.get("receptor_family") or meta.get("protein_family") or "",
-                        "Sense": meta.get("sense") or "",
-                    })
-                payload["tsne"] = {
-                    "method": "tsne",
-                    "points": points,
-                    "n": len(points),
-                }
-            except Exception as e:
-                payload["tsne"] = {"error": str(e)}
+    def _load_or_build_structure_tsne(self, state, classification):
+        """
+        For 'inactive' or 'active':
+          - if cached *_tsne.csv exists and is newer than matrix, load and annotate
+          - else, compute t-SNE from matrix, save *_tsne.csv, then annotate.
 
-        cache.set(cache_key, payload, self.CACHE_TIMEOUT)
-        return payload
+        Structure matrix labels are already in the form entry_pdb (e.g. 'grm3_8TR0'),
+        so we keep them as-is and extract UniProt from the prefix.
+        """
+        matrix_path, labels, matrix = self._load_distance_matrix(state)
+        tsne_path = self._structure_tsne_path(state)
+
+        try:
+            have_tsne = os.path.exists(tsne_path)
+            if have_tsne:
+                m_tsne = os.path.getmtime(tsne_path)
+                m_src = os.path.getmtime(matrix_path)
+                if m_tsne >= m_src:
+                    df_tsne = pd.read_csv(tsne_path)
+                    points = self._build_points_from_tsne_df(
+                        df_tsne, classification, dataset_name="struct_%s" % state
+                    )
+                    return {
+                        "method": "tsne",
+                        "points": points,
+                        "n": len(points),
+                        "state": state,
+                        "from_cache": True,
+                    }
+
+            # otherwise compute new t-SNE
+            D = np.array(matrix, dtype=float)
+            coords = self._compute_tsne(D)
+
+            rows = []
+            for i, lab in enumerate(labels):
+                rows.append({
+                    "x": float(coords[i, 0]),
+                    "y": float(coords[i, 1]),
+                    "cluster": -1,  # default, can be edited later
+                    "label": lab,   # lab is already 'entry_pdb'
+                })
+            df_out = pd.DataFrame(rows)
+            df_out.to_csv(tsne_path, index=False)
+
+            points = self._build_points_from_tsne_df(
+                df_out, classification, dataset_name="struct_%s" % state
+            )
+            return {
+                "method": "tsne",
+                "points": points,
+                "n": len(points),
+                "state": state,
+                "from_cache": False,
+            }
+
+        except Exception as e:
+            return {"error": str(e), "state": state}
+
+    def _build_payload(self):
+        """
+        Build combined payload with:
+          - sequence t-SNE
+          - structure inactive / active t-SNE
+        All annotated using Classification.xlsx.
+        """
+        classification = self._load_classification_meta()
+
+        sequence_tsne = self._load_sequence_tsne(classification)
+        inactive_tsne = self._load_or_build_structure_tsne('inactive', classification)
+        active_tsne   = self._load_or_build_structure_tsne('active', classification)
+
+        return {
+            "sequence": sequence_tsne,
+            "structure": {
+                "inactive": inactive_tsne,
+                "active": active_tsne,
+            },
+        }
 
     # ---------- TemplateView overrides ----------
+
     def get(self, request, *args, **kwargs):
         """
-        Serve HTML by default; JSON when requested; t-SNE via ?embed=1.
-        Dataset is selected via ?state=inactive|active (default: inactive).
+        - HTML by default
+        - JSON when ?format=json or Accept: application/json
         """
-        state_param = request.GET.get('state')
-        if state_param in self.FILES:
-            state = state_param
-        else:
-            state = self.DEFAULT_STATE
-
         want_json = (
             request.GET.get('format') == 'json'
             or request.GET.get('data') == '1'
             or 'application/json' in request.headers.get('Accept', '')
         )
         if want_json:
-            want_embed = (request.GET.get('embed') in ('1', 'true', 'yes'))
             try:
-                payload = self._build_payload(state=state, want_embed=want_embed)
+                payload = self._build_payload()
             except Exception as e:
                 return JsonResponse({"error": str(e)}, status=400)
             return JsonResponse(payload, safe=True)
 
-        return super().get(request, *args, **kwargs)
+        return super(StructureSim, self).get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         """
-        Expose separate URLs for inactive & active datasets so JS can toggle between them.
+        Expose a single URL that JS can fetch combined tsne data from.
         """
-        ctx = super().get_context_data(**kwargs)
+        ctx = super(StructureSim, self).get_context_data(**kwargs)
         base = self.request.build_absolute_uri(self.request.path)
-
-        ctx['inactive_embed_url'] = f"{base}?format=json&state=inactive&embed=1"
-        ctx['active_embed_url']   = f"{base}?format=json&state=active&embed=1"
-
+        ctx['embed_url'] = "%s?format=json" % base
         return ctx
