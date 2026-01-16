@@ -1,4 +1,4 @@
-﻿from django.conf.urls import url
+from django.conf.urls import url
 from django.views.generic import TemplateView
 from django.views.decorators.cache import cache_page
 
@@ -24,6 +24,7 @@ urlpatterns = [
     url(r'class_similarity_matrix/xlsx', views.render_class_similarity_xlsx_matrix, name='class_similarity_csv_matrix'),
     url(r'^class_similarity/CountByClass/?$', views.ClassesAndCounts.as_view(), name='ClassesAndCounts'),
     url(r'^class_similarity/Classification/?$', views.Classification.as_view(), name='Classification'),
+    url(r'^class_similarity/Classification_tree/?$', views.Classification_tree.as_view(), name='Classification_tree'),
     url(r'^class_similarity/GPCRBrowser/?$', views.GPCRBrowser.as_view(), name='GPCRBrowser'),
     url(r'^class_similarity/ClassificationWheel', views.ClassificationWheel.as_view(), name='ClassificationWheel'),
     # url(r'^class_similarity/OrphanSimilarity', views.OrphanSimilarity.as_view(), name='OrphanSimilarity'),

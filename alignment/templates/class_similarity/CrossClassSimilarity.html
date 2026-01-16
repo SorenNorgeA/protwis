@@ -307,14 +307,14 @@ td.cell-empty{ background: var(--ccs-empty-bg); color:#888; }
       <button type="button" class="ccs-modal-close" aria-label="Close">&times;</button>
     </header>
     <div class="ccs-modal-body">
-      <!-- TODO: replace with your copy -->
       <p>This page shows cross-class relationships between GPCR classes.</p>
       <ul>
         <li><strong>Green (ID)</strong> = sequence identity (upper triangle).</li>
         <li><strong>Blue (SIM)</strong> = sequence similarity (lower triangle).</li>
         <li>Hover any cell to preview pairs; <strong>click</strong> to lock and open detailed <em>flyout</em>.</li>
         <li>Use the <strong>Download</strong> buttons to export the heatmap or the flyout as JPG/PNG/SVG.</li>
-        <li>“Human only” toggles scope; badges show the axis meaning.</li>
+        <li>Use <strong>Include classless receptors / Exclude classless receptors</strong> to toggle whether <em>(Classless)</em> items are shown.</li>
+        <li><strong>Human</strong>: the classes and receptors shown on this page are those found in humans.</li>
       </ul>
       <p>You can tweak the scope, export with badges, and follow links to GPCRdb, GtoPdb, and UniProt.</p>
     </div>
@@ -331,7 +331,7 @@ td.cell-empty{ background: var(--ccs-empty-bg); color:#888; }
           How to
         </button>
         <button id="ccsScopeToggle" type="button" class="btn btn-primary">
-          Human only
+          Include classless receptors
         </button>
         <div class="dropdown" id="ccsDownloadDropdown" style="position: relative;">
           <button type="button" class="btn btn-primary dropdown-toggle"
@@ -955,7 +955,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   scopeToggle.addEventListener('click', function(){
     currentScope = (currentScope === 'human') ? 'human-classless' : 'human';
-    scopeToggle.textContent = (currentScope === 'human') ? 'Human only' : 'Human only (incl. Classless)';
+    // Label shows the action you can take next (not the current state)
+    scopeToggle.textContent = (currentScope === 'human') ? 'Include classless receptors' : 'Exclude classless receptors';
     renderTable(indicesForScope(currentScope));
     applyScopeWidth(currentScope);
     positionBadges();
