@@ -227,8 +227,9 @@
           </button>
           <div class="dropdown-menu dropdown-menu-side dropdown-menu-align-colorby">
             <button type="button" class="btn btn-outline-primary btn-block mb-1 GPCRome-colorby-btn" data-wheel="classic" data-value="Class">Class</button>
-            <button type="button" class="btn btn-outline-primary btn-block mb-1 GPCRome-colorby-btn" data-wheel="classic" data-value="Ligand type">Ligand type</button>
             <button type="button" class="btn btn-outline-primary btn-block mb-1 GPCRome-colorby-btn" data-wheel="classic" data-value="Receptor family">Receptor family</button>
+            <button type="button" class="btn btn-outline-primary btn-block mb-1 GPCRome-colorby-btn" data-wheel="classic" data-value="Modality">Modality</button>
+            <button type="button" class="btn btn-outline-primary btn-block mb-1 GPCRome-colorby-btn" data-wheel="classic" data-value="Chemotype">Chemotype</button>
             <button type="button" class="btn btn-outline-primary btn-block GPCRome-colorby-btn" data-wheel="classic" data-value="Sense">Sense</button>
           </div>
         </div>
@@ -319,6 +320,9 @@
           <div class="dropdown-menu dropdown-menu-side">
             <button type="button" class="btn btn-outline-primary btn-block mb-1 GPCRome-colorby-btn" data-wheel="odorant" data-value="Class">Class</button>
             <button type="button" class="btn btn-outline-primary btn-block mb-1 GPCRome-colorby-btn" data-wheel="odorant" data-value="Receptor family">Receptor family</button>
+            <button type="button" class="btn btn-outline-primary btn-block mb-1 GPCRome-colorby-btn" data-wheel="odorant" data-value="Modality">Modality</button>
+            <button type="button" class="btn btn-outline-primary btn-block mb-1 GPCRome-colorby-btn" data-wheel="odorant" data-value="Chemotype">Chemotype</button>
+            <button type="button" class="btn btn-outline-primary btn-block GPCRome-colorby-btn" data-wheel="odorant" data-value="Sense">Sense</button>
           </div>
         </div>
 
@@ -366,8 +370,8 @@
 $(document).on('click', '.dropdown-menu', function (e) { e.stopPropagation(); });
 
 const wheelData = {
-  classic: {{ GPCRomeData|safe }},
-  odorant: {{ GPCRomeOdorantData|safe }}
+  classic: JSON.parse('{{ GPCRomeData|escapejs }}'),
+  odorant: JSON.parse('{{ GPCRomeOdorantData|escapejs }}')
 };
 
 const ICON_URL = "{% static 'home/images/DataMapper/DataMapper_GPCRome_icon_legend.png' %}";
@@ -378,6 +382,7 @@ const wheelStyling = {
 };
 
 function generateCategoryColors(categories) {
+  if (!categories || categories.length === 0) return {};
   const colors = {};
   const hueStep = 360 / categories.length;
   categories.forEach((cat, i) => {
@@ -386,6 +391,31 @@ function generateCategoryColors(categories) {
   });
   return colors;
 }
+
+function extractUniqueCategories(type, fieldName) {
+  const vals = new Set();
+  const data = wheelData[type] || {};
+  for (const circleKey in data) {
+    const circle = data[circleKey];
+    for (const classKey in circle) {
+      const families = circle[classKey];
+      for (const familyKey in families) {
+        const receptors = families[familyKey];
+        for (const recKey in receptors) {
+          const receptor = receptors[recKey];
+          const v = receptor ? receptor[fieldName] : null;
+          if (v !== undefined && v !== null && String(v).trim() !== "") {
+            vals.add(String(v).trim());
+          }
+        }
+      }
+    }
+  }
+  return Array.from(vals).sort((a, b) => a.localeCompare(b));
+}
+
+const CLASSIC_MODALITIES = extractUniqueCategories("classic", "Modality");
+const ODORANT_MODALITIES = extractUniqueCategories("odorant", "Modality");
 
 const RECEPTOR_FAMILIES = [
   "5-Hydroxytryptamine receptors",
@@ -482,7 +512,7 @@ const coloringSchemes = {
     "T2": "#17becf",
     "Classless": "#8c564b"
   },
-   "Ligand type": {
+  "Chemotype": {
     "Adhesion receptors": "#a6cee3",          // Light blue
     "Alicarboxylic acid receptors": "#1f78b4", // Darker blue
     "Aminergic receptors": "#e41a1c",         // Red
@@ -498,6 +528,7 @@ const coloringSchemes = {
     "Tastant receptors": "#b15928",           // Brown
     "unknown receptors": "#999999"            // Grey
   },
+  "Modality": generateCategoryColors(CLASSIC_MODALITIES),
   "Receptor family": generateCategoryColors(RECEPTOR_FAMILIES),
   "Sense": {
     "Vision": "#ff7f00",
@@ -521,7 +552,10 @@ const coloringSchemesOdorant = {
     "O1": "#9D4EDD",  // purple
     "O2": "#2A9D8F"   // teal
   },
+  "Chemotype": coloringSchemes["Chemotype"],
+  "Modality": generateCategoryColors(ODORANT_MODALITIES),
   "Receptor family": generateCategoryColors(ODORANT_RECEPTOR_FAMILIES),
+  "Sense": coloringSchemes["Sense"],
 };
 
 function applyColoring(type) {
@@ -562,7 +596,7 @@ function drawWheel(type) {
   d3v4.select(`#${locationId}`).select("svg").remove();
   DrawGPCRomeWheel(wheelData[type], locationId, wheelStyling[type]);
 }
-// Tracks enable/disable per wheel and per scheme (Class, Ligand type, etc.)
+// Tracks enable/disable per wheel and per scheme (Class, Chemotype, etc.)
 const activeCategories = {
   classic: {},
   odorant: {}
@@ -585,7 +619,8 @@ function initActiveCategories() {
 
 const customizeMenuWidths = {
   "Class": 200,
-  "Ligand type": 350,
+  "Chemotype": 350,
+  "Modality": 260,
   "Receptor family": 350,
   "Sense": 230
 };
@@ -719,7 +754,7 @@ function initializeGenericColorPicker({ elementId, startColor, wheelType, scheme
     showInput: true,
     showButtons: false,                 // <— trims popup height
     preferredFormat: "hex",
-    appendTo: 'body',             
+    appendTo: 'body',
     palette: [
       ["#000", "#FF0000", "#00FF00", "#0000FF", "#FFFF00"],
       ["#FF00FF", "#00FFFF", "#FFFFFF", "#C0C0C0", "#808080"],

@@ -1919,30 +1919,159 @@ class GPCRBrowser(TemplateView):
 class ClassificationWheel(TemplateView):
     template_name = 'class_similarity/ClassificationWheel.html'
 
+    # classification Excel (same file as Classification/GPCRBrowser use)
+    CLASSIFICATION_FOLDER = 'protein_data'
+    CLASSIFICATION_FILE = 'Classification.xlsx'
+
+    def _classification_path(self):
+        """
+        Path to Classification.xlsx.
+        """
+        return os.path.join(
+            settings.DATA_DIR,
+            self.CLASSIFICATION_FOLDER,
+            self.CLASSIFICATION_FILE,
+        )
+
+    def _load_df(self):
+        """
+        Load Classification.xlsx and return a dataframe with normalized column names.
+        Only keeps columns needed for wheel annotation.
+        """
+        path = self._classification_path()
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"File not found: {path}")
+
+        df = pd.read_excel(path)
+
+        # tolerant column name picker (handles embedded newlines etc.)
+        def pick(*cands):
+            names = set([str(c).strip() for c in cands])
+            for col in df.columns:
+                s = str(col).strip()
+                if s in names:
+                    return col
+            return None
+
+        col_uni = pick('GPCRs (UniProt)', 'GPCRs\n(UniProt)', 'GPCRs (UniProt)')
+        col_class = pick('Class')
+        col_family = pick('Receptor family')
+        # Some legacy exports used "Ligand type"; current file uses "Chemotype"
+        col_chemotype = pick('Chemotype')
+        col_ligand_type = pick('Ligand type', 'Ligand\n type', 'Ligand type ')
+        col_modality = pick('Modality')
+        col_sense = pick('Sense')
+
+        normalized_cols = {}
+        if col_uni:
+            normalized_cols['GPCRs (UniProt)'] = df[col_uni]
+        if col_class:
+            normalized_cols['Class'] = df[col_class]
+        if col_family:
+            normalized_cols['Receptor family'] = df[col_family]
+        if col_chemotype:
+            normalized_cols['Chemotype'] = df[col_chemotype]
+        if col_ligand_type:
+            normalized_cols['Ligand type'] = df[col_ligand_type]
+        if col_modality:
+            normalized_cols['Modality'] = df[col_modality]
+        if col_sense:
+            normalized_cols['Sense'] = df[col_sense]
+
+        df_normalized = pd.DataFrame(normalized_cols)
+
+        # Ensure required columns exist (fill with None if missing)
+        required_cols = [
+            'GPCRs (UniProt)',
+            'Class',
+            'Receptor family',
+            'Chemotype',
+            'Ligand type',
+            'Modality',
+            'Sense',
+        ]
+        for col in required_cols:
+            if col not in df_normalized.columns:
+                df_normalized[col] = None
+
+        return df_normalized
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        # --- Step 1: Load Excel metadata ---
-
-        data_folder = 'protein_data'
-        file_name = 'Ligand type update plus sense column.xlsx'
-        file_path = os.path.join(settings.DATA_DIR, data_folder, file_name)
-        df = pd.read_excel(file_path)
-
-        # Clean column names
-        df.columns = df.columns.str.strip().str.replace("\n", " ")
-
-        # Build a lookup dict by UniProt entry name
+        # --- Step 1: Load Excel metadata (Classification.xlsx) ---
         meta_lookup = {}
-        for _, row in df.iterrows():
-            entry = str(row["GPCRs (UniProt)"]).strip()
-            if entry:
-                meta_lookup[entry] = {
-                    "Class": row.get("Class", ""),
-                    "Ligand type": row.get("Ligand type", ""),
-                    "Receptor family": row.get("Receptor family", ""),
-                    "Sense": row.get("Sense", "")
+
+        def _clean_cell(val):
+            if pd.isna(val):
+                return ""
+            s = str(val).strip()
+            if not s or s.lower() == "nan":
+                return ""
+            return s
+
+        def _normalize_uniprot_key(raw):
+            """
+            Normalize a UniProt-style key to match wheel's EntryName.
+            Wheel EntryName is the uppercased stem (e.g. ADRB2 from adrb2_human).
+            """
+            s = _clean_cell(raw).upper()
+            if not s:
+                return ""
+            # Common formats we may encounter
+            s = s.replace(" ", "")
+            if s.endswith("_HUMAN") or s.endswith("-HUMAN"):
+                s = s[:-6]
+            if "_" in s:
+                s = s.split("_", 1)[0]
+            if "-" in s:
+                s = s.split("-", 1)[0]
+            return s
+
+        try:
+            df = self._load_df()
+        except FileNotFoundError as e:
+            # Wheel can still render; it will just miss annotations
+            context["error"] = f"File not found: {e}"
+            df = None
+        except Exception as e:
+            context["error"] = f"Error loading Classification.xlsx: {e}"
+            df = None
+
+        if df is not None:
+            for _, row in df.iterrows():
+                uni_val = row.get("GPCRs (UniProt)")
+                uni_str = _clean_cell(uni_val)
+                if not uni_str:
+                    continue
+
+                chemotype = _clean_cell(row.get("Chemotype")) or _clean_cell(row.get("Ligand type"))
+                rec = {
+                    "Class": _clean_cell(row.get("Class")),
+                    # Keep legacy key ("Ligand type") for backwards compatibility,
+                    # but also provide the new explicit field ("Chemotype").
+                    "Ligand type": chemotype,
+                    "Chemotype": chemotype,
+                    "Receptor family": _clean_cell(row.get("Receptor family")),
+                    "Modality": _clean_cell(row.get("Modality")),
+                    "Sense": _clean_cell(row.get("Sense")),
                 }
+
+                # One cell may contain multiple UniProt mnemonics (comma/semicolon separated)
+                for token in re.split(r'[,;]\s*', uni_str):
+                    key = _normalize_uniprot_key(token)
+                    if not key:
+                        continue
+
+                    existing = meta_lookup.get(key)
+                    if existing is None:
+                        # store a copy so multiple keys from one row don't share the same dict
+                        meta_lookup[key] = rec.copy()
+                    else:
+                        # Fill missing fields opportunistically
+                        for k, v in rec.items():
+                            if (not existing.get(k)) and v:
+                                existing[k] = v
 
         # --- Step 2: Helper to inject metadata into wheel structure ---
         def enrich_wheel_with_metadata(wheelstructure):
@@ -1957,7 +2086,7 @@ class ClassificationWheel(TemplateView):
                                 # This k is the class code (A, B1, etc.)
                                 recurse(v, current_class=k)
                             elif "EntryName" in v:
-                                entry_code = v["EntryName"]
+                                entry_code = str(v.get("EntryName", "")).strip().upper()
                                 meta = meta_lookup.get(entry_code, {})
                                 v.update(meta)
 
