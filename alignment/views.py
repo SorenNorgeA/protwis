@@ -1,4 +1,4 @@
-﻿from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect
 from django.conf import settings
 from django.http import HttpResponse
 from django.views.generic import TemplateView
@@ -1488,7 +1488,7 @@ class Classification_tree(TemplateView):
         """
         Load Classification.xlsx and return a dataframe with normalized column names.
         Reuses the same logic as Classification class, but only keeps columns needed
-        for the classification tree (Class → Chemotype → Receptor family → UniProt).
+        for the classification tree datasets.
         """
         path = self._classification_path()
         if not os.path.exists(path):
@@ -1510,6 +1510,7 @@ class Classification_tree(TemplateView):
         col_class = pick('Class')
         col_chemotype = pick('Chemotype')
         col_family = pick('Receptor family')
+        col_modality = pick('Modality')
 
         # Build a normalized dataframe with standard column names
         normalized_cols = {}
@@ -1521,11 +1522,13 @@ class Classification_tree(TemplateView):
             normalized_cols['Chemotype'] = df[col_chemotype]
         if col_family:
             normalized_cols['Receptor family'] = df[col_family]
+        if col_modality:
+            normalized_cols['Modality'] = df[col_modality]
 
         df_normalized = pd.DataFrame(normalized_cols)
 
         # Ensure all required columns exist (fill with empty if missing)
-        required_cols = ['GPCRs (UniProt)', 'Class', 'Chemotype', 'Receptor family']
+        required_cols = ['GPCRs (UniProt)', 'Class', 'Chemotype', 'Receptor family', 'Modality']
         for col in required_cols:
             if col not in df_normalized.columns:
                 df_normalized[col] = None
@@ -1580,6 +1583,55 @@ class Classification_tree(TemplateView):
         return nested_sorted
 
     @staticmethod
+    def _build_nested_family(df):
+        """
+        Build nested mapping: Receptor family → sorted(set(UniProt)).
+        """
+        nested = {}
+        for _, row in df.iterrows():
+            fam = Classification_tree._clean_cell(row.get("Receptor family")) or "Other / unknown"
+            uids = Classification_tree._split_uniprot_cell(row.get("GPCRs (UniProt)"))
+            if not uids:
+                continue
+            uid_set = nested.setdefault(fam, set())
+            for uid in uids:
+                uid_set.add(uid)
+
+        nested_sorted = OrderedDict()
+        for fam in sorted(nested.keys(), key=lambda x: str(x).lower()):
+            nested_sorted[fam] = sorted(nested[fam], key=lambda x: str(x).upper())
+        return nested_sorted
+
+    @staticmethod
+    def _build_nested_class_family(df, class_to_symbol):
+        """
+        Build nested mapping: Class_symbol → Receptor family → sorted(set(UniProt)).
+        """
+        nested = {}
+        for _, row in df.iterrows():
+            cls = Classification_tree._clean_cell(row.get("Class"))
+            sym = class_to_symbol.get(cls) if cls else None
+            if not sym:
+                continue
+            fam = Classification_tree._clean_cell(row.get("Receptor family")) or "Other / unknown"
+            uids = Classification_tree._split_uniprot_cell(row.get("GPCRs (UniProt)"))
+            if not uids:
+                continue
+            fam_map = nested.setdefault(sym, {})
+            uid_set = fam_map.setdefault(fam, set())
+            for uid in uids:
+                uid_set.add(uid)
+
+        nested_sorted = OrderedDict()
+        for sym in sorted(nested.keys(), key=lambda x: str(x).lower()):
+            fams = nested[sym]
+            fams_sorted = OrderedDict()
+            for fam in sorted(fams.keys(), key=lambda x: str(x).lower()):
+                fams_sorted[fam] = sorted(fams[fam], key=lambda x: str(x).upper())
+            nested_sorted[sym] = fams_sorted
+        return nested_sorted
+
+    @staticmethod
     def _nested_to_tree(class_label, nested):
         """
         Convert nested mapping (Chemotype → Family → [UniProt]) into a D3-like node dict.
@@ -1602,6 +1654,48 @@ class Classification_tree(TemplateView):
         root = OrderedDict([("name", ""), ("value", 3000), ("color", ""), ("children", [class_node])])
         return root
 
+    @staticmethod
+    def _nested_family_to_tree(class_label, nested_family):
+        """
+        Convert nested mapping (Family → [UniProt]) into a D3-like node dict:
+        root('') → Class → Family → UniProt
+        """
+        def leaf_node(name):
+            return OrderedDict([("name", name), ("value", 0), ("color", "")])
+
+        def inner_node(name, children):
+            return OrderedDict([("name", name), ("value", 0), ("color", ""), ("children", children)])
+
+        fam_children = []
+        for fam, uids in nested_family.items():
+            fam_children.append(inner_node(fam, [leaf_node(uid) for uid in uids]))
+
+        class_node = inner_node(class_label, fam_children)
+        root = OrderedDict([("name", ""), ("value", 3000), ("color", ""), ("children", [class_node])])
+        return root
+
+    @staticmethod
+    def _nested_class_family_to_tree(nested_class_family):
+        """
+        Convert nested mapping (Class_symbol → Family → [UniProt]) into a D3-like node dict:
+        root('') → Class_symbol → Family → UniProt
+        """
+        def leaf_node(name):
+            return OrderedDict([("name", name), ("value", 0), ("color", "")])
+
+        def inner_node(name, children):
+            return OrderedDict([("name", name), ("value", 0), ("color", ""), ("children", children)])
+
+        class_children = []
+        for sym, fams in nested_class_family.items():
+            fam_children = []
+            for fam, uids in fams.items():
+                fam_children.append(inner_node(fam, [leaf_node(uid) for uid in uids]))
+            class_children.append(inner_node(sym, fam_children))
+
+        root = OrderedDict([("name", ""), ("value", 3000), ("color", ""), ("children", class_children)])
+        return root
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
@@ -1615,7 +1709,7 @@ class Classification_tree(TemplateView):
             return ctx
 
         # Check if required columns exist
-        required_cols = ["Class", "Chemotype", "Receptor family", "GPCRs (UniProt)"]
+        required_cols = ["Class", "Chemotype", "Modality", "Receptor family", "GPCRs (UniProt)"]
         missing_cols = [col for col in required_cols if col not in df.columns]
         if missing_cols:
             ctx["error"] = f"Missing required columns in Classification.xlsx: {', '.join(missing_cols)}"
@@ -1659,25 +1753,43 @@ class Classification_tree(TemplateView):
         # Only Class A is split into non-orphan/orphan by Chemotype == "Orphan receptors".
         classes_data = {}
 
+        # Map Excel class string -> symbol (A, B1, ...)
+        class_to_symbol = {}
         for class_key, config in class_configs.items():
-            class_data = {}
+            for nm in config["class_names"]:
+                class_to_symbol[nm] = class_key
 
-            class_mask = df["Class"].apply(
+        def class_mask_for(config):
+            return df["Class"].apply(
                 lambda x: str(x).strip() in config["class_names"]
                 if pd.notna(x) and str(x).strip() and str(x).strip().lower() != "nan"
                 else False
             )
-            class_df = df[class_mask].copy()
 
-            # Default options; JS will compute exact depth/branch lengths after collapsing singletons.
-            tree_options = {
-                "depth": 4,
-                "branch_length": {1: config["display_name"], 2: "Chemotype", 3: "Receptor family", 4: ""},
-                "branch_trunc": 0,
-                "leaf_offset": 30,
-                "anchor": "",
-                "label_free": [],
-            }
+        # Base tree options; JS will compute exact depth/branch lengths.
+        base_tree_options = {
+            "branch_trunc": 0,
+            "leaf_offset": 30,
+            "anchor": "",
+            "label_free": [],
+            # For renderer behavior:
+            "centerBadgeR": 0,
+            "centerBadgePadding": 0,
+            "firstRingExtra": 45,
+        }
+
+        # Build new unified tree_sets payload for the new UI.
+        tree_sets = {
+            "Class": {"options": [], "plots": {}},
+            "Modality": {"options": [], "plots": {}},
+            "Chemotype": {"options": [], "plots": {}},
+        }
+
+        for class_key, config in class_configs.items():
+            class_data = {}
+
+            class_df = df[class_mask_for(config)].copy()
+            tree_options = dict(base_tree_options)
 
             if class_key == "A":
                 orphan_key = "Orphan receptors"
@@ -1701,9 +1813,15 @@ class Classification_tree(TemplateView):
             else:
                 # No split for other classes
                 if len(class_df) > 0:
-                    nested = self._build_nested(class_df)
-                    class_data["non_orphan"] = {"tree": self._nested_to_tree(config["class_names"][0], nested),
-                                                "tree_options": tree_options}
+                    if class_key == "C":
+                        # Special rule: Class C has NO Chemotype layer (Class → Family → Receptor).
+                        nested_fam = self._build_nested_family(class_df)
+                        class_data["non_orphan"] = {"tree": self._nested_family_to_tree(config["class_names"][0], nested_fam),
+                                                    "tree_options": tree_options}
+                    else:
+                        nested = self._build_nested(class_df)
+                        class_data["non_orphan"] = {"tree": self._nested_to_tree(config["class_names"][0], nested),
+                                                    "tree_options": tree_options}
                 else:
                     class_data["non_orphan"] = None
                 class_data["orphan"] = None
@@ -1713,11 +1831,125 @@ class Classification_tree(TemplateView):
                 "display_name": config["display_name"]
             }
 
+            # ----- tree_sets["Class"] options/plots -----
+            if class_key == "A":
+                # Gather orphan leaf labels (UniProt) for the Class A legend (alphabetical).
+                orphan_leaf_labels = []
+                try:
+                    if class_df is not None and "Chemotype" in class_df.columns:
+                        orphan_key = "Orphan receptors"
+                        chem_series = class_df["Chemotype"].apply(lambda v: self._clean_cell(v) or "")
+                        orphan_df = class_df[chem_series.str.lower() == orphan_key.lower()].copy()
+                        uid_set = set()
+                        for _, row in orphan_df.iterrows():
+                            for uid in self._split_uniprot_cell(row.get("GPCRs (UniProt)")):
+                                uid_set.add(uid)
+                        orphan_leaf_labels = sorted(uid_set, key=lambda x: str(x).upper())
+                except Exception:
+                    orphan_leaf_labels = []
+
+                if class_data.get("non_orphan") and class_data["non_orphan"].get("tree"):
+                    key = "A"
+                    label = "Class A"
+                    tree_sets["Class"]["options"].append({"key": key, "label": label})
+                    tree_sets["Class"]["plots"][key] = {
+                        "tree": class_data["non_orphan"]["tree"],
+                        "tree_options": dict(tree_options, **{"colorMode": "chemotype"}),
+                        "meta": {
+                            "title": label,
+                            "liftClassLayer": True,
+                            "collapseLabels": ["Chemotype", "Family"],
+                            # Render an orphan legend under this plot (SVG extension).
+                            "orphanLeafLabels": orphan_leaf_labels,
+                        },
+                    }
+            else:
+                if class_data.get("non_orphan") and class_data["non_orphan"].get("tree"):
+                    key = class_key
+                    label = config["display_name"]
+                    # Class C is fixed-color (no chemotype layer); other classes use chemotype coloring.
+                    if class_key == "C":
+                        # Keep in sync with CLASS_COLORS["C"] in the template
+                        tree_opts = dict(tree_options, **{"colorMode": "fixed", "fixedColor": "#d62728"})
+                        meta = {"title": label, "liftClassLayer": True, "collapseLabels": ["Family"]}
+                    else:
+                        tree_opts = dict(tree_options, **{"colorMode": "chemotype"})
+                        meta = {"title": label, "liftClassLayer": True, "collapseLabels": ["Chemotype", "Family"]}
+                    tree_sets["Class"]["options"].append({"key": key, "label": label})
+                    tree_sets["Class"]["plots"][key] = {"tree": class_data["non_orphan"]["tree"], "tree_options": tree_opts, "meta": meta}
+
+        # Sort Class options in the desired order
+        class_order = ["A", "B1", "B2", "C", "F", "T2"]
+        tree_sets["Class"]["options"].sort(key=lambda o: (class_order.index(o["key"]) if o["key"] in class_order else 999, o["label"]))
+
+        # ----- tree_sets["Modality"] -----
+        modality_labels = ["Orphan receptors", "Peptide receptors", "Protein receptors", "Small molecule receptors"]
+        for m in modality_labels:
+            key = m
+            label = m
+            # Filter by Modality column directly (case-insensitive exact match)
+            m_series = df["Modality"].apply(lambda v: (self._clean_cell(v) or ""))
+            m_df = df[m_series.str.lower() == m.lower()].copy()
+            if len(m_df) == 0:
+                continue
+            nested_cf = self._build_nested_class_family(m_df, class_to_symbol)
+            tree_sets["Modality"]["options"].append({"key": key, "label": label})
+            tree_sets["Modality"]["plots"][key] = {
+                "tree": self._nested_class_family_to_tree(nested_cf),
+                "tree_options": dict(base_tree_options, **{"colorMode": "class"}),
+                "meta": {"title": label, "liftClassLayer": False, "collapseLabels": []},
+            }
+        # Sort modality dropdown alphabetically, but keep Orphan receptors last.
+        def _mod_sort(o):
+            lbl = str(o.get("label", "")).strip()
+            is_orphan = (lbl.lower() == "orphan receptors")
+            return (1 if is_orphan else 0, lbl.lower())
+        tree_sets["Modality"]["options"].sort(key=_mod_sort)
+
+        # ----- tree_sets["Chemotype"] -----
+        # Exclude chemotypes that do not make sense as a standalone Chemotype dataset.
+        excluded_chemotypes = {"odorant receptors", "ion receptors"}
+        chemotypes = set()
+        for v in df["Chemotype"].values.tolist():
+            c = self._clean_cell(v)
+            if c:
+                if str(c).strip().lower() in excluded_chemotypes:
+                    continue
+                chemotypes.add(c)
+        for chem in sorted(chemotypes, key=lambda x: str(x).lower()):
+            c_series = df["Chemotype"].apply(lambda v: (self._clean_cell(v) or ""))
+            c_df = df[c_series.str.lower() == str(chem).lower()].copy()
+            if len(c_df) == 0:
+                continue
+            nested_cf = self._build_nested_class_family(c_df, class_to_symbol)
+            # Decide coloring:
+            # - If this chemotype spans multiple classes, color by class.
+            # - If it is only in a single class (or collapses away), color uniformly by chemotype.
+            class_syms = set()
+            for v in c_df["Class"].values.tolist():
+                cls = self._clean_cell(v)
+                sym = class_to_symbol.get(cls) if cls else None
+                if sym:
+                    class_syms.add(sym)
+            if len(class_syms) > 1:
+                tree_opts = dict(base_tree_options, **{"colorMode": "class"})
+            else:
+                tree_opts = dict(base_tree_options, **{"colorMode": "chemotype", "forceChemotype": chem})
+            tree_sets["Chemotype"]["options"].append({"key": chem, "label": chem})
+            tree_sets["Chemotype"]["plots"][chem] = {
+                "tree": self._nested_class_family_to_tree(nested_cf),
+                "tree_options": tree_opts,
+                # Collapse singleton layers for cleaner plots:
+                # - If a chemotype exists only in 1 class, collapse Class.
+                # - If that class has only 1 family for this chemotype, collapse Family too.
+                "meta": {"title": chem, "liftClassLayer": False, "collapseLabels": ["Class", "Family"]},
+            }
+
         # Pass data to template as JSON
-        ctx["classes_data"] = json.dumps(classes_data)
+        ctx["classes_data"] = json.dumps(classes_data)  # legacy (test template / backwards compat)
+        ctx["tree_sets"] = json.dumps(tree_sets)
 
         return ctx
-
 
 class GPCRBrowser(TemplateView):
     template_name = "class_similarity/GPCRBrowser.html"

@@ -480,7 +480,7 @@ function createLegendBars(location, data, conversion, circle_styling_dict, datat
     });
 
     const existingCategories = Object.keys(categoryMax);
-    
+
     const colorScales = {};
     let skippedDiscreteCount = 0;
 
@@ -2005,7 +2005,7 @@ function data_visualization(data, category_data, location, Layout_dict, data_sty
     function getShapeColor(column, data_value, receptorData = {}) {
         const column_styling = data_styling[column];
         let color = 'black';
-    
+
         if (column_styling.Datatype === 'Discrete') {
             // Use ColorValue from receptorData
             if (receptorData && receptorData.ColorValue) {
@@ -2016,7 +2016,7 @@ function data_visualization(data, category_data, location, Layout_dict, data_sty
         } else if (column_styling.Datatype === 'Continuous') {
             const gradientScale = d3.scale.linear()
                 .domain([column_styling.Data_min, column_styling.Data_max]);
-    
+
             if (column_styling.data_color_complexity === 'One') {
                 gradientScale.range(['#FFFFFF', column_styling.Data_color2]);
             } else if (column_styling.data_color_complexity === 'Two') {
@@ -2025,12 +2025,12 @@ function data_visualization(data, category_data, location, Layout_dict, data_sty
                 gradientScale.range([column_styling.Data_color1, '#FFFFFF', column_styling.Data_color2])
                     .domain([column_styling.Data_min, (column_styling.Data_min + column_styling.Data_max) / 2, column_styling.Data_max]);
             }
-    
+
             color = gradientScale(data_value);
         }
-    
+
         return color;
-    }    
+    }
 
     // ###############################
     // ## Iterate through data rows ##
@@ -2154,8 +2154,8 @@ function data_visualization(data, category_data, location, Layout_dict, data_sty
             const legend_svg = svg.append("g"); // Append group for the legend bar
             const gradientId = `Gradient_${column}`;
             const defs = svg.append('defs');
-            var BarText = (BarLabels && BarLabels[column]) 
-                ? BarLabels[column] 
+            var BarText = (BarLabels && BarLabels[column])
+                ? BarLabels[column]
                 : `Dataset ${column.substr(3)}`;
             // Add centered text on top of the bar specifying the data column
             legend_svg.append("text")
@@ -2970,8 +2970,8 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
             .attr("xlink:href", dataUrl)
             .attr("x", 0)
             .attr("y", -30)
-            .attr("width", 230)
-            .attr("height", 230)
+            .attr("width", 215)
+            .attr("height", 215)
             .attr("class", "toggle-image");
         };
     }
@@ -3003,20 +3003,20 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
         function extractHeaders(circleData) {
             let CircleHeaders = Object.keys(circleData); // Top-level keys (Classes)
             let CircleSubHeaders = [];
-        
+
             // Collect all Receptor Families (keys inside each Class), but only if there is more than one
             CircleHeaders.forEach(classKey => {
                 let receptorFamilies = Object.keys(circleData[classKey]);
-        
+
                 // Only add receptor families if there are more than one
                 if (!["T2", "Classless"].some(f => CircleHeaders.includes(f))) {
                     CircleSubHeaders.push(...receptorFamilies);
                 }
             });
-        
+
             // Remove duplicates from CircleSubHeaders
             CircleSubHeaders = [...new Set(CircleSubHeaders)];
-        
+
             return { CircleHeaders, CircleSubHeaders };
         }
 
@@ -3024,7 +3024,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
             let Circle_array = [];
             let DataFill = {};
             const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-        
+
             // Loop through the main classes (CircleHeaders)
             for (const classKey of CircleHeaders) {
 
@@ -3045,7 +3045,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                 }
 
                 FirstFamily = true;
-        
+
                 // Sort receptor families naturally before iterating
                 let receptorFamilies = Object.keys(circleData[classKey]).sort(collator.compare);
 
@@ -3056,7 +3056,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                     receptorFamilies.splice(orphanIndex, 1);         // remove it
                     receptorFamilies.push("Class A orphans");        // add to end
                 }
-                        
+
                 // Loop through receptor families
                 for (const receptorFamily of receptorFamilies) {
                     if (CircleSubHeaders.includes(receptorFamily)) {
@@ -3068,10 +3068,10 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                             Circle_array.push(receptorFamily);
                         }
                     }
-        
+
                     // Loop through receptors inside each receptor family
                     for (const receptor of Object.keys(circleData[classKey][receptorFamily])) {
-                        
+
                         let label;
 
                         if (GPCRome_styling.LabelType === "Uniprot") {
@@ -3097,11 +3097,11 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
             }
             // Circle_array.push("");
             return { Circle_array, DataFill };
-        }        
+        }
 
         let { CircleHeaders, CircleSubHeaders } = extractHeaders(Data);
         let { Circle_array, DataFill } = createCircleArray(Data, CircleHeaders, CircleSubHeaders);
-        
+
         function calculatePositionAndAngle(index, total, values, CircleHeaders, CircleSubHeaders, isSplit) {
             // Get the text value at the current index
             const text_value = values[index];
@@ -3187,7 +3187,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                 "&quot;": '"',
                 "&apos;": "'"
             };
-        
+
             // Apply all the replacements step by step
             let formattedText = text
                 .replace(/ receptors/g, '')
@@ -3204,7 +3204,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                 .replace(/Olfactory/g, 'OLF')
                 .replace(/calcitonin-like receptor/g, 'CLR')
                 .replace(/5-Hydroxytryptamine/g, '5-HT');
-        
+
             // Replace HTML entities
             formattedText = formattedText.replace(/&[a-z]+;/g, match => htmlEntities[match] || match);
 
@@ -3228,13 +3228,13 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
 
                 return str;
             }
-                    
+
             // Apply capitalization only if needed
             formattedText = capitalizeFirstLetter(formattedText);
-            
+
             // Check if the text is in the Family_list for additional formatting
             const isInFamilyList = Family_list.includes(text);
-        
+
             // Apply additional formatting if the text is in the Family_list
             if (isInFamilyList) {
                 formattedText = formattedText
@@ -3247,10 +3247,10 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                     .split("</tspan>")[0] // Keep only part before the first closing tspan tag
                     .split(" (")[0]; // Keep only the part before the first " (" parenthesis
             }
-        
+
             return formattedText;
         }
-    
+
        // Bind data and append text elements for the specific GPCRome
        svg.selectAll(`.GPCRome-text-${level}`)
            .data(Circle_array)
@@ -3288,7 +3288,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
            .attr("dy", (d) => CircleHeaders.includes(d) ? "0.1em" : "0.05em")  // Adjust 'dy' as needed
            .attr("transform", (d, i) => {
                let pos = calculatePositionAndAngle(i, Circle_array.length, Circle_array, CircleHeaders, CircleSubHeaders, false);
-            
+
                // Calculate the angle and determine the text's side (right or left)
                const angle = (i / Circle_array.length) * 360 - 90;
 
@@ -3346,7 +3346,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                     // fontsize
                     let family_fontsize = FontsizeGlobal;
 
-                   
+
                       // Check if the formatted text is longer than 10 characters (or any desired length)
                       if (formattedText.length > 18) {
                           let splitIndex;
@@ -3429,9 +3429,9 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
 
                       } else {
                         // If the formatted text is shorter than 10 characters, handle it normally
-                        
+
                         // Get the current and previous positions without splitting (isSplit = false)
-                        if (Circle_array[index - 1] === '') { 
+                        if (Circle_array[index - 1] === '') {
                             const currentPos = calculatePositionAndAngle(index, totalItems, Circle_array, CircleHeaders, CircleSubHeaders, false);
                             const prevPos = calculatePositionAndAngle(index - 1, totalItems, Circle_array, CircleHeaders, CircleSubHeaders, false);
 
@@ -3468,13 +3468,13 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                       }
                 }
             });
-        
+
         // ################
         // ### Coloring ###
         // ################
         // Define color scale for continuous data
         let colorScale;
-        
+
         if (DataType === "Numeric") {
             if (ColorSetup === 'One') {
             // White to Max (One color)
@@ -3519,11 +3519,11 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
             .attr("transform", `translate(${width / 2}, ${height / 2})`)
             .style("fill", (d) => {
                 const value = DataFill[d.data];
-            
+
                 if (DataType === "Text") {
                     return value || "none";  // Use Color directly
                 }
-            
+
                 const numericValue = parseFloat(value);
                 // if (numericValue === 0) {
                 //     return "white";
@@ -3545,7 +3545,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
         if (DataType === "Numeric") {
             // Add gradient bar legend for numeric data
             const legendGroup = svg.append("g").attr("class", "legend-gradient-bar");
-            
+
             const barWidth = GPCRome_styling.LegendbarLength || 300;
             const barHeight = 15;
             const legendPaddingRight = 20;
@@ -3555,7 +3555,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
             const BarFixedDigit = GPCRome_styling.LegendbarDigit || 2;
             const BarFontSize = GPCRome_styling.LegendbarFontsize || "11px";
             const uniqueGradientId = `gradient-bar-${location}`;
-        
+
             // Create defs and linearGradient
             const defs = svg.append("defs");
             const gradient = defs.append("linearGradient")
@@ -3564,16 +3564,16 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                 .attr("x2", "100%")
                 .attr("y1", "0%")
                 .attr("y2", "0%");
-        
+
             if (ColorSetup === "Three") {
                 gradient.append("stop")
                     .attr("offset", "0%")
                     .attr("stop-color", ColorMin);
-        
+
                 gradient.append("stop")
                     .attr("offset", "50%")
                     .attr("stop-color", ColorAvg);
-        
+
                 gradient.append("stop")
                     .attr("offset", "100%")
                     .attr("stop-color", ColorMax);
@@ -3581,7 +3581,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                 gradient.append("stop")
                     .attr("offset", "0%")
                     .attr("stop-color", ColorMin);
-        
+
                 gradient.append("stop")
                     .attr("offset", "100%")
                     .attr("stop-color", ColorMax);
@@ -3589,12 +3589,12 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                 gradient.append("stop")
                     .attr("offset", "0%")
                     .attr("stop-color", "#FFFFFF");
-        
+
                 gradient.append("stop")
                     .attr("offset", "100%")
                     .attr("stop-color", ColorMax);
             }
-        
+
             // Draw the gradient bar
             legendGroup.append("rect")
                 .attr("x", barX)
@@ -3603,7 +3603,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                 .attr("height", barHeight)
                 .style("fill", `url(#${uniqueGradientId})`)
                 .style("stroke", "black");
-        
+
             // Add min, avg (if needed), and max labels
             legendGroup.append("text")
                 .attr("x", barX)
@@ -3611,19 +3611,19 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                 .attr("text-anchor", "start")
                 .style("font-size", BarFontSize)
                 .text(() => {
-                    return Number.isInteger(MinValue) 
-                        ? parseInt(MinValue) 
+                    return Number.isInteger(MinValue)
+                        ? parseInt(MinValue)
                         : parseFloat(MinValue).toFixed(BarFixedDigit);
                 });
-        
+
             legendGroup.append("text")
                 .attr("x", barX + barWidth)
                 .attr("y", barY + barHeight + 15)
                 .attr("text-anchor", "end")
                 .style("font-size", BarFontSize)
                 .text(() => {
-                    return Number.isInteger(MaxValue) 
-                        ? parseInt(MaxValue) 
+                    return Number.isInteger(MaxValue)
+                        ? parseInt(MaxValue)
                         : parseFloat(MaxValue).toFixed(BarFixedDigit);
                 });
 
@@ -3729,7 +3729,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                 });
                 // Clean up measuring element
                 tempText.remove();
-                // 
+                //
                 const legendBBox = svg.select(".legend-text-categories").node()?.getBBox();
                 if (legendBBox) {
                     const centerOffsetX = (dimensions.width - legendBBox.width) / 2 - legendBBox.x;
@@ -3858,7 +3858,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
             }
         }
     }
-    
+
     // Add padding and update height to match content
     const padding = 10;
     const newHeight = dimensions.height + AddBottomHeight;

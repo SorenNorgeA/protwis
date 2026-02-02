@@ -381,6 +381,148 @@ const wheelStyling = {
   odorant: { DataType:"Text", FontStyle:"Arial", FontsizeGlobal:"11px", FontsizeClass:"20px", showIcon:true, LabelType:"Protein", ShowLegend:true, LegendLayout:{mode:"row", columns:1, sorted:"Vertically"}, IconUrl: ICON_URL, ColorBy: "Class" }
 };
 
+// ==========================
+// === Tree-aligned colors ===
+// ==========================
+// Keep these in sync with `alignment/templates/class_similarity/Classification_tree.html`.
+const CLASS_COLORS_TREE = {
+  "A":  "#1f78b4",
+  "B1": "#33a02c",
+  "B2": "#6A3D9A",
+  "C":  "#d62728",
+  "F":  "#FF7F0E",
+  "T2": "#F7B6D2",
+  // Wheel uses "Classless"; tree uses "Cl"
+  "Classless": "#9e9e9e",
+};
+
+const CHEMOTYPE_COLORS_TREE = {
+  "Adhesion receptors": "#1F77B4",
+  "Alicarboxylic acid receptors": "#AEC7E8",
+  "Aminergic receptors": "#FF6B6B",
+  "Amino acid receptors": "#98DF8A",
+  "Ion receptors": "#D62728",
+  "Lipid receptors": "#9467BD",
+  "Melatonin receptors": "#DBDB8D",
+  "Nucleotide receptors": "#9EDAE5",
+  "Orphan receptors": "#a0b8ba",
+  "Peptide receptors": "#2CA02C",
+  "Protein receptors": "#FF7F0E",
+  "Retinal receptors": "#FFBB78",
+  "Steroid receptors": "#E377C2",
+  "Tastant receptors": "#F7B6D2",
+};
+
+const CHEMOTYPE_FALLBACK_PALETTE = [
+  "#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99","#e31a1c",
+  "#fdbf6f","#ff7f00","#cab2d6","#6a3d9a","#ffff99","#b15928",
+  "#66c2a5","#fc8d62"
+];
+
+function normKey(v) {
+  if (v === undefined || v === null) return "";
+  const s = String(v).trim();
+  if (!s || s.toLowerCase() === "nan") return "";
+  return s;
+}
+
+function fnv1a32(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  }
+  return h >>> 0;
+}
+
+function stableColorForKey(key, palette) {
+  const k = normKey(key);
+  if (!k) return "#cccccc";
+  const idx = fnv1a32(k.toLowerCase()) % palette.length;
+  return palette[idx];
+}
+
+function getChemotypeColor(chemotype) {
+  const k = normKey(chemotype);
+  if (!k) return "#cccccc";
+  if (CHEMOTYPE_COLORS_TREE[k]) return CHEMOTYPE_COLORS_TREE[k];
+  return stableColorForKey(k, CHEMOTYPE_FALLBACK_PALETTE);
+}
+
+function buildSchemeFromCategories(categories, getColorFn) {
+  const out = {};
+  (categories || []).forEach(cat => {
+    const k = normKey(cat);
+    if (!k) return;
+    out[k] = getColorFn(k);
+  });
+  // Ensure a stable fallback bucket exists for missing values.
+  if (!out["Unknown"]) out["Unknown"] = "#cccccc";
+  return out;
+}
+
+// =============================
+// === Classic family renames ===
+// =============================
+// Renames are applied to the *wheel structure* (grouping) and also written back into
+// each leaf receptor's `Receptor family` field (for coloring/legend consistency).
+function preprocessClassicWheelData(data) {
+  if (!data || typeof data !== "object") return data;
+
+  const familyRename = {
+    "opsins": "Vision receptors",
+    "opsins receptors": "Vision receptors",
+    "class a orphans": "Orphans",
+    "class c orphans": "Orphans",
+    "class c orphans ": "Orphans",
+    "peptide p518 receptors": "QRFP receptors",
+  };
+
+  function renameFamilyKey(fam) {
+    const s = normKey(fam);
+    if (!s) return s;
+    const mapped = familyRename[s.toLowerCase()];
+    return mapped || s;
+  }
+
+  // Data shape: Circle_X -> ClassKey -> FamilyKey -> ReceptorName -> receptorObj
+  Object.keys(data).forEach(circleKey => {
+    const circle = data[circleKey];
+    if (!circle || typeof circle !== "object") return;
+
+    Object.keys(circle).forEach(classKey => {
+      const fams = circle[classKey];
+      if (!fams || typeof fams !== "object") return;
+
+      const newFams = {};
+      Object.keys(fams).forEach(oldFamKey => {
+        const newFamKey = renameFamilyKey(oldFamKey);
+        const receptors = fams[oldFamKey];
+        if (!receptors || typeof receptors !== "object") return;
+
+        // Update leaf metadata `Receptor family` to the renamed family.
+        Object.keys(receptors).forEach(recName => {
+          const r = receptors[recName];
+          if (r && typeof r === "object") {
+            r["Receptor family"] = newFamKey;
+          }
+        });
+
+        // Merge if collision after renaming
+        if (!newFams[newFamKey]) newFams[newFamKey] = {};
+        Object.assign(newFams[newFamKey], receptors);
+      });
+
+      circle[classKey] = newFams;
+    });
+  });
+
+  return data;
+}
+
+// Apply Classic preprocessing once, early (before extracting categories / building schemes)
+wheelData.classic = preprocessClassicWheelData(wheelData.classic);
+
 function generateCategoryColors(categories) {
   if (!categories || categories.length === 0) return {};
   const colors = {};
@@ -416,127 +558,57 @@ function extractUniqueCategories(type, fieldName) {
 
 const CLASSIC_MODALITIES = extractUniqueCategories("classic", "Modality");
 const ODORANT_MODALITIES = extractUniqueCategories("odorant", "Modality");
+const CLASSIC_CHEMOTYPES = extractUniqueCategories("classic", "Chemotype");
+const ODORANT_CHEMOTYPES = extractUniqueCategories("odorant", "Chemotype");
+const CLASSIC_SENSES = extractUniqueCategories("classic", "Sense");
+const ODORANT_SENSES = extractUniqueCategories("odorant", "Sense");
+const CLASSIC_RECEPTOR_FAMILIES = extractUniqueCategories("classic", "Receptor family");
+const ODORANT_RECEPTOR_FAMILIES_DYNAMIC = extractUniqueCategories("odorant", "Receptor family");
 
-const RECEPTOR_FAMILIES = [
-  "5-Hydroxytryptamine receptors",
-  "Acetylcholine receptors (muscarinic)",
-  "Adenosine receptors",
-  "ADGRA",
-  "ADGRB",
-  "ADGRC",
-  "ADGRD",
-  "ADGRE",
-  "ADGRF",
-  "ADGRG",
-  "ADGRL",
-  "ADGRV",
-  "Adrenoceptors",
-  "Angiotensin receptors",
-  "Apelin receptors",
-  "Bile acid receptors",
-  "Bombesin receptors",
-  "Bradykinin receptors",
-  "Calcitonin receptors",
-  "Calcium-sensing receptors",
-  "Cannabinoid receptors",
-  "Chemerin receptor",
-  "Chemokine receptors",
-  "Cholecystokinin receptors",
-  "Class A orphans",
-  "Class C Orphans",
-  "Complement peptide receptors",
-  "Corticotropin-releasing factor receptors",
-  "Dopamine receptors",
-  "Endothelin receptors",
-  "Estrogen (G protein-coupled) receptors",
-  "Formylpeptide receptors",
-  "Free fatty acid receptors",
-  "Frizzled",
-  "GABA<sub>B</sub> receptors",
-  "Galanin receptors",
-  "Ghrelin receptors",
-  "Glucagon receptor family",
-  "Glycoprotein hormone receptors",
-  "Gonadotrophin-releasing hormone receptors",
-  "GPR18, GPR55 and GPR119",
-  "Histamine receptors",
-  "Hydroxycarboxylic acid receptors",
-  "Kisspeptin receptors",
-  "Leukotriene receptors",
-  "Lysophospholipid (LPA) receptors",
-  "Lysophospholipid (S1P) receptors",
-  "Melanin-concentrating hormone",
-  "Melanocortin receptors",
-  "Melatonin",
-  "Metabotropic glutamate receptors",
-  "Motilin receptors",
-  "Neuromedin U receptors",
-  "Neuropeptide FF/neuropeptide AF receptors",
-  "Neuropeptide S receptors",
-  "Neuropeptide W/neuropeptide B receptors",
-  "Neuropeptide Y receptors",
-  "Neurotensin receptors",
-  "Opioid receptors",
-  "Opsins",
-  "Orexin receptors",
-  "Other GPCR orphans",
-  "Oxoglutarate receptors",
-  "P2Y receptors",
-  "Parathyroid hormone receptors",
-  "Peptide P518 receptors",
-  "Platelet-activating factor receptors",
-  "Prokineticin receptors",
-  "Prolactin-releasing peptide receptors",
-  "Prostanoid receptors",
-  "Proteinase-activated receptors",
-  "Relaxin family peptide receptors",
-  "Somatostatin receptors",
-  "Succinate receptors",
-  "Tachykinin receptors",
-  "Taste 1 receptors",
-  "Taste 2 receptors",
-  "Thyrotropin-releasing hormone receptors",
-  "Trace amine receptors",
-  "Urotensin receptors",
-  "Vasopressin and oxytocin receptors",
-  "VIP and PACAP receptors"
-];
+// Fixed palettes (curated)
+const MODALITY_COLORS_FIXED = {
+  "Small molecule receptors": "#1f78b4",
+  "Peptide receptors": "#2CA02C",
+  "Protein receptors": "#FF7F0E",
+  "Orphan receptors": "#a0b8ba",
+};
+
+const SENSE_COLORS_FIXED = {
+  "Vision": "#ff7f00",
+  "Taste": "#377eb8",
+  "Odorant": "#4daf4a",
+  "Non-sensory": "#33a02c",
+  "Unknown": "#cccccc",
+};
+
+function buildSenseScheme(categories) {
+  const out = {};
+  (categories || []).forEach(s => {
+    const k = normKey(s);
+    if (!k) return;
+    out[k] = SENSE_COLORS_FIXED[k] || stableColorForKey(k, CHEMOTYPE_FALLBACK_PALETTE);
+  });
+  // Ensure common fixed keys exist even if absent in data
+  Object.keys(SENSE_COLORS_FIXED).forEach(k => {
+    if (!out[k]) out[k] = SENSE_COLORS_FIXED[k];
+  });
+  return out;
+}
 
 const coloringSchemes = {
   "Class": {
-    "A": "#1f77b4",
-    "B1": "#ff7f0e",
-    "B2": "#2ca02c",
-    "C": "#d62728",
-    "F": "#9467bd",
-    "T2": "#17becf",
-    "Classless": "#8c564b"
+    "A": CLASS_COLORS_TREE["A"],
+    "B1": CLASS_COLORS_TREE["B1"],
+    "B2": CLASS_COLORS_TREE["B2"],
+    "C": CLASS_COLORS_TREE["C"],
+    "F": CLASS_COLORS_TREE["F"],
+    "T2": CLASS_COLORS_TREE["T2"],
+    "Classless": CLASS_COLORS_TREE["Classless"],
   },
-  "Chemotype": {
-    "Adhesion receptors": "#a6cee3",          // Light blue
-    "Alicarboxylic acid receptors": "#1f78b4", // Darker blue
-    "Aminergic receptors": "#e41a1c",         // Red
-    "Amino acid receptors": "#b2df8a",        // Light green
-    "Ion receptors": "#33a02c",               // Dark green
-    "Light receptors": "#fb9a99",             // Pink
-    "Lipid receptors": "#fdbf6f",             // Orange
-    "Melatonin receptors": "#ff7f00",         // Darker orange
-    "Nucleotide receptors": "#cab2d6",        // Lavender
-    "Peptide receptors": "#377eb8",           // Blue
-    "Protein receptors": "#6a3d9a",           // Purple
-    "Steroid receptors": "#ffff99",           // Yellow
-    "Tastant receptors": "#b15928",           // Brown
-    "unknown receptors": "#999999"            // Grey
-  },
-  "Modality": generateCategoryColors(CLASSIC_MODALITIES),
-  "Receptor family": generateCategoryColors(RECEPTOR_FAMILIES),
-  "Sense": {
-    "Vision": "#ff7f00",
-    "Taste": "#377eb8",
-    "Odorant": "#4daf4a",
-    "Non-sensory": "#33a02c",
-    "Unknown": "#cccccc"
-  }
+  "Chemotype": buildSchemeFromCategories(CLASSIC_CHEMOTYPES, getChemotypeColor),
+  "Modality": buildSchemeFromCategories(CLASSIC_MODALITIES, (m) => MODALITY_COLORS_FIXED[m] || stableColorForKey(m, CHEMOTYPE_FALLBACK_PALETTE)),
+  "Receptor family": generateCategoryColors(CLASSIC_RECEPTOR_FAMILIES),
+  "Sense": buildSenseScheme(CLASSIC_SENSES),
 };
 
 // Add odorant-specific mappings
@@ -552,11 +624,38 @@ const coloringSchemesOdorant = {
     "O1": "#9D4EDD",  // purple
     "O2": "#2A9D8F"   // teal
   },
-  "Chemotype": coloringSchemes["Chemotype"],
-  "Modality": generateCategoryColors(ODORANT_MODALITIES),
+  "Chemotype": buildSchemeFromCategories(ODORANT_CHEMOTYPES, getChemotypeColor),
+  "Modality": buildSchemeFromCategories(ODORANT_MODALITIES, (m) => MODALITY_COLORS_FIXED[m] || stableColorForKey(m, CHEMOTYPE_FALLBACK_PALETTE)),
+  // Keep odorant receptor-family coloring the same behavior as before (generated).
   "Receptor family": generateCategoryColors(ODORANT_RECEPTOR_FAMILIES),
-  "Sense": coloringSchemes["Sense"],
+  "Sense": buildSenseScheme(ODORANT_SENSES),
 };
+
+// ----------------------------
+// Legend/category ordering
+// ----------------------------
+function getLastLegendLabelForColorBy(colorBy) {
+  const cb = normKey(colorBy);
+  if (cb === "Class") return "Classless";
+  if (cb === "Modality" || cb === "Chemotype") return "Orphan receptors";
+  if (cb === "Sense") return "Unknown";
+  return null;
+}
+
+function sortLegendLabels(labels, colorBy) {
+  const last = getLastLegendLabelForColorBy(colorBy);
+  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+  const arr = (labels || []).slice();
+  arr.sort((a, b) => {
+    const A = normKey(a);
+    const B = normKey(b);
+    const aLast = last && A.toLowerCase() === String(last).toLowerCase();
+    const bLast = last && B.toLowerCase() === String(last).toLowerCase();
+    if (aLast !== bLast) return aLast ? 1 : -1; // last goes to the end
+    return collator.compare(A, B);
+  });
+  return arr;
+}
 
 function applyColoring(type) {
   const schemeSet = (type === "odorant") ? coloringSchemesOdorant : coloringSchemes;
@@ -574,7 +673,11 @@ function applyColoring(type) {
         const receptors = families[familyKey];
         for (const recKey in receptors) {
           const receptor = receptors[recKey];
-          const categoryValue = receptor[colorBy];
+          let categoryValue = normKey(receptor ? receptor[colorBy] : "");
+          // Normalize missing values into a consistent bucket so they are colorable/togglable.
+          if (!categoryValue && (colorBy === "Chemotype" || colorBy === "Modality" || colorBy === "Sense")) {
+            categoryValue = "Unknown";
+          }
 
           // Always keep data so the wheel can render even if everything is "off"
           receptor.Data = categoryValue || "";
@@ -594,7 +697,270 @@ function applyColoring(type) {
 function drawWheel(type) {
   const locationId = (type === "classic") ? "GPCRome_classic_plot" : "GPCRome_odorant_plot";
   d3v4.select(`#${locationId}`).select("svg").remove();
-  DrawGPCRomeWheel(wheelData[type], locationId, wheelStyling[type]);
+  CustomDrawGPCRomeWheel(wheelData[type], locationId, wheelStyling[type]);
+}
+
+// Rebuild the text-category legend with custom ordering rules.
+// (The datamapper renderer builds a legend too, but it sorts alphabetically; we replace it.)
+function rebuildWheelLegend(locationId, wheelType) {
+  const st = wheelStyling[wheelType] || {};
+  if (!st.ShowLegend) return;
+
+  const colorBy = st.ColorBy;
+  const schemeSet = (wheelType === "odorant") ? coloringSchemesOdorant : coloringSchemes;
+  const scheme = schemeSet[colorBy];
+  if (!scheme) return;
+
+  const svg = d3v4.select("#" + locationId + "_svg");
+  if (svg.empty()) return;
+
+  // Remove any existing legend (from datamapper).
+  svg.selectAll(".legend-text-categories").remove();
+
+  const legendGroup = svg.append("g").attr("class", "legend-text-categories");
+
+  // Match the original wheel sizing logic from datamapper.js:
+  // - Base plot is 1000x1000
+  // - Legend is drawn starting at y = baseHeight + 40
+  const baseWidth = parseFloat(svg.attr("width")) || 1000;
+  const baseHeight = 1000;
+  const startX = 50;
+  const startY = baseHeight + 40;
+
+  // Collect the actually-used categories from the (already colored) wheelData.
+  const used = new Set();
+  const data = wheelData[wheelType] || {};
+  for (const circleKey in data) {
+    const circle = data[circleKey];
+    for (const classKey in circle) {
+      const families = circle[classKey];
+      for (const famKey in families) {
+        const receptors = families[famKey];
+        for (const recKey in receptors) {
+          const r = receptors[recKey];
+          if (!r) continue;
+          // Prefer the plotted label value (Data) since applyColoring normalizes blanks -> "Unknown"
+          const v = normKey(r.Data || r[colorBy] || "");
+          if (v) used.add(v);
+        }
+      }
+    }
+  }
+
+  const labels = sortLegendLabels(Array.from(used), colorBy);
+  if (!labels.length) return;
+
+  const fontSize = st.FontsizeGlobal || "11px";
+  const fontFamily = st.FontStyle || "Arial";
+  const padding = 10;
+  const spacingY = 25;
+  const mode = st.LegendLayout?.mode || "row";
+  const cols = parseInt(st.LegendLayout?.columns || "1", 10) || 1;
+  const sortDirection = st.LegendLayout?.sorted || "Vertically";
+
+  const tempText = svg.append("text")
+    .attr("x", -9999).attr("y", -9999)
+    .style("font-size", fontSize)
+    .style("font-family", fontFamily);
+
+  function colorForLabel(lbl) {
+    const k = normKey(lbl);
+    return scheme[k] || "#ffffff";
+  }
+
+  const fontSizeNumber = parseFloat(fontSize) || 11;
+  const circleRadius = Math.round(fontSizeNumber * 0.4);
+
+  if (mode === "row") {
+    let x = startX, y = startY;
+    const maxItemWidth = baseWidth - 100;
+    labels.forEach(label => {
+      tempText.text(label);
+      const labelWidth = tempText.node()?.getComputedTextLength() || 0;
+      const fixedWidth = circleRadius * 2 + padding + labelWidth + 20;
+      if (x + fixedWidth > baseWidth - 50) {
+        x = startX;
+        y += spacingY;
+      }
+      // Follow wheel legend convention: place circle at y, text at y+4.
+      const cy = y;
+      legendGroup.append("circle")
+        .attr("cx", x)
+        .attr("cy", cy)
+        .attr("r", circleRadius)
+        .style("fill", colorForLabel(label))
+        .style("stroke", "black");
+
+      legendGroup.append("text")
+        .attr("x", x + circleRadius + 6)
+        .attr("y", cy + 4)
+        .style("font-size", fontSize)
+        .style("font-family", fontFamily)
+        .text(label);
+
+      x += fixedWidth;
+    });
+  } else {
+    // columns
+    const numCols = Math.max(1, cols);
+    let colData = [];
+    if (sortDirection === "Horizontally") {
+      colData = Array.from({ length: numCols }, () => []);
+      labels.forEach((label, index) => {
+        colData[index % numCols].push(label);
+      });
+    } else {
+      const perCol = Math.floor(labels.length / numCols);
+      const remainder = labels.length % numCols;
+      let idx = 0;
+      for (let i = 0; i < numCols; i++) {
+        const count = perCol + (i < remainder ? 1 : 0);
+        colData.push(labels.slice(idx, idx + count));
+        idx += count;
+      }
+    }
+
+    const colWidths = colData.map(col => {
+      let maxW = 0;
+      col.forEach(label => {
+        tempText.text(label);
+        maxW = Math.max(maxW, tempText.node()?.getComputedTextLength() || 0);
+      });
+      return maxW + 40;
+    });
+
+    let colStartX = startX;
+    colData.forEach((col, colIndex) => {
+      let x = colStartX;
+      let y = startY;
+      col.forEach(label => {
+        const cy = y;
+        legendGroup.append("circle")
+          .attr("cx", x)
+          .attr("cy", cy)
+          .attr("r", circleRadius)
+          .style("fill", colorForLabel(label))
+          .style("stroke", "black");
+
+        legendGroup.append("text")
+          .attr("x", x + circleRadius + 6)
+          .attr("y", cy + 4)
+          .style("font-size", fontSize)
+          .style("font-family", fontFamily)
+          .text(label);
+
+        y += spacingY;
+      });
+      colStartX += colWidths[colIndex];
+    });
+  }
+
+  tempText.remove();
+
+  // Center the legend group horizontally (like datamapper does).
+  const legendBBox = legendGroup.node()?.getBBox();
+  if (legendBBox) {
+    const centerOffsetX = (baseWidth - legendBBox.width) / 2 - legendBBox.x;
+    legendGroup.attr("transform", `translate(${centerOffsetX}, 0)`);
+
+    // Expand SVG height/viewBox so the legend sits below the plot (same idea as datamapper).
+    const addBottomHeight = (legendBBox.y + legendBBox.height) - baseHeight + 40;
+    const newHeight = baseHeight + Math.max(0, addBottomHeight);
+    const vbPad = 10;
+    svg
+      .attr("height", newHeight)
+      .attr("viewBox", `-${vbPad} -${vbPad} ${baseWidth + 2 * vbPad} ${newHeight + 2 * vbPad}`);
+  }
+}
+
+// =========================================================
+// === Custom wheel wrapper (keeps datamapper.js untouched) ===
+// =========================================================
+function classDisplayLabel(code) {
+  const k = normKey(code);
+  if (!k) return "";
+  if (k === "Classless") return "Classless";
+  if (/^(A|B1|B2|C|F|T2|O1|O2)$/i.test(k)) return k.toUpperCase();
+  return k;
+}
+
+function classStrokeColor(type, classCode) {
+  const k = normKey(classCode);
+  if (!k) return "#999";
+  if (type === "odorant") {
+    const cmap = coloringSchemesOdorant["Class"] || {};
+    return cmap[k] || "#999";
+  }
+  return (coloringSchemes["Class"] || {})[k] || "#999";
+}
+
+function addClassPills(locationId, wheelType) {
+  const svg = d3v4.select("#" + locationId + "_svg");
+  if (svg.empty()) return;
+
+  // Adjust this to taste (0..1). Applies to pill fill only (not the text/border).
+  const CLASS_PILL_FILL_OPACITY = 0.75;
+  // Nudge for the Classless label/pill (px, +x = right).
+  const CLASSLESS_PILL_DX = 1;
+
+  // Class headers are tagged with the highlight class in datamapper's wheel renderer.
+  svg.selectAll("text")
+    .filter(function(d) { return d !== undefined && d !== null; })
+    .filter(function(d) {
+      const el = this;
+      const cls = (el.getAttribute && el.getAttribute("class")) ? el.getAttribute("class") : "";
+      // Only the class headers get the highlight marker
+      return cls.indexOf("highlight") !== -1;
+    })
+    .each(function(d) {
+      try {
+        const txt = d3v4.select(this);
+        // Replace header text (and special-case Classless).
+        txt.text(classDisplayLabel(d));
+
+        const fill = classStrokeColor(wheelType, d);
+
+        // Text styling (keep black text; no outline)
+        txt.style("fill", "#000");
+
+        // Compute bbox after text/style updates for better centering.
+        const bb = this.getBBox();
+        // Tight pill padding (as small as possible without clipping).
+        const padX = 3;
+        const padY = 1;
+
+        // Insert behind text
+        const rect = d3v4.select(this.parentNode).insert("rect", () => this)
+          .attr("x", bb.x - padX)
+          .attr("y", bb.y - padY)
+          .attr("width", bb.width + padX * 2)
+          .attr("height", bb.height + padY * 2)
+          .attr("rx", 9)
+          .attr("ry", 9)
+          .style("fill", fill)
+          .style("fill-opacity", CLASS_PILL_FILL_OPACITY)
+          .style("stroke", "#000")
+          .style("stroke-width", "0.75px");
+
+        // Classless: nudge pill + text slightly to the right.
+        if (normKey(d) === "Classless") {
+          const tTr = txt.attr("transform") || "";
+          txt.attr("transform", (tTr ? (tTr + " ") : "") + `translate(${CLASSLESS_PILL_DX},0)`);
+          rect.attr("transform", `translate(${CLASSLESS_PILL_DX},0)`);
+        }
+      } catch (e) {
+        // ignore
+      }
+    });
+}
+
+function CustomDrawGPCRomeWheel(Data, locationId, GPCRome_styling) {
+  // Use the existing renderer, then extend/patch the output.
+  DrawGPCRomeWheel(Data, locationId, GPCRome_styling);
+
+  const wheelType = (locationId.indexOf("odorant") !== -1) ? "odorant" : "classic";
+  addClassPills(locationId, wheelType);
+  rebuildWheelLegend(locationId, wheelType);
 }
 // Tracks enable/disable per wheel and per scheme (Class, Chemotype, etc.)
 const activeCategories = {
@@ -646,7 +1012,8 @@ function initCustomizeColorPickers(type, containerId) {
 
   // Ensure enable-state exists
   if (!activeCategories[type][colorBy]) activeCategories[type][colorBy] = {};
-  Object.keys(scheme).forEach(cat => {
+  const orderedCats = sortLegendLabels(Object.keys(scheme), colorBy);
+  orderedCats.forEach(cat => {
     if (activeCategories[type][colorBy][cat] === undefined) {
       activeCategories[type][colorBy][cat] = true;
     }
@@ -675,7 +1042,7 @@ function initCustomizeColorPickers(type, containerId) {
   }
 
   // Build rows
-  Object.keys(scheme).forEach(category => {
+  orderedCats.forEach(category => {
     const safeCategory = category.replace(/[^a-zA-Z0-9_-]/g, "_");
     const safeId = `${type}_${safeColorBy}_picker_${safeCategory}`;
     const checkboxId = `check_${safeId}`;

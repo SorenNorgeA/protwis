@@ -12,14 +12,24 @@
     margin: 0 auto;
     display: block;
     position: relative;
-    overflow: hidden;
+    /* Let the parent scroll container handle overflow; do not clip SVG */
+    overflow: visible;
+    /* Center intrinsic-width SVGs horizontally */
+    text-align: center;
   }
 
   .tree_plot svg {
-    width: 100%;
+    /*
+      IMPORTANT:
+      Do NOT force the SVG to stretch to container width, otherwise text/labels scale
+      when we change radiusScale. We want radiusScale to shrink the plot while keeping
+      label sizes roughly comparable across plots.
+    */
+    width: auto !important;
     max-width: 100%;
     height: auto;
-    display: block;
+    /* Inline-block lets text-align:center on parent center the SVG */
+    display: inline-block;
   }
 
   .plot-container {
@@ -34,13 +44,11 @@
     text-align: center;
   }
 
-  /* Ensure tab panels properly contain their content */
-  .tab-pane {
-    position: relative;
-  }
-
-  .tab-pane:not(.active) {
-    display: none !important;
+  .tree-controls-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #444;
+    margin-bottom: 4px;
   }
 </style>
 {% endblock %}
@@ -52,98 +60,46 @@
       <strong>Error:</strong> {{ error }}
     </div>
   {% else %}
-    <!-- Bootstrap Tabs -->
-    <ul class="nav nav-tabs" role="tablist" style="margin-top: 20px;">
-      <li class="nav-item">
-        <a class="nav-link active" id="tab-A" data-toggle="tab" href="#panel-A" role="tab">Class A</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" id="tab-B1" data-toggle="tab" href="#panel-B1" role="tab">Class B1</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" id="tab-B2" data-toggle="tab" href="#panel-B2" role="tab">Class B2</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" id="tab-C" data-toggle="tab" href="#panel-C" role="tab">Class C</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" id="tab-F" data-toggle="tab" href="#panel-F" role="tab">Class F</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" id="tab-T2" data-toggle="tab" href="#panel-T2" role="tab">Class T2</a>
-      </li>
-    </ul>
+    <!-- Controls -->
+    <div class="row" style="margin-top: 20px; margin-bottom: 16px;">
+      <div class="col-md-12">
+        <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;">
+          <div>
+            <div class="tree-controls-label">Layout</div>
+            <select id="tree_layout" class="form-control input-sm">
+              <option value="Tree - Circular" selected>Tree - Circular</option>
+              <option value="Tree - Organic">Tree - Organic</option>
+              <option value="Tree - Straight">Tree - Straight</option>
+            </select>
+          </div>
 
-    <!-- Tab Panels -->
-    <div class="tab-content" style="margin-top: 20px;">
-      <div class="tab-pane fade show active" id="panel-A" role="tabpanel">
-        <div class="plot-container">
-          <div class="plot-title">Class A<br><span style="font-weight: normal;">(Excluding orphans)</span></div>
-          <div class="text-center" style="margin-bottom: 10px;">
-            <button id="download_png_A_non_orphan" type="button" class="btn btn-default btn-sm">
-              Download PNG
-            </button>
+          <div>
+            <div class="tree-controls-label">Type</div>
+            <div id="tree_type_group" class="btn-group" role="group" aria-label="Type">
+              <button type="button" class="btn btn-primary btn-sm active" data-type="Class">Class</button>
+              <button type="button" class="btn btn-default btn-sm" data-type="Modality">Modality</button>
+              <button type="button" class="btn btn-default btn-sm" data-type="Chemotype">Chemotype</button>
+            </div>
           </div>
-          <div class="col-md-12" style="margin-bottom: 30px; overflow: auto;">
-            <div id="tree_plot_A_non_orphan" class="tree_plot text-center"></div>
+
+          <div style="min-width: 260px; flex: 1;">
+            <div class="tree-controls-label">Selection</div>
+            <select id="tree_selection" class="form-control input-sm"></select>
           </div>
-        </div>
-        <div class="plot-container">
-          <div class="plot-title">Class A orphans</div>
-          <div class="text-center" style="margin-bottom: 10px;">
-            <button id="download_png_A_orphan" type="button" class="btn btn-default btn-sm">
-              Download PNG
-            </button>
-          </div>
-          <div class="col-md-12" style="margin-bottom: 30px; overflow: auto;">
-            <div id="tree_plot_A_orphan" class="tree_plot text-center"></div>
+
+          <div>
+            <div class="tree-controls-label">&nbsp;</div>
+            <button id="download_png_main" type="button" class="btn btn-default btn-sm">Download PNG</button>
           </div>
         </div>
       </div>
+    </div>
 
-      <div class="tab-pane fade" id="panel-B1" role="tabpanel">
-        <div class="plot-container">
-          <div class="plot-title">Class B1</div>
-          <div class="col-md-12" style="margin-bottom: 30px; overflow: auto;">
-            <div id="tree_plot_B1_non_orphan" class="tree_plot text-center"></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="tab-pane fade" id="panel-B2" role="tabpanel">
-        <div class="plot-container">
-          <div class="plot-title">Class B2</div>
-          <div class="col-md-12" style="margin-bottom: 30px; overflow: auto;">
-            <div id="tree_plot_B2_non_orphan" class="tree_plot text-center"></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="tab-pane fade" id="panel-C" role="tabpanel">
-        <div class="plot-container">
-          <div class="plot-title">Class C</div>
-          <div class="col-md-12" style="margin-bottom: 30px; overflow: auto;">
-            <div id="tree_plot_C_non_orphan" class="tree_plot text-center"></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="tab-pane fade" id="panel-F" role="tabpanel">
-        <div class="plot-container">
-          <div class="plot-title">Class F</div>
-          <div class="col-md-12" style="margin-bottom: 30px; overflow: auto;">
-            <div id="tree_plot_F_non_orphan" class="tree_plot text-center"></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="tab-pane fade" id="panel-T2" role="tabpanel">
-        <div class="plot-container">
-          <div class="plot-title">Class T2</div>
-          <div class="col-md-12" style="margin-bottom: 30px; overflow: auto;">
-            <div id="tree_plot_T2_non_orphan" class="tree_plot text-center"></div>
-          </div>
-        </div>
+    <!-- Single plot -->
+    <div class="plot-container">
+      <div id="tree_plot_title" class="plot-title"></div>
+      <div class="col-md-12" style="margin-bottom: 30px; overflow: auto;">
+        <div id="tree_plot_main" class="tree_plot text-center"></div>
       </div>
     </div>
   {% endif %}
@@ -177,6 +133,12 @@ function custom_update_tree_data(root) {
         // If this is the class node (child of root), shorten the label
         if (parent && parent.name === "" && node.name) {
             node.name = node.name.split(" (")[0];
+            // For plots where depth-1 nodes are class symbols (A, B1, ...), show "Class X"
+            // to match the desired display naming.
+            const key = String(node.name).trim();
+            if (CLASS_COLORS[key] && !/^Class\s+/i.test(key)) {
+                node.name = "Class " + key;
+            }
         }
 
         // If this is a receptor-family node (children are all leaves), shorten label a bit
@@ -199,12 +161,12 @@ function custom_update_tree_data(root) {
 // ------------------------------
 // Class colors (used for the center badge stroke)
 const CLASS_COLORS = {
-    'A':  '#333',
+    'A':  '#1f78b4',
     'B1': '#33a02c',
-    'B2': '#1f78b4',
-    'C':  '#6a3d9a',
-    'F':  '#666666',
-    'T2': '#ff7f00',
+    'B2': '#6A3D9A',
+    'C':  '#d62728',
+    'F':  '#FF7F0E',
+    'T2': '#F7B6D2',
     'Cl': '#9e9e9e',
 };
 
@@ -219,7 +181,7 @@ const CHEMOTYPE_COLORS = {
   "Lipid receptors": "#9467BD",
   "Melatonin receptors": "#DBDB8D",
   "Nucleotide receptors": "#9EDAE5",
-  "Orphan receptors": "#17BECF",
+  "Orphan receptors": "#a0b8ba",
   "Peptide receptors": "#2CA02C",
   "Protein receptors": "#FF7F0E",
   "Retinal receptors": "#FFBB78",
@@ -431,6 +393,16 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
         }
     }
 
+    // Per-plot radius scaling (shorten/lengthen all branches without changing angles).
+    // This affects both geometry (d.y radii) and the SVG diameter/height.
+    var radiusScale = (options.radiusScale !== undefined && options.radiusScale !== null) ? Number(options.radiusScale) : 1.0;
+    if (isFinite(radiusScale) && radiusScale > 0) {
+        Object.keys(branches).forEach(function (k) {
+            branches[k] = branches[k] * radiusScale;
+        });
+        branch_offset = branch_offset * radiusScale;
+    }
+
     // Calculate diameter based on content.
     // We keep this configurable because different label sizes/classes benefit from different padding.
     var diameterPad = (options.diameterPad !== undefined) ? options.diameterPad : 40; // px total padding (split across both sides)
@@ -492,12 +464,7 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
         .style("stroke", function (d) { return d.target.color; })
         .style("stroke-width", function (d) { if (d.target.depth > 0) { return thickness - d.target.depth; } else { return 0; } })
         .style("fill-opacity", 0)
-        .style("opacity", function (d) {
-            if ((d.target.interactions > 0 && d.target.mutations_an > 0) || 1 === 1) { return 0.8 }
-            else if (d.target.interactions > 0) { return 0.5 }
-            else if (d.target.mutations_an > 0) { return 0.5 }
-            else { return 0.1 };
-        });
+        .style("opacity", 1);
 
     var node = svg_g.selectAll(".node")
         .data(nodes)
@@ -526,10 +493,10 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
             } else {
                 // Internal label offset. Push selected internal labels outward (text + pill together).
                 var innerOffset = 12;
-                // Depth 1 is Chemotype after lifting Class into center badge.
+                // Depth 1 is Chemotype only for class-lifted plots (layer1Type === "chemotype").
                 // If there is no Family level (depth=2 tree), Chemotype is also the last internal ring,
                 // so we use an if/else to avoid applying both adjustments.
-                if (d.depth === 1 && !options.chemotypeCollapsed) {
+                if (d.depth === 1 && options.layer1Type === "chemotype" && !options.chemotypeCollapsed) {
                     innerOffset = innerOffset - (options.chemotypeLabelExtra || 0);
                 } else if (d.depth === (options.depth - 1)) {
                     innerOffset = innerOffset - (options.familyLabelExtra || 0);
@@ -648,8 +615,7 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
             });
     }
 
-    // NOTE: Per request, we no longer draw the center Class badge or the stacked
-    // Chemotype/Family badges when singletons collapse. (Layout still uses the same spacing knobs.)
+    // Center badge removed (no middle label/pill).
 
     function custom_string_pixlen(text, depth, options) {
         var canvas = document.createElement('canvas');
@@ -679,46 +645,6 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
         return parseInt(ctx.measureText(text).width,10);
     }
 
-    function custom_getBB(selection) {
-        selection.each(function (d) { d.bbox = this.getBBox(); });
-    }
-
-    function custom_wrap(text, width) {
-        if (width === 0) {
-            return;
-        }
-        text.each(function () {
-            var text = d3.select(this),
-                words = text.text().split(/\s+/).reverse(),
-                word,
-                line = [],
-                lineNumber = 0,
-                lineHeight = 1.1,
-                y = text.attr("y"),
-                dy = parseFloat(text.attr("dy")),
-                tspan = text.text(null).append("tspan").attr("x", 0).attr("y", y).attr("dy", dy + "em");
-
-            word = words.pop();
-            while (word !== undefined) {
-                line.push(word);
-                tspan.text(line.join(" "));
-
-                if (tspan.node().getComputedTextLength() > width) {
-                    line.pop();
-                    tspan.text(line.join(" "));
-                    line = [word];
-                    tspan = text.append("tspan")
-                                .attr("x", 0)
-                                .attr("y", y)
-                                .attr("dy", ++lineNumber * lineHeight + dy + "em")
-                                .text(word);
-                }
-
-                word = words.pop();
-            }
-        });
-    }
-
     // Set viewBox to scale to container width, align top, allow bottom to extend
     // contentWidth and contentHeight already calculated above
     svg.attr('viewBox', '0 0 ' + contentWidth + ' ' + contentHeight)
@@ -727,6 +653,718 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
     // Don't change the transform - svg_g is already correctly centered at (diameter/2, diameter/2)
     // The tree is calculated to extend from center to radius = diameter/2, so it fills ~95% of the SVG
     // The viewBox will allow it to scale down to fit the container while maintaining aspect ratio
+}
+
+// Global helper functions for all drawing functions
+function custom_getBB(selection) {
+    selection.each(function (d) { d.bbox = this.getBBox(); });
+}
+
+function custom_wrap(text, width) {
+    if (width === 0) {
+        return;
+    }
+    text.each(function () {
+        var text = d3.select(this),
+            words = text.text().split(/\s+/).reverse(),
+            word,
+            line = [],
+            lineNumber = 0,
+            lineHeight = 1.1,
+            y = text.attr("y"),
+            dy = parseFloat(text.attr("dy")),
+            tspan = text.text(null).append("tspan").attr("x", 0).attr("y", y).attr("dy", dy + "em");
+
+        word = words.pop();
+        while (word !== undefined) {
+            line.push(word);
+            tspan.text(line.join(" "));
+
+            if (tspan.node().getComputedTextLength() > width) {
+                line.pop();
+                tspan.text(line.join(" "));
+                line = [word];
+                tspan = text.append("tspan")
+                            .attr("x", 0)
+                            .attr("y", y)
+                            .attr("dy", ++lineNumber * lineHeight + dy + "em")
+                            .text(word);
+            }
+
+            word = words.pop();
+        }
+    });
+}
+
+// Custom draw_dendrogram_curved function - horizontal curved dendrogram
+function custom_draw_dendrogram_curved(data, options, stacked_meta, centerLabel) {
+    // Remove existing SVG if present
+    d3.select('#' + options.anchor + "_svg").remove();
+
+    // Set defaults for options
+    if (!options.label_free) options.label_free = [];
+    if (options.branch_trunc === undefined) options.branch_trunc = 0;
+
+    // Calculate dimensions - use similar width to tree (targetSvgSize)
+    var targetSvgSize = options.targetSvgSize || 800;
+    var margin = { top: 20, right: 10, bottom: 40, left: 10 };
+    var baseWidth = targetSvgSize;
+    var baseHeight = targetSvgSize;
+
+    // Calculate number of leaves for height scaling
+    function countLeaves(node) {
+        if (!node.children || node.children.length === 0) return 1;
+        return node.children.reduce(function(sum, child) { return sum + countLeaves(child); }, 0);
+    }
+    var leafCount = countLeaves(data);
+    var nodeHeight = Math.max(18, Math.min(25, (baseHeight - margin.top - margin.bottom) / Math.max(leafCount, 1)));
+    var height = Math.max(leafCount * nodeHeight + margin.top + margin.bottom, 400);
+
+    // Calculate horizontal spacing based on depth
+    // Add compression factor to bring root closer to leaves
+    var horizontalCompression = (options.dendrogramHorizontalCompression !== undefined) ? options.dendrogramHorizontalCompression : 1.0;
+    var depthKeys = Object.keys(options.branch_length || {}).map(k => parseInt(k, 10)).filter(n => !isNaN(n)).sort((a,b) => a-b);
+    var maxDepth = options.depth || 3;
+    var levelWidth = ((baseWidth - margin.left - margin.right) / (maxDepth + 1)) * horizontalCompression;
+    var width = (maxDepth + 1) * levelWidth + margin.left + margin.right;
+
+    var thickness = options.depth + 1;
+
+    var tree = d3.layout.tree()
+        .size([height - margin.top - margin.bottom, width - margin.left - margin.right])
+        .separation(function (a, b) {
+            var sib = (options.separationSibling !== undefined) ? options.separationSibling : 1;
+            var cous = (options.separationCousin !== undefined) ? options.separationCousin : 1;
+            var base = (a.parent === b.parent) ? sib : cous;
+            return base;
+        });
+
+    var diagonal = d3.svg.diagonal()
+        .projection(function (d) { return [d.y, d.x]; });
+
+    // Initial width - will be recalculated after node positioning
+    var initialWidth = width;
+    var svg = d3.select('#' + options.anchor).append("svg")
+        .attr("width", initialWidth)
+        .attr("height", height)
+        .attr("id", options.anchor + "_svg")
+        .attr("xmlns", "http://www.w3.org/2000/svg");
+
+    var svg_g = svg.append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+    var nodes = tree.nodes(data);
+    var links = tree.links(nodes);
+
+    // Adjust node positions for horizontal layout
+    // Use nested dict-based spacing: levelSpacing[type][maxDepth][level] = spacing multiplier
+    // Example: levelSpacing["Class"][3][1] = 0.8 means for Class type, maxDepth=3 trees, level 1 uses 80% spacing
+    var levelSpacing = options.dendrogramLevelSpacing || {};
+    var plotType = options.plotType || "Class"; // Get the type (Class, Modality, Chemotype)
+
+    // Helper function to get spacing for a specific level at a given maxDepth
+    function getLevelSpacing(level) {
+        // Check if we have type-specific spacing defined
+        if (levelSpacing[plotType] && levelSpacing[plotType][maxDepth] && levelSpacing[plotType][maxDepth][level] !== undefined) {
+            return levelSpacing[plotType][maxDepth][level];
+        }
+        // Fallback: check for type-agnostic spacing (backwards compatibility)
+        if (levelSpacing[maxDepth] && levelSpacing[maxDepth][level] !== undefined) {
+            return levelSpacing[maxDepth][level];
+        }
+        // Default: normal spacing
+        return 1.0;
+    }
+
+    // Calculate X positions by depth level (all nodes at same depth get same X)
+    // First, calculate cumulative X positions for each depth level
+    var depthPositions = {};
+    var cumulativeX = 0;
+    for (var depth = 1; depth <= maxDepth; depth++) {
+        var spacing = getLevelSpacing(depth);
+        cumulativeX += levelWidth * spacing;
+        depthPositions[depth] = cumulativeX;
+    }
+
+    // Now assign X positions to nodes based on their depth
+    nodes.forEach(function (d) {
+        if (d.depth === 0) {
+            d.y = 0;
+        } else {
+            d.y = depthPositions[d.depth];
+        }
+    });
+
+    // Recalculate width based on actual leaf positions
+    var maxY = 0;
+    nodes.forEach(function(d) {
+        if (d.y > maxY) maxY = d.y;
+    });
+    var newWidth = maxY + margin.left + margin.right + 50; // Add some padding for labels
+    if (newWidth !== width) {
+        width = newWidth;
+        svg.attr("width", width);
+    }
+
+    var link = svg_g.append("g")
+        .attr("class", "links")
+        .selectAll("path")
+        .data(links)
+        .enter().append("path")
+        .each(function (d) { d.target.linkNode = this; })
+        .attr("d", diagonal)
+        .style("stroke", function (d) { return d.target.color; })
+        .style("stroke-width", function (d) { if (d.target.depth > 0) { return thickness - d.target.depth; } else { return 0; } })
+        .style("fill-opacity", 0)
+        .style("opacity", 1);
+
+    var node = svg_g.selectAll(".node")
+        .data(nodes)
+        .enter().append("g")
+        .attr("class", "node")
+        .attr("transform", function (d) { return "translate(" + d.y + "," + d.x + ")"; });
+
+    node.filter(function (d) { return (d.depth === options.depth) })
+        .attr("id", function (d) { if (d.name === '') { return "innerNode" } else { return 'X' + d.name.toUpperCase() } });
+
+    node.append("text")
+        .attr("dy", ".31em")
+        .attr("name", function (d) { if (d.name === '') { return "branch" } else { return d.name } })
+        .attr("text-anchor", function (d) {
+            if (d.depth === options.depth) {
+                return "start";
+            } else {
+                return "end";
+            }
+        })
+        .attr("transform", function (d) {
+            var labelOffset = d.depth === options.depth ? 10 : -6;
+            // Add horizontal offsets for chemotype and receptor family labels
+            if (d.depth === 1 && options.dendrogramChemotypeOffset !== undefined) {
+                labelOffset += options.dendrogramChemotypeOffset;
+            } else if (d.depth === 2 && options.dendrogramFamilyOffset !== undefined) {
+                labelOffset += options.dendrogramFamilyOffset;
+            }
+            return "translate(" + labelOffset + ",0)";
+        })
+        .text(function (d) {
+            if (d.depth === options.depth) {
+                return d.name.toUpperCase();
+            } else if (options.label_free && options.label_free.includes(d.depth)) {
+                return "";
+            } else if (d.depth > 0) {
+                return d.name;
+            } else {
+                return "";
+            }
+        })
+        .each(function (d) {
+            if (d.depth > 0 && d.depth !== options.depth && d.name && String(d.name).includes("<")) {
+                this.innerHTML = custom_formatTextWithHTML(d.name);
+            }
+        })
+        .call(custom_wrap, options.branch_trunc)
+        .style("font-size", function (d) {
+            // Use same font sizes as tree for consistency
+            if (options.depth === 4) {
+                if (d.depth === 1) { return options.fontSize.class; }
+                else if (d.depth === 2) { return options.fontSize.ligandtype; }
+                else if (d.depth === 3) { return options.fontSize.receptorfamily; }
+                else { return options.fontSize.receptor; }
+            } else {
+                if (d.depth === 1) { return options.fontSize.ligandtype; }
+                else if (d.depth === 2) { return options.fontSize.receptorfamily; }
+                else { return options.fontSize.receptor; }
+            }
+        })
+        .style("font-family", function(d) {
+            return options.fontFamily || "Palatino";
+        })
+        .style("fill", function (d) {
+            if (d.color) { return "#111"; }
+            else { return "#222"; };
+        }).call(custom_getBB);
+
+    // Background shapes for internal labels
+    function labelBoxPadding(depth, maxDepth) {
+        const padX = (options.labelBoxPadX !== undefined) ? options.labelBoxPadX : 7;
+        const padY = (options.labelBoxPadY !== undefined) ? options.labelBoxPadY : 2;
+        return { x: padX, y: padY };
+    }
+
+    node.filter(function (d) { return (d.depth !== options.depth && d.depth > 0); })
+        .each(function (d) {
+            const g = d3.select(this);
+            const t = g.select("text");
+            if (t.empty()) return;
+
+            // Get bbox in local coordinates (before transform)
+            const bb = t.node().getBBox();
+            const pad = labelBoxPadding(d.depth, options.depth);
+            const tr = t.attr("transform");
+
+            g.insert("rect", "text")
+                .attr("transform", tr || null)
+                .attr("x", bb.x - pad.x)
+                .attr("y", bb.y - pad.y + (options.labelBoxDy || 0))
+                .attr("width", bb.width + pad.x * 2)
+                .attr("height", bb.height + pad.y * 2)
+                .attr("rx", 10)
+                .attr("ry", 10)
+                .style("fill", "#FFF")
+                .style("stroke", ((options.labelBoxStrokeColorMode || "chemotype") === "black") ? "#000" : (d.color || "#999"))
+                .style("stroke-width", "1px");
+        });
+
+    // Optional: leaf pills
+    if (options.leafPills) {
+        const leafPadX = (options.leafBoxPadX !== undefined) ? options.leafBoxPadX : 4;
+        const leafPadY = (options.leafBoxPadY !== undefined) ? options.leafBoxPadY : 2;
+        const leafDy = (options.leafBoxDy !== undefined) ? options.leafBoxDy : 0;
+        const leafRx = (options.leafBoxRx !== undefined) ? options.leafBoxRx : 4;
+        const leafStrokeW = (options.leafBoxStrokeWidth !== undefined) ? options.leafBoxStrokeWidth : 1;
+        const leafStrokeMode = (options.leafBoxStrokeColorMode !== undefined) ? options.leafBoxStrokeColorMode : "chemotype";
+
+        node.filter(function (d) { return (d.depth === options.depth); })
+            .each(function (d) {
+                const g = d3.select(this);
+                const t = g.select("text");
+                if (t.empty()) return;
+
+                const bb = t.node().getBBox();
+                const tr = t.attr("transform");
+
+                g.insert("rect", "text")
+                    .attr("transform", tr || null)
+                    .attr("x", bb.x - leafPadX)
+                    .attr("y", bb.y - leafPadY + leafDy)
+                    .attr("width", bb.width + leafPadX * 2)
+                    .attr("height", bb.height + leafPadY * 2)
+                    .attr("rx", leafRx)
+                    .attr("ry", leafRx)
+                    .style("fill", "#fff")
+                    .style("stroke", (leafStrokeMode === "black") ? "#000" : (d.color || "#999"))
+                    .style("stroke-width", leafStrokeW + "px");
+            });
+    }
+
+    svg.attr('viewBox', '0 0 ' + width + ' ' + height)
+        .attr('preserveAspectRatio', 'xMidYMin meet');
+}
+
+// Custom draw_dendrogram_straight function - horizontal straight dendrogram with 90-degree angles
+function custom_draw_dendrogram_straight(data, options, stacked_meta, centerLabel) {
+    // Remove existing SVG if present
+    d3.select('#' + options.anchor + "_svg").remove();
+
+    // Set defaults for options
+    if (!options.label_free) options.label_free = [];
+    if (options.branch_trunc === undefined) options.branch_trunc = 0;
+
+    // Calculate dimensions - use similar width to tree (targetSvgSize)
+    var targetSvgSize = options.targetSvgSize || 800;
+    var margin = { top: 20, right: 250, bottom: 40, left: 100 };
+    var baseWidth = targetSvgSize;
+    var baseHeight = targetSvgSize;
+
+    // Calculate number of leaves for height scaling
+    function countLeaves(node) {
+        if (!node.children || node.children.length === 0) return 1;
+        return node.children.reduce(function(sum, child) { return sum + countLeaves(child); }, 0);
+    }
+    var leafCount = countLeaves(data);
+    var nodeHeight = Math.max(18, Math.min(25, (baseHeight - margin.top - margin.bottom) / Math.max(leafCount, 1)));
+    var height = Math.max(leafCount * nodeHeight + margin.top + margin.bottom, 400);
+
+    // Calculate horizontal spacing based on depth
+    // Add compression factor to bring root closer to leaves
+    var horizontalCompression = (options.dendrogramHorizontalCompression !== undefined) ? options.dendrogramHorizontalCompression : 1.0;
+    var depthKeys = Object.keys(options.branch_length || {}).map(k => parseInt(k, 10)).filter(n => !isNaN(n)).sort((a,b) => a-b);
+    var maxDepth = options.depth || 3;
+    var levelWidth = ((baseWidth - margin.left - margin.right) / (maxDepth + 1)) * horizontalCompression;
+    var width = (maxDepth + 1) * levelWidth + margin.left + margin.right;
+
+    var thickness = options.depth + 1;
+
+    var tree = d3.layout.tree()
+        .size([height - margin.top - margin.bottom, width - margin.left - margin.right])
+        .separation(function (a, b) {
+            var sib = (options.separationSibling !== undefined) ? options.separationSibling : 1;
+            var cous = (options.separationCousin !== undefined) ? options.separationCousin : 1;
+            var base = (a.parent === b.parent) ? sib : cous;
+            return base;
+        });
+
+    // Orthogonal path generator for 90-degree angles
+    function orthogonal(d) {
+        return "M" + d.source.y + "," + d.source.x
+             + "H" + d.target.y
+             + "V" + d.target.x;
+    }
+
+    var svg = d3.select('#' + options.anchor).append("svg")
+        .attr("width", width)
+        .attr("height", height)
+        .attr("id", options.anchor + "_svg")
+        .attr("xmlns", "http://www.w3.org/2000/svg");
+
+    var svg_g = svg.append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+    var nodes = tree.nodes(data);
+    var links = tree.links(nodes);
+
+    // Use level spacing configuration for straight dendrogram if available
+    var levelSpacing = options.dendrogramStraightLevelSpacing || {};
+    var plotType = options.plotType || "Class";
+
+    // Helper function to get spacing for a specific level at a given maxDepth
+    function getLevelSpacing(level) {
+        if (levelSpacing[plotType] && levelSpacing[plotType][maxDepth] && levelSpacing[plotType][maxDepth][level] !== undefined) {
+            return levelSpacing[plotType][maxDepth][level];
+        }
+        if (levelSpacing[maxDepth] && levelSpacing[maxDepth][level] !== undefined) {
+            return levelSpacing[maxDepth][level];
+        }
+        return 1.0;
+    }
+
+    // Calculate X positions by depth level with spacing configuration
+    var depthPositions = {};
+    var cumulativeX = 0;
+    for (var depth = 1; depth <= maxDepth; depth++) {
+        var spacing = getLevelSpacing(depth);
+        cumulativeX += levelWidth * spacing;
+        depthPositions[depth] = cumulativeX;
+    }
+
+    // Adjust node positions for horizontal layout
+    nodes.forEach(function (d) {
+        if (d.depth === 0) {
+            d.y = 0;
+        } else {
+            d.y = depthPositions[d.depth];
+        }
+    });
+
+    // Build a map of siblings to create stacked appearance (prevent overlapping)
+    // ONLY for root (depth 0) to level 1 connections (Class/Modality/Chemotype)
+    // Do NOT apply stacking for receptor families or leaves
+    var rootNode = nodes.find(function(n) { return n.depth === 0; });
+    var rootX = rootNode ? rootNode.x : 0;
+
+    var rootChildren = [];
+    links.forEach(function(link) {
+        var parent = link.source;
+        var child = link.target;
+        // Only apply stacking from root (depth 0) to level 1
+        if (parent.depth === 0 && child.depth === 1) {
+            rootChildren.push({parent: parent, child: child});
+        }
+    });
+
+    // Calculate offsets for siblings to stack them (only for root->level1)
+    var branchStackOffset = (options.branchStackOffset !== undefined) ? options.branchStackOffset : 4.0;
+
+    if (rootChildren.length > 0) {
+        // Sort siblings by their vertical position (x coordinate)
+        rootChildren.sort(function(a, b) { return a.child.x - b.child.x; });
+
+        // Split into above (x <= root.x) and below (x > root.x)
+        // Use <= so ties (rare) still get a deterministic side and receive split coordinates.
+        var aboveChildren = rootChildren.filter(function(item) { return item.child.x <= rootX; });
+        var belowChildren = rootChildren.filter(function(item) { return item.child.x > rootX; });
+
+        // Root split tuning:
+        // - branchStackOffset: step size for offsets (e.g. 4)
+        // - rootSplitBase: how far from root (in X direction) the split happens
+        // - rootStackReverseAbove: reverse ordering for "above" group (to align with bottom)
+        var rootSplitBase = (options.rootSplitBase !== undefined) ? options.rootSplitBase : 12.0;
+        var rootStackReverseAbove = (options.rootStackReverseAbove !== undefined) ? !!options.rootStackReverseAbove : true;
+
+        // Calculate maxOffset so both halves share the same ladder (0..maxOffset)
+        var totalAbove = aboveChildren.length;
+        var totalBelow = belowChildren.length;
+        var maxOffset = Math.max(
+            (totalAbove > 0 ? (totalAbove - 1) : 0),
+            (totalBelow > 0 ? (totalBelow - 1) : 0)
+        ) * branchStackOffset;
+
+        // For above: assign offsets either normal (0,4,8,...) or reversed (max, max-4, ...)
+        aboveChildren.forEach(function(item, idx) {
+            item.child._stackOffset = rootStackReverseAbove ? (maxOffset - (idx * branchStackOffset)) : (idx * branchStackOffset);
+            item.child._rootSplitX = (rootNode ? rootNode.y : 0) + rootSplitBase + item.child._stackOffset;
+        });
+
+        // For below: always reversed (max, max-4, ...)
+        belowChildren.forEach(function(item, idx) {
+            item.child._stackOffset = maxOffset - (idx * branchStackOffset);
+            item.child._rootSplitX = (rootNode ? rootNode.y : 0) + rootSplitBase + item.child._stackOffset;
+        });
+
+        // Root "horizontal split" (visual de-overlap):
+        // Give each root->level1 branch its own horizontal lane by offsetting it vertically
+        // near the root, then merging back into the tree at the splitX.
+        var rootStemYOffsetStep = (options.rootStemYOffsetStep !== undefined) ? options.rootStemYOffsetStep : 3.0;
+        var rootStemReverseAbove = (options.rootStemReverseAbove !== undefined) ? !!options.rootStemReverseAbove : true;
+        var aboveLen = aboveChildren.length;
+        aboveChildren.forEach(function(item, idx) {
+            // Above: move up (negative y in screen coords)
+            // Optionally reverse the ordering so the top half aligns visually with the bottom half.
+            var k = rootStemReverseAbove ? (aboveLen - 1 - idx) : idx;
+            // Remove the visual "gap" between top and bottom by allowing the top group
+            // to occupy the 0-lane (k=0 => offset 0). Bottom still starts at +1*step.
+            item.child._rootStemYOffset = -(k) * rootStemYOffsetStep;
+        });
+        belowChildren.forEach(function(item, idx) {
+            // Below: move down (positive y in screen coords)
+            item.child._rootStemYOffset = (idx + 1) * rootStemYOffsetStep;
+        });
+
+        // Store root split information for path generation
+        // The root split should extend horizontally to cover all branches
+        rootNode._hasSplit = true;
+        rootNode._maxOffset = maxOffset;
+    }
+
+    // Ensure all other nodes have no stacking offset
+    nodes.forEach(function(node) {
+        if (node.depth !== 1 && !node._stackOffset) {
+            node._stackOffset = 0;
+        }
+    });
+
+    // Enhanced orthogonal path generator that stacks branches and adds leaf splits
+    function orthogonalStacked(d) {
+        var sourceX = d.source.x;
+        var sourceY = d.source.y;
+        var targetX = d.target.x;
+        var targetY = d.target.y;
+
+        // For leaf nodes, add a small horizontal split before the leaf
+        var leafSplitLength = (options.leafSplitLength !== undefined) ? options.leafSplitLength : 8;
+
+        if (d.target.depth === options.depth) {
+            // Leaf node: create a split branch (horizontal line before vertical to leaf)
+            // Path: horizontal from source -> vertical to leaf level -> horizontal split -> vertical to leaf
+            // No stacking offset for leaves
+            var splitStartY = targetY - leafSplitLength;
+            return "M" + sourceY + "," + sourceX
+                 + "H" + splitStartY
+                 + "V" + targetX
+                 + "H" + targetY;
+        } else if (d.source.depth === 0 && d.target.depth === 1) {
+            // Root → level 1: split close to the root, using a consistent X position:
+            // splitX = rootSplitBase + stackOffset (computed earlier and stored on the node).
+            // This avoids "back-and-forth" artifacts from mixing coordinate bases.
+            var splitX = (d.target && d.target._rootSplitX !== undefined) ? d.target._rootSplitX : targetY;
+            // Never let the split go past the child's column, otherwise the path would "backtrack".
+            if (splitX > targetY) splitX = targetY;
+            var stemDY = (d.target && d.target._rootStemYOffset !== undefined) ? d.target._rootStemYOffset : 0;
+            // Small cosmetic stub to the left of the root.
+            var rootLeftStub = (options.rootLeftStub !== undefined) ? Number(options.rootLeftStub) : 6.0;
+            if (!isFinite(rootLeftStub)) rootLeftStub = 0;
+            rootLeftStub = Math.max(0, Math.min(rootLeftStub, 40));
+            // Visual horizontal split at root:
+            // (optional) vertical spread -> horizontal to splitX -> vertical to child -> horizontal to child level
+            // Note: start directly on the stem lane to avoid drawing the initial connector from the root point.
+            return "M" + (sourceY - rootLeftStub) + "," + (sourceX + stemDY)
+                 + "H" + splitX
+                 + "V" + targetX
+                 + "H" + targetY;
+        } else {
+            // Internal node: standard orthogonal dendrogram path (no stacking).
+            // Stacking is ONLY for root → level 1.
+            var offsetY = targetY;
+            return "M" + sourceY + "," + sourceX
+                 + "H" + offsetY
+                 + "V" + targetX;
+        }
+    }
+
+    // Uniform stroke width for Tree - Straight (same as level 1: thickness - 1)
+    var strokeWidth = Math.max(1, thickness - 2.5);
+    var link = svg_g.append("g")
+        .attr("class", "links")
+        .selectAll("path")
+        .data(links)
+        .enter().append("path")
+        .each(function (d) { d.target.linkNode = this; })
+        .attr("d", orthogonalStacked)
+        .style("stroke", function (d) { return d.target.color; })
+        .style("stroke-width", function (d) { if (d.target.depth > 0) { return strokeWidth; } else { return 0; } })
+        .style("fill-opacity", 0)
+        .style("opacity", 1);
+
+    var node = svg_g.selectAll(".node")
+        .data(nodes)
+        .enter().append("g")
+        .attr("class", "node")
+        .attr("transform", function (d) { return "translate(" + d.y + "," + d.x + ")"; });
+
+    node.filter(function (d) { return (d.depth === options.depth) })
+        .attr("id", function (d) { if (d.name === '') { return "innerNode" } else { return 'X' + d.name.toUpperCase() } });
+
+    node.append("text")
+        .attr("dy", ".31em")
+        .attr("name", function (d) { if (d.name === '') { return "branch" } else { return d.name } })
+        .attr("text-anchor", function (d) {
+            if (d.depth === options.depth) {
+                return "start";
+            } else {
+                return (options.dendrogramCenterInternalLabels ? "middle" : "end");
+            }
+        })
+        .attr("transform", function (d) {
+            var labelOffset = d.depth === options.depth ? 10 : -6;
+            // Add horizontal offsets for internal labels only (chemotype, receptor family) — not for leaves.
+            // Otherwise in single-level trees leaves get the chemotype offset and sit too far right / get clipped.
+            if (d.depth !== options.depth) {
+                if (d.depth === 1 && options.dendrogramChemotypeOffset !== undefined) {
+                    labelOffset += options.dendrogramChemotypeOffset;
+                } else if (d.depth === 2 && options.dendrogramFamilyOffset !== undefined) {
+                    labelOffset += options.dendrogramFamilyOffset;
+                }
+            }
+            // Center internal labels/pills on the middle of their outgoing horizontal segment (to the right),
+            // instead of sitting on the elbow.
+            if (options.dendrogramCenterInternalLabels && d.depth > 0 && d.depth !== options.depth && d.children && d.children.length) {
+                // All children are at the next depth, so y is constant for that segment.
+                var childY = d.children[0].y;
+                var midShift = (childY - d.y) / 2;
+                // When centering, don't include the -6 elbow offset; keep only a small optional nudge.
+                var nudge = 0;
+                if (d.depth === 1 && options.dendrogramChemotypeOffset !== undefined) {
+                    nudge += options.dendrogramChemotypeOffset;
+                } else if (d.depth === 2 && options.dendrogramFamilyOffset !== undefined) {
+                    nudge += options.dendrogramFamilyOffset;
+                }
+                return "translate(" + (midShift + nudge) + ",0)";
+            }
+            return "translate(" + labelOffset + ",0)";
+        })
+        .text(function (d) {
+            if (d.depth === options.depth) {
+                return d.name.toUpperCase();
+            } else if (options.label_free && options.label_free.includes(d.depth)) {
+                return "";
+            } else if (d.depth > 0) {
+                return d.name;
+            } else {
+                return "";
+            }
+        })
+        .each(function (d) {
+            if (d.depth > 0 && d.depth !== options.depth && d.name && String(d.name).includes("<")) {
+                this.innerHTML = custom_formatTextWithHTML(d.name);
+            }
+        })
+        .call(custom_wrap, options.branch_trunc)
+        .style("font-size", function (d) {
+            // Use same font sizes as tree for consistency
+            if (options.depth === 4) {
+                if (d.depth === 1) { return options.fontSize.class; }
+                else if (d.depth === 2) { return options.fontSize.ligandtype; }
+                else if (d.depth === 3) { return options.fontSize.receptorfamily; }
+                else { return options.fontSize.receptor; }
+            } else {
+                if (d.depth === 1) { return options.fontSize.ligandtype; }
+                else if (d.depth === 2) { return options.fontSize.receptorfamily; }
+                else { return options.fontSize.receptor; }
+            }
+        })
+        .style("font-family", function(d) {
+            return options.fontFamily || "Palatino";
+        })
+        .style("fill", function (d) {
+            if (d.color) { return "#111"; }
+            else { return "#222"; };
+        }).call(custom_getBB);
+
+    // Background shapes for internal labels
+    function labelBoxPadding(depth, maxDepth) {
+        const padX = (options.labelBoxPadX !== undefined) ? options.labelBoxPadX : 7;
+        const padY = (options.labelBoxPadY !== undefined) ? options.labelBoxPadY : 2;
+        return { x: padX, y: padY };
+    }
+
+    node.filter(function (d) { return (d.depth !== options.depth && d.depth > 0); })
+        .each(function (d) {
+            const g = d3.select(this);
+            const t = g.select("text");
+            if (t.empty()) return;
+
+            // Get bbox in local coordinates (before transform)
+            const bb = t.node().getBBox();
+            const pad = labelBoxPadding(d.depth, options.depth);
+            const tr = t.attr("transform");
+
+            g.insert("rect", "text")
+                .attr("transform", tr || null)
+                .attr("x", bb.x - pad.x)
+                .attr("y", bb.y - pad.y + (options.labelBoxDy || 0))
+                .attr("width", bb.width + pad.x * 2)
+                .attr("height", bb.height + pad.y * 2)
+                .attr("rx", 10)
+                .attr("ry", 10)
+                .style("fill", "#FFF")
+                .style("stroke", ((options.labelBoxStrokeColorMode || "chemotype") === "black") ? "#000" : (d.color || "#999"))
+                .style("stroke-width", "1px");
+        });
+
+    // Optional: leaf pills
+    if (options.leafPills) {
+        const leafPadX = (options.leafBoxPadX !== undefined) ? options.leafBoxPadX : 4;
+        const leafPadY = (options.leafBoxPadY !== undefined) ? options.leafBoxPadY : 2;
+        const leafDy = (options.leafBoxDy !== undefined) ? options.leafBoxDy : 0;
+        const leafRx = (options.leafBoxRx !== undefined) ? options.leafBoxRx : 4;
+        const leafStrokeW = (options.leafBoxStrokeWidth !== undefined) ? options.leafBoxStrokeWidth : 1;
+        const leafStrokeMode = (options.leafBoxStrokeColorMode !== undefined) ? options.leafBoxStrokeColorMode : "chemotype";
+
+        node.filter(function (d) { return (d.depth === options.depth); })
+            .each(function (d) {
+                const g = d3.select(this);
+                const t = g.select("text");
+                if (t.empty()) return;
+
+                const bb = t.node().getBBox();
+                const tr = t.attr("transform");
+
+                g.insert("rect", "text")
+                    .attr("transform", tr || null)
+                    .attr("x", bb.x - leafPadX)
+                    .attr("y", bb.y - leafPadY + leafDy)
+                    .attr("width", bb.width + leafPadX * 2)
+                    .attr("height", bb.height + leafPadY * 2)
+                    .attr("rx", leafRx)
+                    .attr("ry", leafRx)
+                    .style("fill", "#fff")
+                    .style("stroke", (leafStrokeMode === "black") ? "#000" : (d.color || "#999"))
+                    .style("stroke-width", leafStrokeW + "px");
+            });
+    }
+
+    // Calculate actual content bounds after rendering
+    // Find the rightmost leaf position to reduce white space
+    var maxLeafX = 0;
+    node.filter(function(d) { return d.depth === options.depth; }).each(function(d) {
+        // Calculate actual position including label width
+        var textNode = d3.select(this).select("text").node();
+        var labelWidth = textNode ? textNode.getBBox().width : 0;
+        var nodeX = d.y + 10 + labelWidth; // leaf offset + label width
+        if (nodeX > maxLeafX) maxLeafX = nodeX;
+    });
+
+    var bounds = svg_g.node().getBBox();
+    // Use actual leaf positions to minimize right margin (minimum 20px padding)
+    var rightMargin = 20;
+    var actualWidth = maxLeafX + margin.left + rightMargin;
+    var actualHeight = Math.max(height, bounds.height + margin.top + margin.bottom + 50);
+
+    svg.attr("width", actualWidth)
+        .attr("height", actualHeight)
+        .attr('viewBox', '0 0 ' + actualWidth + ' ' + actualHeight)
+        .attr('preserveAspectRatio', 'xMidYMin meet');
 }
 
 // Format text with HTML (handles subscripts, italics, etc.)
@@ -788,94 +1426,53 @@ function custom_changeLeavesLabels(location, value, dict, styling_dict) {
 // ========================
 // === Initialize data  ===
 // ========================
-const classes_data_raw = '{{ classes_data|escapejs }}';
-const classes_data = JSON.parse(classes_data_raw);
+const tree_sets_raw = '{{ tree_sets|escapejs }}';
+const tree_sets = JSON.parse(tree_sets_raw);
 
-// Function to draw a plot for a specific class and orphan status
-function drawClassPlot(classKey, isOrphan, plotData) {
-    if (!plotData || plotData.error) {
-        // Show error message or empty state
-        const plotId = `tree_plot_${classKey}_${isOrphan ? 'orphan' : 'non_orphan'}`;
-        const container = document.getElementById(plotId);
-        if (container && plotData && plotData.error) {
-            container.innerHTML = `<div class="alert alert-warning">${plotData.error}</div>`;
-        } else if (container) {
-            container.innerHTML = '<div class="alert alert-info">No data available</div>';
-        }
-        return;
-    }
+// ========================
+// === Manual scaling   ===
+// ========================
+// Manually set per-selection radius scaling.
+// - Key: `${Type}:${SelectionKey}` (e.g. "Class:A", "Modality:Peptide receptors")
+// - Value: radiusScale multiplier (>0). 1.0 means "no scaling".
+//
+// If a plot is not listed here, we default to 1.0.
+var MANUAL_RADIUS_SCALE = {
+    // Class:
+    "Class:A": 1.1,
+    "Class:B1": 0.55,
+    "Class:B2": 0.5,
+    "Class:C": 0.45,
+    "Class:F": 0.2,
+    "Class:T2": 0.35,
 
-    const plotId = `tree_plot_${classKey}_${isOrphan ? 'orphan' : 'non_orphan'}`;
+    // Modality:
+    "Modality:Orphan receptors": 0.8,
+    "Modality:Peptide receptors": 0.9,
+    "Modality:Protein receptors": 0.8,
+    "Modality:Small molecule receptors": 1.0,
 
-    // Preprocess: collapse singletons and compute dynamic depth/branch lengths
-    const lifted = custom_lift_class_layer(JSON.parse(JSON.stringify(plotData.tree)));
-    const collapsed = custom_collapse_singletons_after_lift(lifted.data);
-    let tree_data = custom_update_tree_data(collapsed.data);
-    tree_data = custom_apply_tree_colors(tree_data, collapsed.stacked);
-    const maxDepth = custom_get_max_depth(tree_data, 0);
+    // Chemotype (same set as CHEMOTYPE_COLORS, excluding "Ion receptors"):
+    "Chemotype:Adhesion receptors": 0.5,
+    "Chemotype:Alicarboxylic acid receptors": 0.4,
+    "Chemotype:Aminergic receptors": 0.4,
+    "Chemotype:Amino acid receptors": 0.4,
+    "Chemotype:Lipid receptors": 0.5,
+    "Chemotype:Melatonin receptors": 0.1,
+    "Chemotype:Nucleotide receptors": 0.25,
+    "Chemotype:Orphan receptors": 0.8,
+    "Chemotype:Peptide receptors": 0.8,
+    "Chemotype:Protein receptors": 0.5,
+    "Chemotype:Retinal receptors": 0.1,
+    "Chemotype:Steroid receptors": 0.2,
+    "Chemotype:Tastant receptors": 0.45,
+};
 
-    const tree_options = JSON.parse(JSON.stringify(plotData.tree_options || {})); // Deep copy
-    tree_options.depth = maxDepth;
-    tree_options.branch_length = custom_compute_branch_lengths(tree_data, maxDepth);
-    tree_options.classColor = CLASS_COLORS[classKey] || "#333";
-    tree_options.centerBadgeR = 0;
-    tree_options.centerBadgePadding = 0;
-    tree_options.firstRingExtra = 45; // push chemotype labels away from center badge
-    tree_options.chemotypeLabelExtra = 65; // push chemotype label + pill outward (no branch movement)
-    tree_options.familyLabelExtra = 6; // push receptor family label + pill outward (no branch movement)
-    // Flags so we can handle 1-chemotype collapse correctly:
-    // If Chemotype is collapsed, depth=1 becomes Family (or even leaves), so do NOT apply chemotype offsets at depth=1.
-    tree_options.chemotypeCollapsed = custom_has_meta(collapsed.stacked, "chemotype");
-    tree_options.familyCollapsed = custom_has_meta(collapsed.stacked, "family");
-    // Tune these two to adjust pill size (smaller => tighter around text)
-    tree_options.labelBoxPadX = 7; // trims both ends
-    tree_options.labelBoxPadY = 1; // trims height
-    tree_options.labelBoxDy = 0.33; // tiny vertical nudge for the box (px)
-    tree_options.labelBoxStrokeColorMode = "chemotype";
-
-    // Optional: pills for the leaf labels (outer ring) - for testing.
-    // Separate tuning knobs from internal label pills:
-    tree_options.leafPills = true;
-    tree_options.leafBoxPadX = 4;
-    tree_options.leafBoxPadY = 0;
-    tree_options.leafBoxDy = 0;
-    tree_options.leafBoxRx = 4;
-    tree_options.leafBoxStrokeWidth = 1;
-    tree_options.leafBoxStrokeColorMode = "chemotype";
-    // Canvas sizing: reduce padding to make plot fill more of the SVG
-    // (increase if labels get clipped)
-    tree_options.diameterPad = 100;
-    tree_options.extraPadding = 0;
-    // Keep plots visually comparable across tabs (same intrinsic SVG size / leaf radius)
-    // With diameterPad=100, targetSvgSize=620 gives leaf radius ~260.
-    tree_options.targetSvgSize = 800;
-    // Spacing between stacked meta badges (Chemotype/Family)
-    tree_options.stackedMetaLineGap = 6;
-    // Angular spacing: remove extra gap between families/leaves
-    tree_options.separationSibling = 1;
-    tree_options.separationCousin = 1;
-    tree_options.circleRadii = {
-        chemotype: 40,
-        family: 34,
-        other: 30
-    };
-
-    // Set static font sizes for the tree
-    tree_options.fontSize = {
-        'class': "25px",
-        'ligandtype': "9px",
-        'receptorfamily': "9px",
-        'receptor': "9px"
-    };
-
-    // Set font family
-    tree_options.fontFamily = 'Palatino';
-
-    // Set anchor to the plot container ID
-    tree_options.anchor = plotId;
-
-    // Draw the tree
-    custom_draw_tree(tree_data, tree_options, collapsed.stacked, lifted.centerLabel);
+function getManualRadiusScale(plotKey) {
+    if (!plotKey) return 1.0;
+    var v = (MANUAL_RADIUS_SCALE && MANUAL_RADIUS_SCALE[plotKey] !== undefined) ? Number(MANUAL_RADIUS_SCALE[plotKey]) : 1.0;
+    if (!isFinite(v) || v <= 0) return 1.0;
+    return v;
 }
 
 // Function to clear all SVGs in a container
@@ -943,74 +1540,540 @@ function downloadSvgAsPng(svgElement, filename, scale) {
     img.src = url;
 }
 
-function wireDownloadButtons() {
-    const btn1 = document.getElementById("download_png_A_non_orphan");
-    if (btn1) {
-        btn1.addEventListener("click", function () {
-            const svg = document.getElementById("tree_plot_A_non_orphan_svg");
-            downloadSvgAsPng(svg, "ClassA_excluding_orphans.png", 2);
+function wireDownloadButton() {
+    const btn = document.getElementById("download_png_main");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+        const svg = document.getElementById("tree_plot_main_svg");
+        const title = (document.getElementById("tree_plot_title") || {}).textContent || "Classification_tree";
+        const safe = String(title).trim().replace(/\s+/g, "_").replace(/[^A-Za-z0-9_\-]+/g, "");
+        downloadSvgAsPng(svg, (safe || "Classification_tree") + ".png", 2);
+    });
+}
+
+// UI controller (single plot)
+let TREE_UI = {
+    type: "Class",
+    selectionKey: "A",
+    layout: "Tree - Circular",
+};
+
+function getTypeOptions(type) {
+    const set = tree_sets[type];
+    if (!set || !set.options) return [];
+    return set.options;
+}
+
+function getPlot(type, selectionKey) {
+    const set = tree_sets[type];
+    if (!set || !set.plots) return null;
+    return set.plots[selectionKey] || null;
+}
+
+function setActiveType(type) {
+    TREE_UI.type = type;
+    const group = document.getElementById("tree_type_group");
+    if (group) {
+        Array.prototype.slice.call(group.querySelectorAll("button[data-type]")).forEach(function (btn) {
+            const t = btn.getAttribute("data-type");
+            if (t === type) {
+                btn.classList.add("active");
+                btn.classList.add("btn-primary");
+                btn.classList.remove("btn-default");
+            } else {
+                btn.classList.remove("active");
+                btn.classList.remove("btn-primary");
+                btn.classList.add("btn-default");
+            }
         });
     }
-    const btn2 = document.getElementById("download_png_A_orphan");
-    if (btn2) {
-        btn2.addEventListener("click", function () {
-            const svg = document.getElementById("tree_plot_A_orphan_svg");
-            downloadSvgAsPng(svg, "ClassA_orphans.png", 2);
+    populateSelectionDropdown(type);
+}
+
+function populateSelectionDropdown(type) {
+    const sel = document.getElementById("tree_selection");
+    if (!sel) return;
+    const opts = getTypeOptions(type);
+    sel.innerHTML = "";
+    opts.forEach(function (o) {
+        const opt = document.createElement("option");
+        opt.value = o.key;
+        opt.textContent = o.label;
+        sel.appendChild(opt);
+    });
+    // Default to "A" for Class type; otherwise use first option
+    var defaultKey = opts.length ? opts[0].key : null;
+    if (type === "Class" && opts.some(function (o) { return o.key === "A"; })) {
+        defaultKey = "A";
+    }
+    TREE_UI.selectionKey = defaultKey;
+    if (defaultKey !== null) sel.value = defaultKey;
+    scheduleRender();
+}
+
+function scheduleRender() {
+    requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+            renderCurrent();
         });
+    });
+}
+
+function collapse_singletons(root, labels) {
+    const stacked = [];
+    if (!root || !root.children || root.children.length === 0) return { data: root, stacked };
+    if (!labels || !labels.length) return { data: root, stacked };
+    for (let i = 0; i < labels.length; i++) {
+        if (root.children.length === 1 && root.children[0] && root.children[0].children) {
+            const node = root.children[0];
+            stacked.push({ label: labels[i], value: node.name });
+            root.children = node.children || [];
+        } else {
+            break;
+        }
+    }
+    return { data: root, stacked };
+}
+
+function applyTreeColors(root, stacked_meta, options) {
+    const mode = (options && options.colorMode) ? String(options.colorMode) : "chemotype";
+    // Special case: Chemotype plots should be uniformly colored by the selected chemotype,
+    // even if the tree contains Class/Family levels (which may collapse away).
+    if (mode === "chemotype" && options && options.forceChemotype) {
+        const c = custom_get_chemotype_color(String(options.forceChemotype));
+        (function walk(n) {
+            if (!n) return;
+            n.color = c;
+            if (n.children) n.children.forEach(walk);
+        })(root);
+        return root;
+    }
+    if (mode === "fixed") {
+        const c = (options && options.fixedColor) ? String(options.fixedColor) : "#333";
+        (function walk(n) {
+            if (!n) return;
+            n.color = c;
+            if (n.children) n.children.forEach(walk);
+        })(root);
+        return root;
+    }
+    if (mode === "class") {
+        // If Class got collapsed into stacked meta, apply that single class color to everything.
+        if (stacked_meta && stacked_meta.length) {
+            const hit = stacked_meta.find(x => (x.label || '').toLowerCase() === 'class');
+            if (hit && hit.value) {
+                let key = String(hit.value).trim();
+                key = key.replace(/^Class\s+/i, '');
+                const c = CLASS_COLORS[key] || "#333";
+                (function walk(n) {
+                    if (!n) return;
+                    n.color = c;
+                    if (n.children) n.children.forEach(walk);
+                })(root);
+                return root;
+            }
+        }
+        // Color by class (depth 1 nodes).
+        if (root && root.children && root.children.length) {
+            root.children.forEach(function (clsNode) {
+                let key = String(clsNode.name || "").trim();
+                key = key.replace(/^Class\s+/i, '');
+                const c = CLASS_COLORS[key] || "#333";
+                (function walk(n) {
+                    if (!n) return;
+                    n.color = c;
+                    if (n.children) n.children.forEach(walk);
+                })(clsNode);
+            });
+        }
+        return root;
+    }
+    // Default: chemotype coloring (existing logic).
+    return custom_apply_tree_colors(root, stacked_meta);
+}
+
+function renderOrphanLegendPills(svgId, labels, options) {
+    if (!labels || !labels.length) return;
+    const svg = d3.select('#' + svgId);
+    if (svg.empty()) return;
+
+    const baseW = parseFloat(svg.attr("width")) || 800;
+    const baseH = parseFloat(svg.attr("height")) || 800;
+
+    // Layout: 20 columns, as requested
+    const cols = 20;
+    const cellW = baseW / cols;
+    const rowH = 18;
+    const padTop = 16;
+    const padBottom = 10;
+    const nRows = Math.ceil(labels.length / cols);
+    const extraH = padTop + (nRows * rowH) + padBottom;
+
+    const newH = baseH + extraH;
+    svg.attr("height", newH);
+    svg.attr("viewBox", "0 0 " + baseW + " " + newH);
+
+    const stroke = custom_get_chemotype_color("Orphan receptors");
+    const g = svg.append("g")
+        .attr("class", "orphan-legend")
+        .attr("transform", "translate(0," + (baseH + padTop) + ")");
+
+    // Measure max text bbox so all pills share the same size.
+    const padX = 4;
+    const padY = 2;
+    const fontFamily = (options && options.fontFamily) ? options.fontFamily : "Palatino";
+    const fontSize = (options && options.fontSize && options.fontSize.receptor) ? options.fontSize.receptor : "9px";
+
+    let maxW = 0;
+    let maxH = 0;
+    const meas = g.append("g").attr("transform", "translate(-99999,-99999)");
+    for (let i = 0; i < labels.length; i++) {
+        const t = meas.append("text")
+            .attr("text-anchor", "middle")
+            .attr("dy", "0.95em")
+            .style("font-family", fontFamily)
+            .style("font-size", fontSize)
+            .text(String(labels[i]).toUpperCase());
+        const bb = t.node().getBBox();
+        if (bb.width > maxW) maxW = bb.width;
+        if (bb.height > maxH) maxH = bb.height;
+        t.remove();
+    }
+    meas.remove();
+
+    // Make pills slightly narrower than the cell to leave a small gap between neighbors.
+    const gapX = 4; // px total horizontal gap per cell
+    const pillW = Math.max(10, Math.min(maxW + padX * 2, cellW - gapX));
+    const pillH = maxH + padY * 2;
+
+    for (let i = 0; i < labels.length; i++) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const x = (col * cellW) + (cellW / 2);
+        const y = row * rowH;
+
+        const item = g.append("g").attr("transform", "translate(" + x + "," + y + ")");
+        const t = item.append("text")
+            .attr("text-anchor", "middle")
+            .attr("dy", "0.95em")
+            .style("font-family", fontFamily)
+            .style("font-size", fontSize)
+            .style("fill", "#111")
+            .text(String(labels[i]).toUpperCase());
+
+        const bb = t.node().getBBox();
+        item.insert("rect", "text")
+            .attr("x", -pillW / 2)
+            .attr("y", bb.y - padY)
+            .attr("width", pillW)
+            .attr("height", pillH)
+            .attr("rx", 4)
+            .attr("ry", 4)
+            .style("fill", "#fff")
+            .style("stroke", stroke)
+            .style("stroke-width", "1px");
     }
 }
 
-// Function to draw plots for a specific class tab
-function drawClassTabPlots(classKey) {
-    if (!classes_data[classKey]) {
+function renderCurrent() {
+    const type = TREE_UI.type;
+    const selectionKey = TREE_UI.selectionKey;
+    const plot = getPlot(type, selectionKey);
+    const containerId = "tree_plot_main";
+
+    clearContainer(containerId);
+    const titleEl = document.getElementById("tree_plot_title");
+    if (titleEl) titleEl.textContent = "";
+
+    if (!plot || plot.error) {
+        const container = document.getElementById(containerId);
+        if (container) container.innerHTML = plot && plot.error
+            ? `<div class="alert alert-warning">${plot.error}</div>`
+            : '<div class="alert alert-info">No data available</div>';
         return;
     }
 
-    const classData = classes_data[classKey].data;
+    const meta = plot.meta || {};
+    const plotTitle = meta.title || selectionKey || "";
+    if (titleEl) titleEl.textContent = plotTitle;
 
-    // Clear containers first
-    const nonOrphanId = `tree_plot_${classKey}_non_orphan`;
-    clearContainer(nonOrphanId);
-    if (classKey === 'A') {
-        const orphanId = `tree_plot_${classKey}_orphan`;
-        clearContainer(orphanId);
+    // Clone inputs so we never mutate the backend-provided JSON.
+    let tree_data = JSON.parse(JSON.stringify(plot.tree));
+    let tree_options = JSON.parse(JSON.stringify(plot.tree_options || {}));
+
+    let centerLabel = "";
+    if (meta.liftClassLayer) {
+        const lifted = custom_lift_class_layer(tree_data);
+        tree_data = lifted.data;
+        centerLabel = lifted.centerLabel || "";
     }
 
-    // Draw non-orphan plot
-    if (classData.non_orphan) {
-        drawClassPlot(classKey, false, classData.non_orphan);
+    const collapsed = collapse_singletons(tree_data, meta.collapseLabels || []);
+    tree_data = custom_update_tree_data(collapsed.data);
+    tree_data = applyTreeColors(tree_data, collapsed.stacked, tree_options);
+
+    const maxDepth = custom_get_max_depth(tree_data, 0);
+    tree_options.depth = maxDepth;
+    tree_options.branch_length = custom_compute_branch_lengths(tree_data, maxDepth);
+
+    // Common visual options
+    tree_options.chemotypeLabelExtra = 65;
+    tree_options.familyLabelExtra = 6;
+
+    // Tell the renderer what the first ring represents so label offsets behave correctly.
+    // - Class-lifted plots: ring1 is Chemotype (or Family for the Class C special-case).
+    // - Non-lifted plots (Modality/Chemotype): ring1 is Class.
+    if (meta.liftClassLayer) {
+        const c0 = (meta.collapseLabels && meta.collapseLabels.length) ? String(meta.collapseLabels[0]) : "";
+        tree_options.layer1Type = (c0 === "Family") ? "family" : "chemotype";
+    } else {
+        tree_options.layer1Type = "class";
     }
 
-    // Draw orphan plot (Class A only)
-    if (classKey === 'A' && classData.orphan) {
-        drawClassPlot(classKey, true, classData.orphan);
+    tree_options.labelBoxPadX = 7;
+    tree_options.labelBoxPadY = 1;
+    tree_options.labelBoxDy = 0.33;
+    // Modality and class-colored plots should have colored internal pills too.
+    tree_options.labelBoxStrokeColorMode = (tree_options.colorMode === "chemotype") ? "chemotype" : "class";
+
+    tree_options.leafPills = true;
+    tree_options.leafBoxPadX = 4;
+    tree_options.leafBoxPadY = 0;
+    tree_options.leafBoxDy = 0;
+    tree_options.leafBoxRx = 4;
+    tree_options.leafBoxStrokeWidth = 1;
+    // Leaf pills should be colored for class-mode plots too.
+    tree_options.leafBoxStrokeColorMode = (tree_options.colorMode === "chemotype") ? "chemotype" : "class";
+
+    tree_options.diameterPad = 100;
+    tree_options.extraPadding = 0;
+    tree_options.targetSvgSize = 800;
+    tree_options.stackedMetaLineGap = 6;
+    tree_options.separationSibling = 1;
+    tree_options.separationCousin = 1;
+
+    tree_options.chemotypeCollapsed = custom_has_meta(collapsed.stacked, "chemotype");
+    tree_options.familyCollapsed = custom_has_meta(collapsed.stacked, "family");
+
+    tree_options.circleRadii = { chemotype: 40, family: 34, other: 30 };
+    tree_options.fontSize = { 'class': "25px", 'ligandtype': "9px", 'receptorfamily': "9px", 'receptor': "9px" };
+    tree_options.fontFamily = 'Palatino';
+
+    // Dendrogram-specific options
+    // Horizontal compression: < 1.0 brings root closer to leaves (e.g., 0.7 = 70% of original spacing)
+    tree_options.dendrogramHorizontalCompression = 1.7;
+
+    // Level spacing: nested dict-based approach for flexible spacing per type/depth/level combination
+    // Structure: {type: {maxDepth: {level: spacing_multiplier}}}
+    // Example: {"Class": {3: {1: 0.8, 2: 1.0, 3: 0.3}}, "Modality": {2: {1: 1.0, 2: 1.0}}}
+    // This means:
+    //   - For Class type, maxDepth=3 trees: level 1 uses 80% spacing, level 2 uses 100% spacing, level 3 uses 30% spacing
+    //   - For Modality type, maxDepth=2 trees: level 1 uses 100% spacing, level 2 uses 100% spacing
+    // Values < 1.0 compress spacing, > 1.0 expand spacing
+    tree_options.dendrogramLevelSpacing = {
+        "Class": {
+            // Depth 1: Class -> Receptor (1 level)
+            1: {
+                1: 0.3,  // Class to Receptor
+            },
+            // Depth 2: Class -> Receptor family -> Receptor (2 levels)
+            2: {
+                1: 0.6,  // Class to Receptor family
+                2: 0.3   // Receptor family to Receptor
+            },
+            // Depth 3: Class -> Chemotype -> Receptor family -> Receptor (3 levels)
+            3: {
+                1: 1.1,  // Class to Chemotype
+                2: 1.0,  // Chemotype to Receptor family
+                3: 0.3   // Receptor family to Receptor
+            },
+            // Depth 4: Class -> Chemotype -> Receptor family -> Receptor (4 levels, if exists)
+            4: {
+                1: 0.8,  // Root to Class
+                2: 1.0,  // Class to Chemotype
+                3: 0.3,  // Chemotype to Receptor family
+                4: 0.3   // Receptor family to Receptor
+            }
+        },
+        "Modality": {
+            // Depth 2: Modality -> Receptor family -> Receptor (2 levels)
+            2: {
+                1: 0.4,  // Modality to Receptor family
+                2: 0.6   // Receptor family to Receptor
+            },
+            // Depth 3: Modality -> Class -> Receptor family -> Receptor (3 levels)
+            3: {
+                1: 0.6,  // Modality to Class
+                2: 1.0,  // Class to Receptor family
+                3: 0.5   // Receptor family to Receptor
+            }
+        },
+        "Chemotype": {
+            // Depth 1: Chemotype -> Receptor (1 levels)
+            1: {
+                1: 0.3,  // Chemotype to Receptor
+            },
+            // Depth 2: Chemotype -> Receptor family -> Receptor (2 levels)
+            2: {
+                1: 0.6,  // Chemotype to Receptor family
+                2: 0.4   // Receptor family to Receptor
+            },
+            // Depth 3: Chemotype -> Class -> Receptor family -> Receptor (3 levels)
+            3: {
+                1: 0.6,  // Modality to Class
+                2: 1.0,  // Class to Receptor family
+                3: 0.5   // Receptor family to Receptor
+            }
+        }
+    };
+
+    // Horizontal offsets for labels (positive = right, negative = left)
+    tree_options.dendrogramChemotypeOffset = 20;  // Offset for chemotype labels (depth 1)
+    tree_options.dendrogramFamilyOffset = 5;     // Offset for receptor family labels (depth 2)
+
+    // Straight Dendrogram-specific level spacing configuration
+    // Structure: {type: {maxDepth: {level: spacing_multiplier}}}
+    // Similar to dendrogramLevelSpacing but specifically for straight dendrogram layout
+    tree_options.dendrogramStraightLevelSpacing = {
+        "Class": {
+            // Depth 1: Class -> Receptor (1 level)
+            1: {
+                1: 0.2,  // Class to Receptor
+            },
+            // Depth 2: Class -> Receptor family -> Receptor (2 levels)
+            2: {
+                1: 0.1,  // Class to Receptor family
+                2: 1.0   // Receptor family to Receptor
+            },
+            // Depth 3: Class -> Chemotype -> Receptor family -> Receptor (3 levels)
+            3: {
+                1: 0.1,  // Class to Chemotype
+                2: 1.0,  // Chemotype to Receptor family
+                3: 1.5   // Receptor family to Receptor
+            },
+            // Depth 4: Class -> Chemotype -> Receptor family -> Receptor (4 levels, if exists)
+            4: {
+                1: 1.0,  // Root to Class
+                2: 1.0,  // Class to Chemotype
+                3: 1.0,  // Chemotype to Receptor family
+                4: 1.0   // Receptor family to Receptor
+            }
+        },
+        "Modality": {
+            // Depth 2: Modality -> Receptor family -> Receptor (2 levels)
+            2: {
+                1: 0.1,  // Modality to Receptor family
+                2: 1.0   // Receptor family to Receptor
+            },
+            // Depth 3: Modality -> Class -> Receptor family -> Receptor (3 levels)
+            3: {
+                1: 0.1,  // Modality to Class
+                2: 1.0,  // Class to Receptor family
+                3: 1.5   // Receptor family to Receptor
+            }
+        },
+        "Chemotype": {
+            // Depth 1: Chemotype -> Receptor (1 levels)
+            1: {
+                1: 0.2,  // Chemotype to Receptor
+            },
+            // Depth 2: Chemotype -> Receptor family -> Receptor (2 levels)
+            2: {
+                1: 0.1,  // Chemotype to Receptor family
+                2: 1.0   // Receptor family to Receptor
+            },
+            // Depth 3: Chemotype -> Class -> Receptor family -> Receptor (3 levels)
+            3: {
+                1: 0.1,  // Chemotype to Class
+                2: 1.0,  // Class to Receptor family
+                3: 1.5   // Receptor family to Receptor
+            }
+        }
+    };
+
+    // Leaf split length for straight dendrogram (horizontal segment before leaf)
+    // Twice as long for Tree - Straight (was 8)
+    tree_options.leafSplitLength = 16;
+
+    // Branch stacking offset for straight dendrogram (horizontal offset to prevent overlapping)
+    // Only applies from root (depth 0) to level 1 (Class/Modality/Chemotype)
+    // Increased value for more pronounced stacking effect
+    tree_options.branchStackOffset = 4.0;
+
+    // Root split controls (Tree - Straight only)
+    // - rootSplitBase: how far from the root (in X direction) the split should happen.
+    //   Increase if you want the horizontal split “further right” from the origin.
+    // - rootStackReverseAbove: reverse the ordering for the "above" half (top side).
+    //   This helps align the top/bottom ladders and prevents the “back-and-forth” look.
+    tree_options.rootSplitBase = 4.0;
+    tree_options.rootStackReverseAbove = false;
+    // - rootStemYOffsetStep: vertical separation (in px) between root branch "lanes"
+    //   so the root→level1 horizontal stems don't sit on top of each other.
+    tree_options.rootStemYOffsetStep = 4.0;
+    // - rootStemReverseAbove: reverse the TOP stem-lane ordering (independent of stackOffset ordering).
+    //   Set true if you want the top horizontal stems to be assigned in reverse order.
+    tree_options.rootStemReverseAbove = true;
+    // - rootLeftStub: small leftward stub (px) before the root split (cosmetic).
+    tree_options.rootLeftStub = 6.0;
+    // - dendrogramCenterInternalLabels: center internal pills/labels on the outgoing horizontal segment.
+    tree_options.dendrogramCenterInternalLabels = true;
+
+    // Manual scaling per selection
+    const plotKey = type + ":" + String(selectionKey);
+    tree_options.radiusScale = getManualRadiusScale(plotKey);
+
+    tree_options.anchor = containerId;
+    tree_options.plotType = type; // Pass type to drawing functions for type-specific spacing
+
+    // Route to appropriate drawing function based on layout
+    const layout = TREE_UI.layout || "Tree - Circular";
+    if (layout === "Tree - Organic") {
+        custom_draw_dendrogram_curved(tree_data, tree_options, collapsed.stacked, centerLabel);
+    } else if (layout === "Tree - Straight") {
+        custom_draw_dendrogram_straight(tree_data, tree_options, collapsed.stacked, centerLabel);
+    } else {
+        custom_draw_tree(tree_data, tree_options, collapsed.stacked, centerLabel);
+    }
+
+    // Class A only: append orphan pill legend under the SVG (alphabetical, unrotated)
+    // Note: Orphan legend only works with Tree - Circular layout currently
+    if (layout === "Tree - Circular" && type === "Class" && selectionKey === "A" && meta.orphanLeafLabels && meta.orphanLeafLabels.length) {
+        renderOrphanLegendPills(containerId + "_svg", meta.orphanLeafLabels, tree_options);
     }
 }
 
-// Initialize plots on page load and handle tab switching
-// Bootstrap 3 tabs are jQuery-driven (events are triggered via $.fn.tab),
-// so we must hook using jQuery to reliably redraw after a pane is shown.
 $(function () {
-    function scheduleDraw(classKey) {
-        // Wait a couple frames so the pane is truly visible before getBBox() calls.
-        requestAnimationFrame(function () {
-            requestAnimationFrame(function () {
-                drawClassTabPlots(classKey);
-            });
+    wireDownloadButton();
+
+    const group = document.getElementById("tree_type_group");
+    if (group) {
+        group.addEventListener("click", function (e) {
+            const btn = e.target && e.target.closest ? e.target.closest("button[data-type]") : null;
+            if (!btn) return;
+            const type = btn.getAttribute("data-type");
+            if (!type) return;
+            setActiveType(type);
         });
     }
 
-    // Always start on Class A (force active and fire shown handlers)
-    $('#tab-A').tab('show');
-    scheduleDraw('A');
-    wireDownloadButtons();
+    const sel = document.getElementById("tree_selection");
+    if (sel) {
+        sel.addEventListener("change", function () {
+            TREE_UI.selectionKey = sel.value;
+            scheduleRender();
+        });
+    }
 
-    // Redraw on every tab show (prevents pills disappearing after hide/show)
-    $('.nav-tabs a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
-        const id = $(e.target).attr('id') || '';
-        const classKey = id.replace(/^tab-/, '');
-        scheduleDraw(classKey);
-    });
+    const layoutSel = document.getElementById("tree_layout");
+    if (layoutSel) {
+        layoutSel.addEventListener("change", function () {
+            TREE_UI.layout = layoutSel.value;
+            scheduleRender();
+        });
+    }
+
+    // Initialize default
+    setActiveType("Class");
 });
 </script>
 {% endif %}
