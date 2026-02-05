@@ -1,82 +1,45 @@
 from build.management.commands.base_build import Command as BaseBuild
 
-from django.db.models import F,Q
-from django.conf import settings
+from django.core.management.base import CommandError
+from django.db import connection, transaction
+from django.db.models import F, Q
 
 from protein.models import Protein, ProteinSegment, ProteinFamily, Species
+from protein.models import CLASSLESS_PARENT_GPCR_SLUGS
 
 from common.alignment import Alignment
 
 from collections import OrderedDict
-import os
-import sys
 import logging
-import re
-from pathlib import Path
 
-
-import csv
-
-from datetime import datetime, date
 import time
-
-
-
-starttime = datetime.now()
-logger = logging.getLogger('receptor_similarity')
-hdlr = logging.FileHandler('./logs/receptor_similarity.log')
-formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-hdlr.setFormatter(formatter)
-logger.addHandler(hdlr)
-logger.setLevel(logging.INFO)
-
-class_prefix_re = re.compile(r'^(Class)\s+', flags=re.I)
-
-from protein.models import CLASSLESS_PARENT_GPCR_SLUGS
-
-FIELDNAMES = ['class1','receptor1_name_short',
-                'receptor1_name','receptor1_entry_name',
-                'class2','receptor2_name_short',
-                'receptor2_name','receptor2_entry_name',
-                'identity', 'similarity']
-
-matrix_header_max_length = 20
-
-build_date = date.today()
-
-import warnings
-warnings.filterwarnings("ignore")
 
 class Command(BaseBuild):
     help = 'Build receptor similarity and identity.'
-    
+
 
     def add_arguments(self, parser):
         super(Command, self).add_arguments(parser=parser)
-        parser.add_argument('--output',type=str, help="Output file path. Default '[settings.DATA_DIR]/structure_data/human_gpcr_similarity_data_all_segments.csv'.", default=os.sep.join([settings.DATA_DIR, 'structure_data', 'human_gpcr_similarity_data_all_segments.csv']), action='store')
         parser.add_argument('--verbose', help='Prints progress in stdout.', default=False, action='store_true')
-        parser.add_argument('--no-backup', help="Overwrites the output file without creating a backup. If --output is not used, overwrites the file '[settings.DATA_DIR]/structure_data/human_gpcr_similarity_data_all_segments.csv'.", default=False, action='store_true')
         parser.add_argument('--limit',type=int, help='Use only any indicated number of GPCRs per class.', default=False, action='store')
 
     logger = logging.getLogger(__name__)
 
     def get_parent_gpcr_families(self,exclude_classless_artificial_class=True,include_classless_natural_classes=True):
-        parent_family = ProteinFamily.objects.get(slug='000') 
+        parent_family = ProteinFamily.objects.get(slug='000')
         parent_gpcr_families = ProteinFamily.objects.filter(parent_id=parent_family.pk, slug__startswith='0').exclude(pk=parent_family.pk)
         if exclude_classless_artificial_class:
             for slug in CLASSLESS_PARENT_GPCR_SLUGS:
                 parent_gpcr_families = parent_gpcr_families.exclude(slug__startswith=slug)
+        classless_protein_families = []
         if include_classless_natural_classes:
             classless_protein_families = self.get_classless_bottom_protein_families()
         parent_gpcr_families = list(parent_gpcr_families)+classless_protein_families
         return sorted(parent_gpcr_families,key=lambda f: (int(f.slug.split('_')[0])))
-    
+
     def get_human_species(self):
         return Species.objects.get(common_name__iexact='Human')
-    
-    def get_yeast_species(self):
-        return Protein.objects.filter(entry_name__iendswith='_yeast')[0].species
-    
+
     def __slug_tree_branch(self, slug_parts,slug_tree_dict):
         if len(slug_parts) == 1:
             slug_tree_dict[slug_parts[0]] = None
@@ -100,7 +63,7 @@ class Command(BaseBuild):
             else:
                 slug_tree_ordered_dict[slug] = None
         return slug_tree_ordered_dict
-    
+
     def __parse_slug_tree_(self, slug_tree_dict,slug_list_list,slug_list):
         for slug,subtree in slug_tree_dict.items():
             slug_list.append(slug)
@@ -109,14 +72,14 @@ class Command(BaseBuild):
             else:
                 slug_list_list.append(slug_list.copy())
             slug_list.pop()
-    
+
     def get_classless_bottom_protein_families(self):
         classless_parent_gpcrs_slugs_list = sorted(sorted(CLASSLESS_PARENT_GPCR_SLUGS,key = lambda x: int(x[1:])),key = lambda x: x[0])
         parent_gpcr_families = ProteinFamily.objects.filter(slug__startswith=classless_parent_gpcrs_slugs_list[0])
-        
+
         for slug in classless_parent_gpcrs_slugs_list[1:]:
             parent_gpcr_families = parent_gpcr_families.filter(slug__startswith=slug)
-        
+
         slug_2_family_dict = {}
         for f in parent_gpcr_families:
             slug_2_family_dict[f.slug] = f
@@ -130,7 +93,7 @@ class Command(BaseBuild):
         self.__parse_slug_tree_(family_slug_tree_ordered_dict,slug_list_list,slug_list)
         classless_bottom_slugs_list = ['_'.join(slug_list) for slug_list in slug_list_list]
         return [slug_2_family_dict[slug] for slug in classless_bottom_slugs_list]
-    
+
     def filter_out_non_species_parent_gpcr_families(self,parent_gpcr_families,species):
         """ Filters out parent GPCR families as a list of ProteinFamily objects that belong to a species.
             parent_gpcr_families: a list of protein.ProteinFamily objects
@@ -139,8 +102,8 @@ class Command(BaseBuild):
         new_parent_gpcr_families_slugs_set = set()
         species2 = species
         try:
-            species_iterator = iter(species)
-        except TypeError as te:
+            iter(species)
+        except TypeError:
              species2 = [species]
         parent_gpcr_families_slugs = []
         for family in parent_gpcr_families:
@@ -151,219 +114,212 @@ class Command(BaseBuild):
             if q.exists():
                 new_parent_gpcr_families_slugs_set.add(slug)
         return [f for f in parent_gpcr_families if f.slug in new_parent_gpcr_families_slugs_set]
-        
-    
+
+
     def filter_out_non_human_parent_gpcr_families(self,parent_gpcr_families):
         return self.filter_out_non_species_parent_gpcr_families(parent_gpcr_families,self.get_human_species())
 
-    def filter_out_non_yeast_parent_gpcr_families(self,parent_gpcr_families):
-        return self.filter_out_non_species_parent_gpcr_families(parent_gpcr_families,self.get_yeast_species())
-    
     def handle(self, *args, **options):
-        output_folder_path = os.path.dirname(options['output'])
-        if os.path.lexists(options['output']) and not options['no_backup']:
-            rootname, ext = os.path.splitext(options['output'])
-            while True:
-                ts = '%.f' % (time.time()*1000)
-                bkp_output = rootname + '_' + ts + ext + '.bkp'
-                try:
-                    os.link(options['output'],bkp_output)
-                except FileNotFoundError:
-                    break
-                except FileExistsError:
-                    continue
-                os.unlink(options['output'])
-                txt = 'Renamed output file to "'+bkp_output+'" as backup.'
-                if options['verbose']: print(txt)
-                self.logger.info(txt)
-                break
-        Path(os.path.dirname(output_folder_path)).mkdir(parents=True, exist_ok=True)
-        if options['no_backup']:
-            mode = 'w'
-            txt = 'Opening file "'+options['output']+'" for writing (overwrite mode)...'
-        else:
-            mode = 'x'
-            txt = 'Opening file "'+options['output']+'" for writing (create mode)...'
-        if options['verbose']: print(txt)
-        self.logger.info(txt)
+        try:
+            from alignment.models import ReceptorSimilarity
+        except ImportError as e:
+            raise CommandError("ReceptorSimilarity model not available. Did you migrate the alignment app?") from e
 
-        with open(options['output'],mode) as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=FIELDNAMES)
-            writer.writeheader()
-            self.logger.info("Computing receptor similarity...")
-            initial_step1 = 380 #If alignment fails, please, set this to a lower value
-            initial_step2 = 380 #If alignment fails, please, set this to a lower value
-            start_time = time.time()
+        start_time = time.time()
+        self.logger.info("Computing receptor similarity and populating alignment_receptorsimilarity...")
 
-            parent_families = self.get_parent_gpcr_families(exclude_classless_artificial_class=True,include_classless_natural_classes=True)
-            human_parent_gpcr_families = self.filter_out_non_human_parent_gpcr_families(parent_families)
-            human_species = self.get_human_species()
+        # Reset table so SQL id starts at 1 on each run.
+        try:
+            with connection.cursor() as cursor:
+                table = ReceptorSimilarity._meta.db_table
+                if connection.vendor == 'postgresql':
+                    cursor.execute('TRUNCATE TABLE {} RESTART IDENTITY'.format(connection.ops.quote_name(table)))
+                else:
+                    ReceptorSimilarity.objects.all().delete()
+            self.logger.info('Reset receptor similarity table (id restarts at 1).')
+        except Exception as e:
+            raise CommandError(f"Could not reset receptor similarity table: {e}") from e
 
+        initial_step1 = 380  # If alignment fails, please, set this to a lower value
+        initial_step2 = 380  # If alignment fails, please, set this to a lower value
 
+        parent_families = self.get_parent_gpcr_families(
+            exclude_classless_artificial_class=True,
+            include_classless_natural_classes=True,
+        )
+        human_parent_gpcr_families = self.filter_out_non_human_parent_gpcr_families(parent_families)
+        human_species = self.get_human_species()
 
-            yeast_parent_gpcr_families = self.filter_out_non_yeast_parent_gpcr_families(parent_families)
-            yeast_non_human_parent_gpcr_families_set = set(yeast_parent_gpcr_families) - set(human_parent_gpcr_families)
-            yeast_non_human_parent_gpcr_families = [gpcr_family for gpcr_family in yeast_parent_gpcr_families if gpcr_family in yeast_non_human_parent_gpcr_families_set]
-            yeast_species = self.get_yeast_species()
+        gpcr_segments = ProteinSegment.objects.filter(
+            Q(proteinfamily='GPCR') & (Q(slug__regex='TM[1-7]') | Q(slug='H8'))
+        )
 
-            gpcr_segments = ProteinSegment.objects.filter(Q(proteinfamily='GPCR') & (Q(slug__regex='TM[1-7]') | Q(slug='H8')))
+        human_parent_gpcr_families_protein = {}
+        human_parent_gpcr_families_protein_num = {}
+        for gpcr_class in human_parent_gpcr_families:
+            gpcr_class_proteins = (
+                Protein.objects.all()
+                .annotate(family_slug=F('family__slug'))
+                .filter(species=human_species, family_slug__startswith=gpcr_class.slug)
+                .exclude(accession=None)
+                .order_by('family_slug', 'entry_name')
+            )
+            human_parent_gpcr_families_protein[gpcr_class] = list(gpcr_class_proteins)
+            human_parent_gpcr_families_protein_num[gpcr_class] = len(human_parent_gpcr_families_protein[gpcr_class])
 
+        selected_parent_gpcr_families = list(human_parent_gpcr_families)
+        selected_parent_gpcr_families_protein = human_parent_gpcr_families_protein
+        selected_parent_gpcr_families_protein_num = human_parent_gpcr_families_protein_num
 
-            human_parent_gpcr_families_protein = {}
-            human_parent_gpcr_families_protein_num = {}
-            for gpcr_class in human_parent_gpcr_families:
-                gpcr_class_proteins = Protein.objects.all().annotate(family_slug=F('family__slug')).filter(species=human_species,family_slug__startswith=gpcr_class.slug)
-                gpcr_class_proteins = gpcr_class_proteins.exclude(accession=None).order_by('family_slug','entry_name')
-                human_parent_gpcr_families_protein[gpcr_class] = list(gpcr_class_proteins)
-                human_parent_gpcr_families_protein_num[gpcr_class] = len(gpcr_class_proteins)
+        step1 = int(initial_step1)  # If alignment fails, please, set this to a lower value
+        step2 = int(initial_step2)  # If alignment fails, please, set this to a lower value
+        step_halved = False
 
-            yeast_non_human_parent_gpcr_families_protein = {}
-            yeast_non_human_parent_gpcr_families_protein_num = {} 
-            
-            selected_parent_gpcr_families = human_parent_gpcr_families
-            selected_parent_gpcr_families_protein = {}
-            selected_parent_gpcr_families_protein_num = {}
-            for gpcr_class in selected_parent_gpcr_families:
-                if gpcr_class in human_parent_gpcr_families_protein and gpcr_class in yeast_non_human_parent_gpcr_families_protein:
-                    selected_parent_gpcr_families_protein[gpcr_class] = human_parent_gpcr_families_protein[gpcr_class] + yeast_non_human_parent_gpcr_families_protein[gpcr_class]
-                    selected_parent_gpcr_families_protein_num[gpcr_class] = human_parent_gpcr_families_protein_num[gpcr_class] + yeast_non_human_parent_gpcr_families_protein_num[gpcr_class]
-                elif gpcr_class in human_parent_gpcr_families_protein:
-                    selected_parent_gpcr_families_protein[gpcr_class] = human_parent_gpcr_families_protein[gpcr_class]
-                    selected_parent_gpcr_families_protein_num[gpcr_class] = human_parent_gpcr_families_protein_num[gpcr_class]
-                elif gpcr_class in yeast_non_human_parent_gpcr_families_protein:
-                    selected_parent_gpcr_families_protein[gpcr_class] = yeast_non_human_parent_gpcr_families_protein[gpcr_class]
-                    selected_parent_gpcr_families_protein_num[gpcr_class] = yeast_non_human_parent_gpcr_families_protein_num[gpcr_class]
+        def _limit_n(gpcr_class):
+            if options['limit']:
+                return min(selected_parent_gpcr_families_protein_num[gpcr_class], options['limit'])
+            return selected_parent_gpcr_families_protein_num[gpcr_class]
 
+        def _to_int_percent(v):
+            try:
+                return int(round(float(v)))
+            except Exception:
+                return None
 
+        buffer = []
+        batch_size = 5000
+        total_created = 0
 
-            step1=int(initial_step1) #If alignment fails, please, set this to a lower value
-            step2=int(initial_step2) #If alignment fails, please, set this to a lower value
-            step_halved = False 
+        # Iterate class pairs once (A,B) with B starting at A to avoid duplicate work,
+        # while still processing all chunks for large classes.
+        for i, gpcr_class in enumerate(selected_parent_gpcr_families):
+            protein_num1 = _limit_n(gpcr_class)
+            proteins1_all = selected_parent_gpcr_families_protein[gpcr_class][:protein_num1]
 
-            unique_keys_set = set()
-            for gpcr_class in selected_parent_gpcr_families:
-                gpcr_class1_name = class_prefix_re.sub(r'',gpcr_class.name.replace('<i>','').replace('</i>',''))
+            for j in range(i, len(selected_parent_gpcr_families)):
+                gpcr_class2 = selected_parent_gpcr_families[j]
+                protein_num2 = _limit_n(gpcr_class2)
+                proteins2_all = selected_parent_gpcr_families_protein[gpcr_class2][:protein_num2]
+
                 while_loop_continue = False
                 while True:
-                    if options['limit']: 
-                        if selected_parent_gpcr_families_protein_num[gpcr_class] < options['limit']:
-                            protein_num1 = selected_parent_gpcr_families_protein_num[gpcr_class]
-                        else:
-                            protein_num1 = options['limit']
-                    else:
-                        protein_num1 = selected_parent_gpcr_families_protein_num[gpcr_class]
-                    
-                    for clim in range(0,protein_num1,step1):
-                        
-                        gpcr_class_proteins = selected_parent_gpcr_families_protein[gpcr_class]
-                        gpcr_class_proteins = gpcr_class_proteins[clim:clim+step1]
-                        if options['limit']:
-                            gpcr_class_proteins = gpcr_class_proteins[:options['limit']]
-                        
-                        for gpcr_class2 in selected_parent_gpcr_families:
-                            gpcr_class2_name = class_prefix_re.sub(r'',gpcr_class2.name.replace('<i>','').replace('</i>',''))
-                            unique_list = [gpcr_class1_name,gpcr_class2_name]
-                            unique_list.sort()
-                            unique_key = '@'.join(unique_list)
-                            if unique_key in unique_keys_set:
-                                continue
-                            if options['limit']: 
-                                if selected_parent_gpcr_families_protein_num[gpcr_class2] < options['limit']:
-                                    protein_num2 = selected_parent_gpcr_families_protein_num[gpcr_class2]
-                                else:
-                                    protein_num2 = options['limit']
-                            else:
-                                protein_num2 = selected_parent_gpcr_families_protein_num[gpcr_class2]
+                    for clim in range(0, protein_num1, step1):
+                        gpcr_class_proteins = proteins1_all[clim:clim + step1]
 
+                        clim2_start = clim if gpcr_class == gpcr_class2 else 0
+                        for clim2 in range(clim2_start, protein_num2, step2):
+                            gpcr_class2_proteins = proteins2_all[clim2:clim2 + step2]
 
-                            for clim2 in range(0,protein_num2,step2):
-                                if options['verbose']:
-                                        print(gpcr_class,"from:"+str(clim+1),"to:"+str(clim+step1),"(of:{})".format(protein_num1),\
-                                        'vs',gpcr_class2,"from:"+str(clim2+1),"to:"+str(clim2+step2),"(of:{})".format(protein_num2))
-                                gpcr_class2_proteins = selected_parent_gpcr_families_protein[gpcr_class2]
-                                gpcr_class2_proteins = gpcr_class2_proteins[clim2:clim2+step2]
+                            if options['verbose']:
+                                print(
+                                    gpcr_class, "from:" + str(clim + 1),
+                                    "to:" + str(min(clim + step1, protein_num1)),
+                                    "(of:{})".format(protein_num1),
+                                    "vs", gpcr_class2, "from:" + str(clim2 + 1),
+                                    "to:" + str(min(clim2 + step2, protein_num2)),
+                                    "(of:{})".format(protein_num2),
+                                )
 
-                                if options['limit']:
-                                    gpcr_class2_proteins = gpcr_class2_proteins[:options['limit']]
+                            proteins = (
+                                gpcr_class_proteins
+                                if (gpcr_class == gpcr_class2 and clim == clim2)
+                                else (gpcr_class_proteins + gpcr_class2_proteins)
+                            )
 
-                                if gpcr_class1_name == gpcr_class2_name and clim2 == clim and clim+step1 == clim2+step2:
-                                    proteins = gpcr_class_proteins
-                                else:
-                                    proteins = gpcr_class_proteins + gpcr_class2_proteins
-
-                                cs_alignment = Alignment()
-                                cs_alignment.load_proteins(proteins)
-                                cs_alignment.load_segments(gpcr_segments)
-                                build_alignment_return_value = cs_alignment.build_alignment()
-                                if build_alignment_return_value == "Too large":
-                                    print('Alignment too large. Retrying...', file=sys.stderr)
-                                    while_loop_continue = True
-                                    break
-                                cs_alignment.remove_non_generic_numbers_from_alignment() 
-                                cs_alignment.calculate_similarity_matrix()
-
-                                entry_name_2_position = {}
-                                pos = 0
-                                for protein in cs_alignment.proteins:
-                                    entry_name_2_position[protein.protein.entry_name] = pos
-                                    pos += 1
-
-                                for protein1 in gpcr_class_proteins:
-                                    for protein2 in gpcr_class2_proteins:
-                                        if protein1.entry_name == protein2.entry_name:
-                                            continue
-                                        pos_s = entry_name_2_position[protein1.entry_name]
-                                        similarity_value = int(cs_alignment.similarity_matrix[protein2.entry_name]['values'][pos_s][0])
-                                        pos_i = entry_name_2_position[protein2.entry_name]
-                                        identity_value = int(cs_alignment.similarity_matrix[protein1.entry_name]['values'][pos_i][0])
-                                        protein_tuple = (protein1,protein2)
-                                        similarity_value = similarity_value
-                                        identity_value = identity_value
-                                        protein1_name_short = Protein(name=protein1.name).short().replace('<i>','').replace('</i>','')
-                                        protein1_name = protein1.name.replace('<i>','').replace('</i>','')
-                                        protein2_name_short = Protein(name=protein2.name).short().replace('<i>','').replace('</i>','')
-                                        protein2_name = protein2.name.replace('<i>','').replace('</i>','')
-                                        receptor1_entry_name = protein1.entry_name
-                                        receptor2_entry_name = protein2.entry_name
-                                        data = {'class1':gpcr_class1_name,'receptor1_name_short':protein1_name_short,
-                                                'receptor1_name':protein1_name,'receptor1_entry_name':receptor1_entry_name,
-                                                'class2':gpcr_class2_name,'receptor2_name_short':protein2_name_short,
-                                                'receptor2_name': protein2_name,'receptor2_entry_name':receptor2_entry_name,
-                                                'identity':identity_value, 'similarity': similarity_value}
-                                        writer.writerow(data)
-                                csvfile.flush()
-
-                                        
-                            unique_keys_set.add(unique_key)
-                            if while_loop_continue:
+                            cs_alignment = Alignment()
+                            cs_alignment.load_proteins(proteins)
+                            cs_alignment.load_segments(gpcr_segments)
+                            build_alignment_return_value = cs_alignment.build_alignment()
+                            if build_alignment_return_value == "Too large":
+                                self.logger.warning("Alignment too large. Retrying with smaller chunks...")
+                                while_loop_continue = True
                                 break
-                        try:
-                            del proteins
-                        except Exception:
-                            pass
-                        try:
-                            del gpcr_class_proteins
-                        except Exception:
-                            pass
+                            cs_alignment.remove_non_generic_numbers_from_alignment()
+
+                            # Map Protein.pk -> ProteinConformation (used by pairwise_similarity)
+                            pconf_by_protein_pk = {pconf.protein.pk: pconf for pconf in cs_alignment.proteins}
+
+                            for protein1 in gpcr_class_proteins:
+                                for protein2 in gpcr_class2_proteins:
+                                    if protein1.pk == protein2.pk:
+                                        continue
+
+                                    # Avoid producing both (a,b) and (b,a) when comparing a chunk to itself.
+                                    if gpcr_class == gpcr_class2 and clim == clim2 and protein1.pk > protein2.pk:
+                                        continue
+
+                                    # Store one canonical direction to satisfy uniq(protein_ref, protein_target)
+                                    # and avoid target<->ref duplicates.
+                                    if protein1.pk < protein2.pk:
+                                        ref, target = protein1, protein2
+                                        ref_class_fk, target_class_fk = gpcr_class, gpcr_class2
+                                    else:
+                                        ref, target = protein2, protein1
+                                        ref_class_fk, target_class_fk = gpcr_class2, gpcr_class
+
+                                    pconf_ref = pconf_by_protein_pk.get(ref.pk)
+                                    pconf_target = pconf_by_protein_pk.get(target.pk)
+                                    if not pconf_ref or not pconf_target:
+                                        continue
+
+                                    calc_values = cs_alignment.pairwise_similarity(pconf_ref, pconf_target)
+                                    if not calc_values:
+                                        continue
+                                    identity_value = _to_int_percent(calc_values[0])
+                                    similarity_value = _to_int_percent(calc_values[1])
+                                    if identity_value is None or similarity_value is None:
+                                        continue
+                                    if identity_value < 0 or similarity_value < 0:
+                                        # No aligned residues; skip
+                                        continue
+
+                                    buffer.append(
+                                        ReceptorSimilarity(
+                                            protein_ref=ref,
+                                            protein_target=target,
+                                            ref_class=ref_class_fk,
+                                            target_class=target_class_fk,
+                                            identity=identity_value,
+                                            similarity=similarity_value,
+                                        )
+                                    )
+
+                                    if len(buffer) >= batch_size:
+                                        with transaction.atomic():
+                                            ReceptorSimilarity.objects.bulk_create(buffer, batch_size=batch_size)
+                                        total_created += len(buffer)
+                                        buffer.clear()
+                                        if options['verbose']:
+                                            print("Inserted rows:", total_created)
+
                         if while_loop_continue:
                             break
-                        selected_parent_gpcr_families_protein[gpcr_class][clim:clim+step1] = [None for i1 in range(clim,clim+step1)]
+
                     if while_loop_continue:
-                        if options['verbose']: print("Halving step1 and step2...") 
-                        step1 = step1 // 2
-                        step2 = step2 // 2
+                        if options['verbose']:
+                            print("Halving step1 and step2...")
+                        step1 = max(1, step1 // 2)
+                        step2 = max(1, step2 // 2)
                         step_halved = True
                         while_loop_continue = False
-                        if options['verbose']: print("Retrying last class similarity computation with the new steps...")
+                        if options['verbose']:
+                            print("Retrying with the new steps...")
                         continue
-                    elif step_halved:
-                        print("Restoring initial step1 and step2...")
-                        step1=initial_step1
-                        step2=initial_step2
+                    if step_halved:
+                        if options['verbose']:
+                            print("Restoring initial step1 and step2...")
+                        step1 = initial_step1
+                        step2 = initial_step2
                         step_halved = False
-                    del selected_parent_gpcr_families_protein[gpcr_class]
-                    break    
-                
+                    break
+
+        if buffer:
+            with transaction.atomic():
+                ReceptorSimilarity.objects.bulk_create(buffer, batch_size=batch_size)
+            total_created += len(buffer)
+            buffer.clear()
+
+        self.logger.info("Inserted %s receptor similarity rows.", total_created)
 
         end_time = time.time()
         elapsed_time = end_time - start_time
@@ -372,14 +328,3 @@ class Command(BaseBuild):
             print('Done.')
         self.logger.info('Execution time: '+str(elapsed_time)+' seconds')
         self.logger.info('Done.')
-
-     
-
-
-
-
-
-             
-
-
-
