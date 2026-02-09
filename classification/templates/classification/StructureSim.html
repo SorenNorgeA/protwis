@@ -1,0 +1,620 @@
+{% extends "home/base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container">
+  <div id="sim-status">Loading…</div>
+
+  <!-- How-to Modal -->
+  <div id="ssHowToBackdrop" class="ss-modal-backdrop" aria-hidden="true"></div>
+  <div id="ssHowToModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="ssHowToTitle" aria-hidden="true">
+    <header>
+      <h3 id="ssHowToTitle">How to use this page</h3>
+      <button type="button" class="ss-modal-close" aria-label="Close">&times;</button>
+    </header>
+    <div class="ss-modal-body">
+      <p>
+        This page shows a 2D <strong>t-SNE clustering algorithm</strong> embedding of GPCR similarity.
+        Each point is a receptor; nearby points are more similar in the selected dataset.
+      </p>
+      <ul>
+        <li><strong>Dataset</strong>: switch between <strong>Sequence</strong>, <strong>Inactive structures</strong>, and <strong>Active structures</strong>.</li>
+        <li><strong>Human only</strong>: this view contains <strong>human receptors only</strong>.</li>
+        <li><strong>Structure datasets</strong>: include <strong>representative structures only</strong> (active/inactive sets).</li>
+        <li><strong>Colour by</strong>: recolours points by Class/Chemotype/Receptor family/Modality/Sense.</li>
+        <li><strong>Shape by</strong>: toggles marker shapes (None/Class). Note: choosing <strong>Colour by = Class</strong> forces <strong>Shape by = None</strong>; any other colour setting forces <strong>Shape by = Class</strong>.</li>
+        <li><strong>Hover</strong> any point to see details (e.g., label and UniProt).</li>
+        <li><strong>Legend</strong>: click legend items to exclude/include groups in the plot.</li>
+      </ul>
+    </div>
+    <footer>
+      <button type="button" class="btn btn-primary" id="ssHowToOk">Got it</button>
+    </footer>
+  </div>
+
+  <!-- how-to button (first row) -->
+  <div class="ss-controls-row ss-controls-row--nolabel">
+    <button id="ssHowToBtn" type="button" class="btn btn-primary btn-sm">
+      <span class="glyphicon glyphicon-info-sign" style="vertical-align: top; line-height:1.3;"></span>
+      How to
+    </button>
+  </div>
+
+  <!-- dataset toggle -->
+  <div class="ss-controls-row">
+    <span class="ss-controls-label">Dataset:</span>
+    <button class="btn btn-primary btn-sm dataset-btn" data-dataset="sequence">Sequence</button>
+    <button class="btn btn-default btn-sm dataset-btn" data-dataset="inactive">Inactive structures</button>
+    <button class="btn btn-default btn-sm dataset-btn" data-dataset="active">Active structures</button>
+  </div>
+
+  <!-- colour-by controls -->
+  <div class="ss-controls-row">
+    <span class="ss-controls-label">Colour by:</span>
+    <button class="btn btn-primary btn-sm colorby" data-key="Class">Class</button>
+    <button class="btn btn-default  btn-sm colorby" data-key="Chemotype">Chemotype</button>
+    <button class="btn btn-default  btn-sm colorby" data-key="Receptor family">Receptor family</button>
+    <button class="btn btn-default  btn-sm colorby" data-key="Modality">Modality</button>
+    <button class="btn btn-default  btn-sm colorby" data-key="Sense">Sense</button>
+  </div>
+
+  <!-- shape-by controls -->
+  <div class="ss-controls-row">
+    <span class="ss-controls-label">Shape by:</span>
+    <button class="btn btn-primary btn-sm shapeby" data-key="None">None</button>
+    <button class="btn btn-default btn-sm shapeby" data-key="Class">Class</button>
+  </div>
+
+  <!-- NEW: download button (temporarily disabled) -->
+  <!--
+  <button id="download-btn" class="btn btn-default btn-xs">
+    Download SVG
+  </button>
+  -->
+
+  <!-- plot title -->
+  <h4 id="plot-title" class="text-center" style="margin: 10px 0 5px;">
+    Sequence similarity
+  </h4>
+
+  <div id="plot" style="min-height: 540px;"></div>
+</div>
+{% endblock %}
+
+{% block addon_css %}
+<style>
+/* --- Control rows (StructureSim) --- */
+.ss-controls-row{
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+.ss-controls-label{
+  display: inline-block;
+  width: 80px; /* aligns button columns across rows */
+  margin: 0;
+}
+.ss-controls-row--nolabel{
+  padding-left: 80px; /* match .ss-controls-label width */
+}
+
+/* --- How-to modal (StructureSim) --- */
+.ss-modal-backdrop{
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 3000; display:none;
+}
+.ss-modal{
+  position: fixed; left: 50%; top: 12%;
+  transform: translateX(-50%);
+  width: min(780px, calc(100% - 40px));
+  background: #fff; color:#111;
+  border:1px solid #cfcfcf; border-radius:10px;
+  box-shadow:0 16px 36px rgba(0,0,0,.25);
+  z-index: 3001; display:none;
+}
+.ss-modal header{
+  padding: 14px 16px; border-bottom:1px solid #e6e6e6;
+  display:flex; align-items:center; justify-content:space-between;
+}
+.ss-modal header h3{ margin:0; font-size:18px; font-weight:600; }
+.ss-modal .ss-modal-close{
+  border:0; background:transparent; font-size:22px; line-height:1;
+  opacity:.65; cursor:pointer;
+}
+.ss-modal .ss-modal-close:hover{ opacity:1; }
+.ss-modal .ss-modal-body{ padding: 14px 16px 18px; max-height: 70vh; overflow:auto; }
+.ss-modal footer{ padding: 10px 16px; border-top:1px solid #e6e6e6; text-align:right; }
+</style>
+{% endblock %}
+
+{% block addon_js %}
+<script src="{% static 'home/js/plotly_v1_58_5.js' %}"></script>
+<script>
+(async function () {
+  const statusEl    = document.getElementById('sim-status');
+  const plotTitleEl = document.getElementById('plot-title');
+  const plotDiv     = document.getElementById('plot');
+  // const downloadBtn = document.getElementById('download-btn');   // NEW (temporarily disabled)
+
+  const EMBED_URL = "{{ embed_url }}";
+
+  /* ---------- colour constants ---------- */
+
+  const PALETTE = [
+    '#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd',
+    '#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'
+  ];
+
+  const CLASS_COLORS = {
+    'A':     '#1f77b4',
+    'B1':    '#ff7f0e',
+    'B2':    '#2ca02c',
+    'O1':    '#d62728',
+    'O2':    '#9467bd',
+    'C':     '#8c564b',
+    'F':     '#e377c2',
+    'T2':    '#7f7f7f',
+    'Other': '#bcbd22'
+  };
+
+  const MODALITY_COLORS = {
+    'Ion receptors':            '#7570b3',
+    'Peptide receptors':        '#1b9e77',
+    'Protein receptors':        '#66a61e',
+    'Small molecule receptors': '#d95f02',
+    'Orphan receptors':         '#7f7f7f',
+    'Other':                    '#666666'
+  };
+
+  const SENSE_COLORS = {
+    'non-sensory': '#1f78b4',
+    'odorant':     '#e31a1c',
+    'taste':       '#33a02c',
+    'vision':      '#6a3d9a',
+    'unknown':     '#b2b2b2'
+  };
+
+  const CLASS_ORDER = ['A','B1','B2','C','F','O1','O2','T2'];
+
+  /* ---------- helpers ---------- */
+
+  function normalizeModality(raw) {
+    let s = (raw || '').toString().trim();
+    if (!s) return 'Orphan receptors';
+    s = s.replace(/\s+/g, ' ').toLowerCase();
+
+    if (s.includes('ion'))        return 'Ion receptors';
+    if (s.includes('peptide'))    return 'Peptide receptors';
+    if (s.includes('protein'))    return 'Protein receptors';
+    if (s.includes('small') ||
+        s.includes('molecule'))   return 'Small molecule receptors';
+    if (s.includes('orphan') ||
+        s === 'unknown')          return 'Orphan receptors';
+
+    return 'Other';
+  }
+
+  function normClassCodeFromString(cls) {
+    let s = String(cls || '').toUpperCase();
+    if (!s) return 'Other';
+    if (s.includes('CLASS B1')) return 'B1';
+    if (s.includes('CLASS B2')) return 'B2';
+    if (s.includes('CLASS O1')) return 'O1';
+    if (s.includes('CLASS O2')) return 'O2';
+    if (s.includes('CLASS T2')) return 'T2';
+    if (s.includes('CLASS C'))  return 'C';
+    if (s.includes('CLASS F'))  return 'F';
+    if (s.includes('CLASS A'))  return 'A';
+    return s; // already a plain code
+  }
+
+  function getCategory(point, key) {
+    if (key === 'Modality')
+      return point.Modality || 'Unknown';
+    if (key === 'Class')
+      return point.Class || 'Other';
+    if (key === 'Chemotype')
+      return point.Chemotype || 'Unknown';
+    if (key === 'Receptor family')
+      return point['Receptor family'] || 'Unknown';
+    if (key === 'Sense')
+      return point.Sense || 'unknown';
+    return 'Unknown';
+  }
+
+  function getShapeCategory(point, shapeKey) {
+    if (shapeKey === 'Class')
+      return normClassCodeFromString(point.Class);
+    // shape-by None
+    return 'None';
+  }
+
+  function getShapeFor(clsCode, shapeKey) {
+    if (shapeKey !== 'Class') {
+      return 'circle';   // all circles when shape-by None
+    }
+    switch (clsCode) {
+      case 'A':  return 'circle';
+      case 'B1': return 'star-triangle-up';
+      case 'B2': return 'star-triangle-down';
+      case 'O1': return 'star-square';
+      case 'O2': return 'star-diamond';
+      case 'C':  return 'pentagon';
+      case 'F':  return 'hexagram';
+      case 'T2': return 'diamond-wide';
+      default:   return 'circle-open';
+    }
+  }
+
+  function colorForCategory(key, cat, point) {
+    if (key === 'Class') {
+      const code = normClassCodeFromString(cat);
+      return CLASS_COLORS[code] || CLASS_COLORS['Other'] || '#999999';
+    }
+
+    if (key === 'Modality') {
+      const grp = normalizeModality(cat);
+      return MODALITY_COLORS[grp] || '#999999';
+    }
+
+    if (key === 'Sense') {
+      const s = String(cat || '').toLowerCase();
+      if (s in SENSE_COLORS) return SENSE_COLORS[s];
+      return SENSE_COLORS['unknown'];
+    }
+
+    // Chemotype / Receptor family: colours assigned later by palette
+    return null;
+  }
+
+  /*
+  // download plot (SVG) without legend (temporarily disabled)
+  downloadBtn.addEventListener('click', async () => {
+    if (!plotDiv || !plotDiv.data || !plotDiv.data.length) {
+      alert('No plot to download yet.');
+      return;
+    }
+
+    const origText = downloadBtn.textContent;
+    downloadBtn.disabled = true;
+    downloadBtn.textContent = 'Preparing…';
+
+    try {
+      const layout = plotDiv.layout || {};
+      const oldShowLegend = layout.showlegend;
+
+      // hide legend
+      await Plotly.relayout(plotDiv, { showlegend: false });
+
+      // export as SVG (tweak width/height if you want)
+      const url = await Plotly.toImage(plotDiv, {
+        format: 'svg',
+        width:  900,
+        height: 700
+      });
+
+      // restore legend state
+      await Plotly.relayout(plotDiv, { showlegend: oldShowLegend });
+
+      // trigger download
+      const a = document.createElement('a');
+      a.href = url;
+      const baseName = (datasetTitle(currentDataset) || 'tsne')
+        .replace(/\s+/g, '_')
+        .toLowerCase();
+      a.download = baseName + '.svg';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+    } catch (e) {
+      console.error('Download failed', e);
+      alert('Download failed: ' + e.message);
+    } finally {
+      downloadBtn.disabled = false;
+      downloadBtn.textContent = origText;
+    }
+  });
+  */
+
+  /* ---------- build traces ---------- */
+
+  function buildTraces(points, colorKey, shapeKey) {
+    const tracesByCombo = new Map();
+    const paletteMap = new Map();  // for Chemotype / Receptor family
+    let paletteIdx = 0;
+
+    points.forEach(p => {
+      const cCat      = getCategory(p, colorKey);
+      const shapeCat  = getShapeCategory(p, shapeKey);
+      let color       = colorForCategory(colorKey, cCat, p);
+
+      if (color === null) {
+        if (!paletteMap.has(cCat)) {
+          paletteMap.set(cCat, PALETTE[paletteIdx % PALETTE.length]);
+          paletteIdx += 1;
+        }
+        color = paletteMap.get(cCat);
+      }
+
+      const key = cCat + '|' + shapeCat;
+      if (!tracesByCombo.has(key)) {
+        tracesByCombo.set(key, {
+          name: cCat,
+          cls:  shapeCat,
+          color: color,
+          xs: [],
+          ys: [],
+          texts: []
+        });
+      }
+      const bucket = tracesByCombo.get(key);
+      bucket.xs.push(p.x);
+      bucket.ys.push(p.y);
+
+      const label    = p.label || '';
+      const uni      = p.uniprot || '';
+      const modality = p.Modality || '';
+      const sense    = p.Sense || '';
+      const lines = [];
+      if (label)    lines.push('Label: ' + label);
+      if (uni)      lines.push('UniProt: ' + uni);
+      if (modality) lines.push('Modality: ' + modality);
+      if (sense)    lines.push('Sense: ' + sense);
+      lines.push(colorKey + ': ' + cCat);
+      bucket.texts.push(lines.join('<br>'));
+    });
+
+    const traces = [];
+    for (const [, b] of tracesByCombo.entries()) {
+      traces.push({
+        x: b.xs,
+        y: b.ys,
+        type: 'scatter',
+        mode: 'markers',
+        marker: {
+          size: 9,
+          line: { width: 0.5, color: '#000' },
+          color: b.color,
+          symbol: getShapeFor(b.cls, shapeKey)
+        },
+        name: b.name,
+        hoverinfo: 'text',
+        text: b.texts,
+        showlegend: true,
+        _classCode: b.cls,
+        _colorCat: b.name
+      });
+    }
+
+    // Add class legend only when shapes encode class
+    if (shapeKey === 'Class') {
+      traces.push({
+        x: [NaN],
+        y: [NaN],
+        type: 'scatter',
+        mode: 'markers',
+        marker: { size: 0, color: 'rgba(0,0,0,0)' },
+        name: '<b>Class (shape)</b>',
+        hoverinfo: 'skip',
+        showlegend: true
+      });
+
+      CLASS_ORDER.forEach(cls => {
+        traces.push({
+          x: [NaN],
+          y: [NaN],
+          type: 'scatter',
+          mode: 'markers',
+          marker: {
+            size: 9,
+            color: '#000',
+            symbol: getShapeFor(cls, 'Class')
+          },
+          name: cls,
+          hoverinfo: 'skip',
+          showlegend: true
+        });
+      });
+    }
+
+    // >>> these two lines were missing <<<
+    return traces;
+  }
+
+
+  /* ---------- data + rendering ---------- */
+
+  let datasets = {
+    sequence: [],
+    inactive: [],
+    active:   []
+  };
+  let currentDataset = 'sequence';
+  let colorKey = 'Class';
+  let shapeKey = 'None';
+
+  function datasetTitle(ds) {
+    if (ds === 'sequence') return 'Sequence similarity';
+    if (ds === 'inactive') return 'Inactive structures';
+    if (ds === 'active')   return 'Active structures';
+    return '';
+  }
+
+  function render() {
+    const pts = datasets[currentDataset] || [];
+    if (!pts.length) {
+      statusEl.textContent = 'No data for ' + currentDataset;
+      return;
+    }
+    statusEl.textContent = '';
+
+    plotTitleEl.textContent = datasetTitle(currentDataset);
+
+    const traces = buildTraces(pts, colorKey, shapeKey);
+    const layout = {
+      xaxis: { visible: false, showgrid: false, scaleanchor: 'y' },
+      yaxis: { visible: false, showgrid: false },
+      hovermode: 'closest',
+      legend: {
+        x: 1.02,
+        xanchor: 'left',
+        y: 0.5,
+        orientation: 'v',
+        font: { family: 'Source Code Pro, monospace' }
+      },
+      margin: { l: 40, r: 220, t: 10, b: 40 },
+      paper_bgcolor: '#fff',
+      plot_bgcolor: '#fff'
+    };
+
+    Plotly.react(plotDiv, traces, layout, { displayModeBar: true, responsive: true });
+    requestAnimationFrame(() => {
+      try { Plotly.Plots.resize(plotDiv); } catch (e) {}
+    });
+  }
+
+  /* ---------- UI wiring ---------- */
+
+  /* ---------- How-to modal ---------- */
+  const howToBtn   = document.getElementById('ssHowToBtn');
+  const howToModal = document.getElementById('ssHowToModal');
+  const howToBack  = document.getElementById('ssHowToBackdrop');
+  const howToClose = howToModal && howToModal.querySelector('.ss-modal-close');
+  const howToOk    = document.getElementById('ssHowToOk');
+
+  function openHowTo() {
+    if (!howToModal || !howToBack) return;
+    howToModal.style.display = 'block';
+    howToBack.style.display  = 'block';
+    howToModal.setAttribute('aria-hidden', 'false');
+    howToBack.setAttribute('aria-hidden', 'false');
+    document.documentElement.style.overflow = 'hidden';
+  }
+
+  function closeHowTo() {
+    if (!howToModal || !howToBack) return;
+    howToModal.style.display = 'none';
+    howToBack.style.display  = 'none';
+    howToModal.setAttribute('aria-hidden', 'true');
+    howToBack.setAttribute('aria-hidden', 'true');
+    document.documentElement.style.overflow = '';
+  }
+
+  if (howToBtn)   howToBtn.addEventListener('click', openHowTo);
+  if (howToBack)  howToBack.addEventListener('click', closeHowTo);
+  if (howToClose) howToClose.addEventListener('click', closeHowTo);
+  if (howToOk)    howToOk.addEventListener('click', closeHowTo);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && howToModal && howToModal.style.display === 'block') closeHowTo();
+  });
+
+  // dataset toggle
+  document.querySelectorAll('.dataset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const ds = btn.getAttribute('data-dataset');
+      if (!ds || ds === currentDataset) return;
+      document.querySelectorAll('.dataset-btn').forEach(b => {
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-default');
+      });
+      btn.classList.remove('btn-default');
+      btn.classList.add('btn-primary');
+      currentDataset = ds;
+      render();
+    });
+  });
+
+  // colour-by
+  document.querySelectorAll('.colorby').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.colorby').forEach(b => {
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-default');
+      });
+      btn.classList.remove('btn-default');
+      btn.classList.add('btn-primary');
+      colorKey = btn.getAttribute('data-key') || 'Class';
+
+      // Keep shape-by in sync with colour-by:
+      // - Colour by Class  -> Shape by None
+      // - Any other colour -> Shape by Class
+      const desiredShapeKey = (colorKey === 'Class') ? 'None' : 'Class';
+      if (shapeKey !== desiredShapeKey) {
+        shapeKey = desiredShapeKey;
+        document.querySelectorAll('.shapeby').forEach(b => {
+          const k = b.getAttribute('data-key') || 'None';
+          if (k === desiredShapeKey) {
+            b.classList.remove('btn-default');
+            b.classList.add('btn-primary');
+          } else {
+            b.classList.remove('btn-primary');
+            b.classList.add('btn-default');
+          }
+        });
+      }
+      render();
+    });
+  });
+
+  // shape-by (None / Class)
+  document.querySelectorAll('.shapeby').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.getAttribute('data-key') || 'None';
+      if (key === shapeKey) return;
+      document.querySelectorAll('.shapeby').forEach(b => {
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-default');
+      });
+      btn.classList.remove('btn-default');
+      btn.classList.add('btn-primary');
+      shapeKey = key;
+      render();
+    });
+  });
+
+  window.addEventListener('resize', () => {
+    try { Plotly.Plots.resize(plotDiv); } catch (e) {}
+  });
+
+  /* ---------- initial load (single fetch) ---------- */
+
+  try {
+    statusEl.textContent = 'Loading data…';
+    const res = await fetch(EMBED_URL, { headers: { 'Accept': 'application/json' }});
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+
+    datasets.sequence = (data.sequence && data.sequence.points) || [];
+    datasets.inactive = (data.structure && data.structure.inactive && data.structure.inactive.points) || [];
+    datasets.active   = (data.structure && data.structure.active   && data.structure.active.points)   || [];
+
+    // --- cosmetic transforms to align with sequence embedding ---
+
+    // Active: flip vertically only (your choice)
+    datasets.active.forEach(p => {
+      p.y = -p.y;
+    });
+
+    // Inactive: flip horizontally AND vertically
+    datasets.inactive.forEach(p => {
+      p.x = -p.x;
+      p.y = -p.y;
+    });
+
+    statusEl.textContent = '';
+    render();
+  } catch (e) {
+    console.error('Initial load error:', e);
+    statusEl.textContent = 'Failed to load data: ' + e.message;
+  }
+
+})();
+
+
+
+</script>
+{% endblock %}
