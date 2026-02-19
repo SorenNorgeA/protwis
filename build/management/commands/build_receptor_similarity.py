@@ -25,6 +25,18 @@ class Command(BaseBuild):
 
     logger = logging.getLogger(__name__)
 
+    @staticmethod
+    def _format_elapsed(seconds):
+        seconds = int(round(seconds))
+        h = seconds // 3600
+        m = (seconds % 3600) // 60
+        s = seconds % 60
+        return f"{h} hours {m} mins {s} secs"
+
+    @staticmethod
+    def _expected_pairs(n):
+        return (n * (n - 1)) // 2
+
     def get_parent_gpcr_families(self,exclude_classless_artificial_class=True,include_classless_natural_classes=True):
         parent_family = ProteinFamily.objects.get(slug='000')
         parent_gpcr_families = ProteinFamily.objects.filter(parent_id=parent_family.pk, slug__startswith='0').exclude(pk=parent_family.pk)
@@ -121,12 +133,12 @@ class Command(BaseBuild):
 
     def handle(self, *args, **options):
         try:
-            from alignment.models import ReceptorSimilarity
+            from classification.models import ReceptorSimilarity
         except ImportError as e:
-            raise CommandError("ReceptorSimilarity model not available. Did you migrate the alignment app?") from e
+            raise CommandError("ReceptorSimilarity model not available. Did you migrate the classification app?") from e
 
         start_time = time.time()
-        self.logger.info("Computing receptor similarity and populating alignment_receptorsimilarity...")
+        self.logger.info("Computing receptor similarity and populating classification_receptorsimilarity...")
 
         # Reset table so SQL id starts at 1 on each run.
         try:
@@ -186,9 +198,26 @@ class Command(BaseBuild):
             except Exception:
                 return None
 
+        # Upper-bound estimate for progress: number of unique (unordered) protein pairs.
+        class_sizes = {cls: _limit_n(cls) for cls in selected_parent_gpcr_families}
+        total_pairs_est = 0
+        for i, cls_i in enumerate(selected_parent_gpcr_families):
+            ni = class_sizes.get(cls_i, 0) or 0
+            for j in range(i, len(selected_parent_gpcr_families)):
+                cls_j = selected_parent_gpcr_families[j]
+                nj = class_sizes.get(cls_j, 0) or 0
+                if i == j:
+                    total_pairs_est += self._expected_pairs(ni)
+                else:
+                    total_pairs_est += ni * nj
+
         buffer = []
         batch_size = 5000
         total_created = 0
+        processed_pairs = 0
+
+        if options['verbose']:
+            print("Estimated unique protein pairs to process:", total_pairs_est)
 
         # Iterate class pairs once (A,B) with B starting at A to avoid duplicate work,
         # while still processing all chunks for large classes.
@@ -257,6 +286,8 @@ class Command(BaseBuild):
                                         ref, target = protein2, protein1
                                         ref_class_fk, target_class_fk = gpcr_class2, gpcr_class
 
+                                    processed_pairs += 1
+
                                     pconf_ref = pconf_by_protein_pk.get(ref.pk)
                                     pconf_target = pconf_by_protein_pk.get(target.pk)
                                     if not pconf_ref or not pconf_target:
@@ -290,7 +321,11 @@ class Command(BaseBuild):
                                         total_created += len(buffer)
                                         buffer.clear()
                                         if options['verbose']:
-                                            print("Inserted rows:", total_created)
+                                            if total_pairs_est:
+                                                pct = (100.0 * processed_pairs) / float(total_pairs_est)
+                                                print(f"Inserted rows: {total_created} ({pct:.1f}% done)")
+                                            else:
+                                                print("Inserted rows:", total_created)
 
                         if while_loop_continue:
                             break
@@ -318,13 +353,19 @@ class Command(BaseBuild):
                 ReceptorSimilarity.objects.bulk_create(buffer, batch_size=batch_size)
             total_created += len(buffer)
             buffer.clear()
+            if options['verbose']:
+                if total_pairs_est:
+                    pct = (100.0 * processed_pairs) / float(total_pairs_est)
+                    print(f"Inserted rows: {total_created} ({pct:.1f}% done)")
+                else:
+                    print("Inserted rows:", total_created)
 
         self.logger.info("Inserted %s receptor similarity rows.", total_created)
 
         end_time = time.time()
         elapsed_time = end_time - start_time
         if options['verbose']:
-            print('Execution time:', elapsed_time, 'seconds')
+            print("Execution time:", self._format_elapsed(elapsed_time))
             print('Done.')
-        self.logger.info('Execution time: '+str(elapsed_time)+' seconds')
+        self.logger.info("Execution time: %s", self._format_elapsed(elapsed_time))
         self.logger.info('Done.')

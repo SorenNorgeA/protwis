@@ -62,6 +62,13 @@ class Command(BaseBuild):
                 model.objects.all().delete()
 
     @staticmethod
+    def _delete_state(model, state_slug):
+        """
+        Delete rows for a single state ('active'/'inactive') without affecting the other.
+        """
+        model.objects.filter(state__slug=state_slug).delete()
+
+    @staticmethod
     def _expected_pairs(n):
         return (n * (n - 1)) // 2
 
@@ -92,10 +99,6 @@ class Command(BaseBuild):
 
         # GPCR families only (exclude classless/artificial buckets)
         qs = qs.filter(protein_conformation__protein__parent__family__slug__startswith='0')
-        qs = qs.exclude(
-            Q(protein_conformation__protein__parent__family__slug__startswith='007') |
-            Q(protein_conformation__protein__parent__family__slug__startswith='008')
-        )
 
         if limit:
             qs = qs[:limit]
@@ -110,6 +113,7 @@ class Command(BaseBuild):
 
     def _build_one_state(self, state_slug, model, *, batch_size, verbose, dry_run, test):
         from contactnetwork.distances import Distances
+        from protein.models import ProteinState
 
         t0 = time.time()
 
@@ -162,8 +166,10 @@ class Command(BaseBuild):
         if dry_run:
             return expected
 
-        # Reset table
-        self._truncate_table(model)
+        # Reset existing rows for this state only
+        self._delete_state(model, state_slug)
+
+        state_obj = ProteinState.objects.only('id').get(slug=state_slug)
 
         buffer = []
         total = 0
@@ -203,6 +209,7 @@ class Command(BaseBuild):
 
                 buffer.append(
                     model(
+                        state_id=state_obj.id,
                         structure_ref_id=ref['structure_id'],
                         structure_target_id=tgt['structure_id'],
                         protein_ref_id=ref['protein_id'],
@@ -223,10 +230,10 @@ class Command(BaseBuild):
 
     def handle(self, *args, **options):
         try:
-            from alignment.models import StructureSimilarityActive, StructureSimilarityInactive
+            from classification.models import StructureSimilarity
         except ImportError as e:
             raise CommandError(
-                "StructureSimilarity models not available. Did you migrate the alignment app?"
+                "StructureSimilarity models not available. Did you migrate the classification app?"
             ) from e
 
         state_opt = options['state']
@@ -239,17 +246,21 @@ class Command(BaseBuild):
 
         targets = []
         if state_opt in ('active', 'both'):
-            targets.append(('active', StructureSimilarityActive))
+            targets.append('active')
         if state_opt in ('inactive', 'both'):
-            targets.append(('inactive', StructureSimilarityInactive))
+            targets.append('inactive')
 
         if not targets:
             raise CommandError("No states selected.")
 
-        for state_slug, model in targets:
+        # If rebuilding both, it is safe and faster to truncate once.
+        if not dry_run and state_opt == 'both':
+            self._truncate_table(StructureSimilarity)
+
+        for state_slug in targets:
             self._build_one_state(
                 state_slug,
-                model,
+                StructureSimilarity,
                 batch_size=batch_size,
                 verbose=verbose,
                 dry_run=dry_run,

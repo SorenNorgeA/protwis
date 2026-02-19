@@ -585,7 +585,14 @@
   try {
     statusEl.textContent = 'Loading data…';
     const res = await fetch(EMBED_URL, { headers: { 'Accept': 'application/json' }});
-    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (!res.ok) {
+      let detail = '';
+      try {
+        const errJson = await res.json();
+        if (errJson && errJson.error) detail = String(errJson.error);
+      } catch (e) {}
+      throw new Error('HTTP ' + res.status + (detail ? (': ' + detail) : ''));
+    }
     const data = await res.json();
 
     datasets.sequence = (data.sequence && data.sequence.points) || [];
@@ -596,12 +603,13 @@
 
     // Active: flip vertically only (your choice)
     datasets.active.forEach(p => {
+      p.x = -p.x;
       p.y = -p.y;
     });
 
     // Inactive: flip horizontally AND vertically
     datasets.inactive.forEach(p => {
-      p.x = -p.x;
+      p.x = p.x;
       p.y = -p.y;
     });
 

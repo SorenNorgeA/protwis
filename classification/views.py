@@ -6,11 +6,7 @@ from django.http import JsonResponse
 from django.views import View
 from django.views.generic import TemplateView
 
-from alignment.models import (
-    ReceptorSimilarity,
-    StructureSimilarityActive,
-    StructureSimilarityInactive,
-)
+from classification.models import ReceptorSimilarity, StructureSimilarity
 from common.models import WebLink
 from mapper.views import DataMapperHome
 from protein.models import Gene, Protein, ProteinFamily, ProteinFamilyClassification
@@ -2255,86 +2251,22 @@ class SimilarityBundleAPI(View):
 class StructureSim(TemplateView):
     """
     Serve combined t-SNE embeddings for:
-      - sequence similarity (precomputed HumanGPCRSimilarityAllData_tsne.csv)
-      - structure distance matrices (inactive / active) with auto t-SNE caching.
+      - sequence similarity (from `classification.ReceptorSimilarity`)
+      - structure distances (from `classification.StructureSimilarity`, filtered by state)
 
-    All points are annotated using Classification.xlsx, matched by:
-      label  -> prefix before '_' -> uppercased UniProt code.
-      e.g.  'grm3_8TR0'  -> 'GRM3'
-            '5ht1a_8PJK' -> '5HT1A'
+    All points are annotated from database-backed classification metadata
+    (ProteinFamily + ProteinFamilyClassification).
     """
 
     template_name = 'classification/StructureSim.html'
 
     # DB-backed payload cache (avoid recomputing t-SNE on every request)
-    PAYLOAD_CACHE_KEY = 'structuresim:payload:db:v1:raw'
+    PAYLOAD_CACHE_KEY = 'structuresim:payload:db:v4:structsim_unified'
     PAYLOAD_CACHE_TIMEOUT = 60 * 60 * 24  # 24h
 
     # ProteinFamilyClassification cache (Chemotype/Modality/Sense lookup)
-    PF_CLASS_CACHE_KEY = 'structuresim:pfclass:db:v1'
+    PF_CLASS_CACHE_KEY = 'structuresim:pfclass:db:v4'
     PF_CLASS_CACHE_TIMEOUT = 60 * 60 * 24  # 24h
-
-    # ---------- config ----------
-
-    # where the structure distance matrices live
-    STRUCTURE_FOLDER = 'structure_data'
-    STRUCTURE_FILES = {
-        'inactive': 'GPCR_structure_clustering_inactiveRep_entry_pdb.xlsx',
-        'active':   'GPCR_structure_clustering_activeStructuresRep_entry_pdb.xlsx',
-    }
-
-    # where the precomputed sequence t-SNE lives
-    SIMILARITY_FOLDER = 'structure_data'
-    SIMILARITY_TSNE = 'HumanGPCRSimilarityAllData_tsne.csv'
-
-    # classification Excel
-    CLASSIFICATION_FOLDER = 'protein_data'
-    CLASSIFICATION_FILE = 'Classification.xlsx'
-
-    CACHE_TIMEOUT = 60 * 15  # only used for classification mapping
-    CLASSIFICATION_CACHE_KEY = 'structuresim:classification:v2'
-
-    # ---------- path helpers ----------
-
-    def _structure_matrix_path(self, state):
-        """
-        Full path to the structure distance matrix CSV for 'inactive'/'active'.
-        """
-        try:
-            fname = self.STRUCTURE_FILES[state]
-        except KeyError:
-            raise ValueError(
-                "Unknown state '%s', expected one of: %s"
-                % (state, ", ".join(self.STRUCTURE_FILES.keys()))
-            )
-        return os.path.join(settings.DATA_DIR, self.STRUCTURE_FOLDER, fname)
-
-    def _structure_tsne_path(self, state):
-        """
-        Path to cached t-SNE CSV for given state, e.g.
-        GPCR_structure_clustering_inactiveRep_tsne.csv
-        """
-        base = os.path.splitext(self.STRUCTURE_FILES[state])[0]
-        fname = "%s_tsne.csv" % base
-        return os.path.join(settings.DATA_DIR, self.STRUCTURE_FOLDER, fname)
-
-    def _similarity_tsne_path(self):
-        """
-        Path to precomputed sequence similarity t-SNE CSV.
-        """
-        return os.path.join(
-            settings.DATA_DIR, self.SIMILARITY_FOLDER, self.SIMILARITY_TSNE
-        )
-
-    def _classification_path(self):
-        """
-        Path to Classification.xlsx.
-        """
-        return os.path.join(
-            settings.DATA_DIR,
-            self.CLASSIFICATION_FOLDER,
-            self.CLASSIFICATION_FILE,
-        )
 
     # ---------- core helpers ----------
 
@@ -2344,16 +2276,28 @@ class StructureSim(TemplateView):
         Returns coords (n x 2).
         """
         n = D.shape[0]
-        perplexity = max(5.0, min(40.0, (n - 1) / 3.0, n - 2.0))
-        tsne = TSNE(
+        # TSNE requires perplexity < n. Keep it in a safe range even for small n.
+        if n < 2:
+            return np.zeros((n, 2), dtype=float)
+        perplexity = min(40.0, max(1.0, (n - 1) / 3.0))
+        if perplexity >= (n - 1):
+            perplexity = float(max(1, n - 2))
+
+        # scikit-learn compatibility:
+        # - older versions don't support learning_rate="auto"
+        # - older versions don't support square_distances
+        base_kwargs = dict(
             n_components=2,
             metric="precomputed",
             perplexity=perplexity,
             random_state=42,
             init="random",
-            learning_rate="auto",
-            square_distances=True,
         )
+        try:
+            tsne = TSNE(learning_rate="auto", square_distances=True, **base_kwargs)
+        except TypeError:
+            tsne = TSNE(learning_rate=200.0, **base_kwargs)
+
         return tsne.fit_transform(D)
 
     # -------------------------- DB-backed embedding + annotations --------------------------
@@ -2460,7 +2404,6 @@ class StructureSim(TemplateView):
                 'family__parent__parent',
                 'family__parent__parent__parent',
             )
-            .only('id', 'entry_name', 'family_id')
             .order_by('entry_name')
         )
 
@@ -2504,16 +2447,15 @@ class StructureSim(TemplateView):
 
     def _build_structure_dataset_db(self, state, pf_class_map):
         """
-        Build t-SNE from StructureSimilarityActive/Inactive using raw `distance`.
+        Build t-SNE from StructureSimilarity (filtered by state) using raw `distance`.
         """
-        model = StructureSimilarityActive if state == "active" else StructureSimilarityInactive
-
         qs = (
-            model.objects
-            .filter(protein_ref__species_id=1, protein_target__species_id=1)
+            StructureSimilarity.objects
+            .filter(state__slug=state, protein_ref__species_id=1, protein_target__species_id=1)
             .select_related(
                 'structure_ref__pdb_code',
                 'structure_target__pdb_code',
+                'state',
                 'protein_ref__family',
                 'protein_ref__family__parent',
                 'protein_ref__family__parent__parent',
@@ -2522,17 +2464,6 @@ class StructureSim(TemplateView):
                 'protein_target__family__parent',
                 'protein_target__family__parent__parent',
                 'protein_target__family__parent__parent__parent',
-            )
-            .only(
-                'structure_ref_id',
-                'structure_ref__pdb_code__index',
-                'structure_target_id',
-                'structure_target__pdb_code__index',
-                'protein_ref_id',
-                'protein_ref__entry_name',
-                'protein_target_id',
-                'protein_target__entry_name',
-                'distance',
             )
         )
 
@@ -2609,281 +2540,6 @@ class StructureSim(TemplateView):
                 "active": self._build_structure_dataset_db("active", pf_class_map),
             },
         }
-
-    def _load_classification_meta(self):
-        """
-        Load Classification.xlsx and return mapping:
-          { UNIPROT_CODE (upper) : {
-                'Receptor family': ...,
-                'Chemotype': ...,
-                'Modality': ...,
-                'Class': ...,
-                'Sense': ...
-          }}
-
-        Cached in Django cache.
-        """
-        cached = cache.get(self.CLASSIFICATION_CACHE_KEY)
-        if cached is not None:
-            return cached
-
-        path = self._classification_path()
-        if not os.path.exists(path):
-            cache.set(self.CLASSIFICATION_CACHE_KEY, {}, self.CACHE_TIMEOUT)
-            return {}
-
-        df = pd.read_excel(path)
-
-        # tolerant column name picker (handles embedded newlines etc.)
-        def pick(*cands):
-            names = set([str(c).strip() for c in cands])
-            for col in df.columns:
-                s = str(col).strip()
-                if s in names:
-                    return col
-            return None
-
-        col_uni      = pick('GPCRs (UniProt)', 'GPCRs\n(UniProt)', 'GPCRs (UniProt)')
-        col_family   = pick('Receptor family')
-        col_chemo    = pick('Chemotype')
-        col_modality = pick('Modality')
-        col_class    = pick('Class')
-        col_sense    = pick('Sense')
-
-        if not col_uni:
-            cache.set(self.CLASSIFICATION_CACHE_KEY, {}, self.CACHE_TIMEOUT)
-            return {}
-
-        mapping = {}
-
-        for _, row in df.iterrows():
-            uni_val = row[col_uni]
-            if pd.isna(uni_val):
-                continue
-            uni = str(uni_val).strip()
-            if not uni or uni.lower() == 'nan':
-                continue
-
-            key = uni.upper()
-            rec = {}
-
-            if col_family is not None and pd.notna(row[col_family]):
-                rec['Receptor family'] = str(row[col_family]).strip()
-
-            if col_chemo is not None and pd.notna(row[col_chemo]):
-                rec['Chemotype'] = str(row[col_chemo]).strip()
-
-            if col_modality is not None and pd.notna(row[col_modality]):
-                rec['Modality'] = str(row[col_modality]).strip()
-
-            if col_class is not None and pd.notna(row[col_class]):
-                rec['Class'] = str(row[col_class]).strip()
-
-            if col_sense is not None and pd.notna(row[col_sense]):
-                rec['Sense'] = str(row[col_sense]).strip()
-
-            if rec:
-                mapping[key] = rec
-
-        cache.set(self.CLASSIFICATION_CACHE_KEY, mapping, self.CACHE_TIMEOUT)
-        return mapping
-
-    @staticmethod
-    def _label_to_uniprot(label):
-        """
-        Turn a label from t-SNE into a Uniprot-style key used in Classification.xlsx.
-
-        Handles:
-          - '5ht1a'      -> '5HT1A'
-          - '5ht1a_8TR0' -> '5HT1A'
-        """
-        if label is None:
-            return None
-        s = str(label).strip()
-        if not s:
-            return None
-        s = s.split('_', 1)[0]  # prefix before '_'
-        return s.upper()
-
-    # ---------- loading / building data ----------
-
-    def _load_distance_matrix(self, state):
-        """
-        Load a structure distance matrix file (CSV or Excel) and return
-        (path, labels, matrix).
-
-        Handles numeric coercion, simple imputation, symmetrization and
-        zero diagonal.
-
-        Assumes the index/columns are labels like 'grm3_8TR0', 't2r14_9IIW', etc.
-        """
-        file_path = self._structure_matrix_path(state)
-        if not os.path.exists(file_path):
-            raise FileNotFoundError("File not found: %s" % file_path)
-
-        # --- load CSV or Excel depending on extension ---
-        ext = os.path.splitext(file_path)[1].lower()
-        if ext in ('.xlsx', '.xls'):
-            df = pd.read_excel(file_path, index_col=0)
-        else:
-            # let pandas infer separator; index in first column
-            df = pd.read_csv(file_path, index_col=0)
-
-        if df.shape[0] != df.shape[1]:
-            raise ValueError(
-                "%s matrix must be square; got %dx%d"
-                % (state, df.shape[0], df.shape[1])
-            )
-
-        labels = df.index.astype(str).tolist()
-        cols = df.columns.astype(str).tolist()
-
-        # ensure columns follow exactly the same order as index
-        if cols != labels:
-            try:
-                df = df.loc[labels, labels]
-            except Exception:
-                raise ValueError(
-                    "%s matrix columns do not match index labels." % state
-                )
-
-        # --- numeric cleanup ---
-        # force numeric, impute NaNs by column median, symmetrize, zero diag
-        df = df.apply(pd.to_numeric, errors='coerce')
-        arr = df.values.astype(float)
-
-        if np.isnan(arr).any():
-            col_med = np.nanmedian(arr, axis=0)
-            inds = np.where(np.isnan(arr))
-            arr[inds] = np.take(col_med, inds[1])
-
-        # make symmetric and zero diagonal
-        arr = 0.5 * (arr + arr.T)
-        np.fill_diagonal(arr, 0.0)
-
-        matrix = arr.tolist()
-        return file_path, labels, matrix
-
-    def _build_points_from_tsne_df(self, df_tsne, classification, dataset_name):
-        """
-        Turn a (x,y,cluster,label) dataframe into a list of point dicts
-        annotated with classification metadata.
-        """
-        points = []
-        for _, row in df_tsne.iterrows():
-            label = str(row['label'])
-            uni = self._label_to_uniprot(label)
-            ann = classification.get(uni, {}) if uni else {}
-
-            # cluster may be missing / NaN
-            cl_raw = row['cluster'] if 'cluster' in df_tsne.columns else None
-            cluster = None
-            if cl_raw is not None and not pd.isna(cl_raw):
-                try:
-                    cluster = int(cl_raw)
-                except Exception:
-                    cluster = None
-
-            points.append({
-                "label": label,
-                "uniprot": uni,
-                "x": float(row['x']),
-                "y": float(row['y']),
-                "cluster": cluster,
-                "dataset": dataset_name,
-                "Receptor family": ann.get("Receptor family", ""),
-                "Chemotype": ann.get("Chemotype", ""),
-                "Modality": ann.get("Modality", ""),
-                "Class": ann.get("Class", ""),
-                "Sense": ann.get("Sense", ""),
-            })
-        return points
-
-    def _load_sequence_tsne(self, classification):
-        """
-        Load precomputed HumanGPCRSimilarityAllData_tsne.csv and annotate with classification.
-
-        Expects columns: x, y, label (cluster is optional).
-        """
-        path = self._similarity_tsne_path()
-        if not os.path.exists(path):
-            raise FileNotFoundError("Sequence t-SNE file not found: %s" % path)
-
-        df = pd.read_csv(path)
-        for col in ('x', 'y', 'label'):
-            if col not in df.columns:
-                raise ValueError(
-                    "Sequence t-SNE CSV missing required column '%s'" % col
-                )
-
-        points = self._build_points_from_tsne_df(
-            df, classification, dataset_name="sequence"
-        )
-
-        return {
-            "method": "tsne",
-            "points": points,
-            "n": len(points),
-        }
-
-    def _load_or_build_structure_tsne(self, state, classification):
-        """
-        For 'inactive' or 'active':
-          - if cached *_tsne.csv exists and is newer than matrix, load and annotate
-          - else, compute t-SNE from matrix, save *_tsne.csv, then annotate.
-
-        Structure matrix labels are already in the form entry_pdb (e.g. 'grm3_8TR0'),
-        so we keep them as-is and extract UniProt from the prefix.
-        """
-        matrix_path, labels, matrix = self._load_distance_matrix(state)
-        tsne_path = self._structure_tsne_path(state)
-
-        try:
-            have_tsne = os.path.exists(tsne_path)
-            if have_tsne:
-                m_tsne = os.path.getmtime(tsne_path)
-                m_src = os.path.getmtime(matrix_path)
-                if m_tsne >= m_src:
-                    df_tsne = pd.read_csv(tsne_path)
-                    points = self._build_points_from_tsne_df(
-                        df_tsne, classification, dataset_name="struct_%s" % state
-                    )
-                    return {
-                        "method": "tsne",
-                        "points": points,
-                        "n": len(points),
-                        "state": state,
-                        "from_cache": True,
-                    }
-
-            # otherwise compute new t-SNE
-            D = np.array(matrix, dtype=float)
-            coords = self._compute_tsne(D)
-
-            rows = []
-            for i, lab in enumerate(labels):
-                rows.append({
-                    "x": float(coords[i, 0]),
-                    "y": float(coords[i, 1]),
-                    "cluster": -1,  # default, can be edited later
-                    "label": lab,   # lab is already 'entry_pdb'
-                })
-            df_out = pd.DataFrame(rows)
-            df_out.to_csv(tsne_path, index=False)
-
-            points = self._build_points_from_tsne_df(
-                df_out, classification, dataset_name="struct_%s" % state
-            )
-            return {
-                "method": "tsne",
-                "points": points,
-                "n": len(points),
-                "state": state,
-                "from_cache": False,
-            }
-
-        except Exception as e:
-            return {"error": str(e), "state": state}
 
     def _build_payload(self):
         """
