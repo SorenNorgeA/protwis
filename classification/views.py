@@ -6,12 +6,13 @@ from django.http import JsonResponse
 from django.views import View
 from django.views.generic import TemplateView
 
-from classification.models import ReceptorSimilarity, StructureSimilarity
+from classification.models import ClusterCoord, ReceptorSimilarity, StructureSimilarity
 from common.models import WebLink
 from mapper.views import DataMapperHome
-from protein.models import Gene, Protein, ProteinFamily, ProteinFamilyClassification
-
+from protein.models import Gene, Protein, ProteinFamily, ProteinFamilyClassification, ProteinState
 from collections import OrderedDict, defaultdict
+import math
+import time
 import json
 import os
 import re
@@ -19,6 +20,7 @@ from string import Template
 
 import numpy as np
 import pandas as pd
+from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
 
@@ -2260,45 +2262,9 @@ class StructureSim(TemplateView):
 
     template_name = 'classification/StructureSim.html'
 
-    # DB-backed payload cache (avoid recomputing t-SNE on every request)
-    PAYLOAD_CACHE_KEY = 'structuresim:payload:db:v4:structsim_unified'
-    PAYLOAD_CACHE_TIMEOUT = 60 * 60 * 24  # 24h
-
     # ProteinFamilyClassification cache (Chemotype/Modality/Sense lookup)
     PF_CLASS_CACHE_KEY = 'structuresim:pfclass:db:v4'
     PF_CLASS_CACHE_TIMEOUT = 60 * 60 * 24  # 24h
-
-    # ---------- core helpers ----------
-
-    def _compute_tsne(self, D):
-        """
-        D: (n x n) distance matrix, symmetric, zeros on diag.
-        Returns coords (n x 2).
-        """
-        n = D.shape[0]
-        # TSNE requires perplexity < n. Keep it in a safe range even for small n.
-        if n < 2:
-            return np.zeros((n, 2), dtype=float)
-        perplexity = min(40.0, max(1.0, (n - 1) / 3.0))
-        if perplexity >= (n - 1):
-            perplexity = float(max(1, n - 2))
-
-        # scikit-learn compatibility:
-        # - older versions don't support learning_rate="auto"
-        # - older versions don't support square_distances
-        base_kwargs = dict(
-            n_components=2,
-            metric="precomputed",
-            perplexity=perplexity,
-            random_state=42,
-            init="random",
-        )
-        try:
-            tsne = TSNE(learning_rate="auto", square_distances=True, **base_kwargs)
-        except TypeError:
-            tsne = TSNE(learning_rate=200.0, **base_kwargs)
-
-        return tsne.fit_transform(D)
 
     # -------------------------- DB-backed embedding + annotations --------------------------
 
@@ -2307,6 +2273,88 @@ class StructureSim(TemplateView):
         if not entry_name:
             return ""
         return str(entry_name).split("_", 1)[0].upper()
+
+    @staticmethod
+    def _gene_name(protein):
+        """
+        Best-effort gene symbol for a protein.
+        Uses prefetched `genes` if available to avoid N+1 queries.
+        """
+        if protein is None:
+            return ""
+        try:
+            cache = getattr(protein, '_prefetched_objects_cache', {}) or {}
+            pref = cache.get('genes')
+            if pref:
+                g0 = pref[0]
+                return getattr(g0, 'name', '') or ''
+        except Exception:
+            pass
+        try:
+            g = protein.genes.all().first()
+            return g.name if g else ""
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _first_gene_map(protein_ids):
+        """
+        Return {protein_id: gene_name} for the *first* gene per protein (by Gene.position),
+        fetched in a single query. This avoids N+1 when iterating with `.iterator()`.
+        """
+        if not protein_ids:
+            return {}
+        gene_map = {}
+        qs = (
+            Gene.objects
+            .filter(proteins__id__in=protein_ids, species_id=1)
+            .values_list('proteins__id', 'name', 'position')
+            .order_by('proteins__id', 'position')
+        )
+        for prot_id, gene_name, _pos in qs.iterator():
+            if prot_id not in gene_map:
+                gene_map[prot_id] = gene_name or ""
+        return gene_map
+
+    @staticmethod
+    def _rep_structure_pdb_map(state_slug, protein_ids):
+        """
+        Return {protein_id: pdb_code} for the representative structure per receptor/state.
+
+        IMPORTANT: We derive this from `classification.StructureSimilarity`, which already stores
+        the (protein ↔ representative structure) linkage used to build the structure distance
+        matrices for the clustering datasets. This avoids relying on other “representative” flags
+        that may not match the StructureSimilarity build inputs.
+        """
+        if not protein_ids:
+            return {}
+
+        state_obj = ProteinState.objects.only("id").get(slug=state_slug)
+        mapping = {}
+
+        # Ref side
+        qs_ref = (
+            StructureSimilarity.objects
+            .filter(state_id=state_obj.id, protein_ref_id__in=protein_ids)
+            .values_list("protein_ref_id", "structure_ref__pdb_code__index")
+            .distinct()
+        )
+        for prot_id, pdb in qs_ref.iterator():
+            if prot_id not in mapping:
+                mapping[prot_id] = (pdb or "")
+
+        # Target side
+        qs_tgt = (
+            StructureSimilarity.objects
+            .filter(state_id=state_obj.id, protein_target_id__in=protein_ids)
+            .values_list("protein_target_id", "structure_target__pdb_code__index")
+            .distinct()
+        )
+        for prot_id, pdb in qs_tgt.iterator():
+            if prot_id not in mapping:
+                mapping[prot_id] = (pdb or "")
+
+        return mapping
 
     def _get_pf_classification_map_db(self):
         """
@@ -2373,6 +2421,15 @@ class StructureSim(TemplateView):
                 break
             cur = getattr(cur, 'parent', None)
 
+        # Temporary label tweaks (to be removed after DB rebuild)
+        try:
+            if str(clazz).strip().upper() == "OTHER GPCRS":
+                clazz = "Unclassified"
+            if str(receptor_family).strip().upper() == "OTHER GPCR ORPHANS":
+                receptor_family = "Orphan receptor"
+        except Exception:
+            pass
+
         return {
             'Class': clazz,
             'Receptor family': receptor_family,
@@ -2381,165 +2438,131 @@ class StructureSim(TemplateView):
             'Sense': sense,
         }
 
-    def _build_sequence_dataset_db(self, pf_class_map):
+    def _build_sequence_dataset_db(self, pf_class_map, plot_type):
         """
-        Build t-SNE from ReceptorSimilarity. Distance = 100 - similarity.
+        Load persisted coordinates for the sequence dataset from ClusterCoord.
         """
-        qs = ReceptorSimilarity.objects.filter(
-            protein_ref__species_id=1,
-            protein_target__species_id=1,
-        ).values_list('protein_ref_id', 'protein_target_id', 'similarity')
-
-        prot_ids = set()
-        for ref_id, tgt_id, _sim in qs.iterator():
-            prot_ids.add(ref_id)
-            prot_ids.add(tgt_id)
-
-        proteins = list(
-            Protein.objects
-            .filter(id__in=prot_ids)
-            .select_related(
-                'family',
-                'family__parent',
-                'family__parent__parent',
-                'family__parent__parent__parent',
+        rows = (
+            ClusterCoord.objects
+            .filter(
+                dataset_type=ClusterCoord.DATASET_SEQUENCE,
+                plot_type=plot_type,
+                protein__species_id=1,
             )
-            .order_by('entry_name')
+            .select_related(
+                'protein',
+                'protein__family',
+                'protein__family__parent',
+                'protein__family__parent__parent',
+                'protein__family__parent__parent__parent',
+            )
+            .order_by('protein__entry_name')
         )
 
-        n = len(proteins)
-        if n == 0:
-            return {"method": "tsne", "points": [], "n": 0, "error": "No ReceptorSimilarity rows found"}
-
-        idx = {p.id: i for i, p in enumerate(proteins)}
-        D = np.full((n, n), 100.0, dtype=float)
-        np.fill_diagonal(D, 0.0)
-
-        for ref_id, tgt_id, sim in qs.iterator():
-            i = idx.get(ref_id)
-            j = idx.get(tgt_id)
-            if i is None or j is None or i == j:
-                continue
-            try:
-                dist = 100.0 - float(sim)
-            except Exception:
-                continue
-            D[i, j] = dist
-            D[j, i] = dist
-
-        coords = self._compute_tsne(D)
+        # Avoid N+1 for gene lookups: build a single mapping.
+        protein_ids = list(rows.values_list('protein_id', flat=True))
+        gene_map = self._first_gene_map(protein_ids)
 
         points = []
-        for i, p in enumerate(proteins):
-            stem = self._entry_stem(p.entry_name)
+        for r in rows.iterator():
+            p = getattr(r, 'protein', None)
+            stem = self._entry_stem(getattr(p, 'entry_name', None))
+            gene = gene_map.get(getattr(p, 'id', None), "")
+            gtop = (getattr(p, 'name', None) or stem or "")
             ann = self._protein_annotations_db(p, pf_class_map)
             points.append({
-                "label": stem,
+                "label": gtop,
+                "gene": gene,
                 "uniprot": stem,
-                "x": float(coords[i, 0]),
-                "y": float(coords[i, 1]),
+                "x": float(r.x),
+                "y": float(r.y),
                 "cluster": None,
                 "dataset": "sequence",
                 **ann,
             })
 
-        return {"method": "tsne", "points": points, "n": len(points)}
+        method = "tsne" if plot_type == ClusterCoord.PLOT_TSNE else "pca_tsne"
+        return {"method": method, "points": points, "n": len(points)}
 
-    def _build_structure_dataset_db(self, state, pf_class_map):
+    def _build_structure_dataset_db(self, state, pf_class_map, plot_type):
         """
-        Build t-SNE from StructureSimilarity (filtered by state) using raw `distance`.
+        Load persisted coordinates for the structure dataset (active/inactive)
+        from ClusterCoord.
         """
-        qs = (
-            StructureSimilarity.objects
-            .filter(state__slug=state, protein_ref__species_id=1, protein_target__species_id=1)
-            .select_related(
-                'structure_ref__pdb_code',
-                'structure_target__pdb_code',
-                'state',
-                'protein_ref__family',
-                'protein_ref__family__parent',
-                'protein_ref__family__parent__parent',
-                'protein_ref__family__parent__parent__parent',
-                'protein_target__family',
-                'protein_target__family__parent',
-                'protein_target__family__parent__parent',
-                'protein_target__family__parent__parent__parent',
-            )
+        dataset_type = (
+            ClusterCoord.DATASET_STRUCTURE_ACTIVE
+            if state == 'active'
+            else ClusterCoord.DATASET_STRUCTURE_INACTIVE
         )
 
-        struct_meta = {}  # structure_id -> (protein_obj, pdb_index)
-        max_dist = 0.0
-        pairs = []
+        rows = (
+            ClusterCoord.objects
+            .filter(
+                dataset_type=dataset_type,
+                plot_type=plot_type,
+                protein__species_id=1,
+            )
+            .select_related(
+                'protein',
+                'protein__family',
+                'protein__family__parent',
+                'protein__family__parent__parent',
+                'protein__family__parent__parent__parent',
+            )
+            .order_by('protein__entry_name')
+        )
 
-        for r in qs.iterator():
-            # gather max distance for imputation fallback
-            try:
-                d = float(r.distance)
-                if d > max_dist:
-                    max_dist = d
-            except Exception:
-                d = None
-
-            pairs.append((r.structure_ref_id, r.structure_target_id, d))
-
-            if r.structure_ref_id not in struct_meta:
-                pdb = getattr(getattr(r.structure_ref, 'pdb_code', None), 'index', '') if getattr(r, 'structure_ref', None) else ''
-                struct_meta[r.structure_ref_id] = (getattr(r, 'protein_ref', None), pdb)
-            if r.structure_target_id not in struct_meta:
-                pdb = getattr(getattr(r.structure_target, 'pdb_code', None), 'index', '') if getattr(r, 'structure_target', None) else ''
-                struct_meta[r.structure_target_id] = (getattr(r, 'protein_target', None), pdb)
-
-        struct_ids = sorted(struct_meta.keys())
-        n = len(struct_ids)
-        if n == 0:
-            return {"method": "tsne", "points": [], "n": 0, "state": state, "error": "No structure similarity rows found"}
-
-        if max_dist <= 0:
-            max_dist = 1.0
-
-        idx = {sid: i for i, sid in enumerate(struct_ids)}
-        D = np.full((n, n), max_dist, dtype=float)
-        np.fill_diagonal(D, 0.0)
-
-        for sid_ref, sid_tgt, d in pairs:
-            if d is None:
-                continue
-            i = idx.get(sid_ref)
-            j = idx.get(sid_tgt)
-            if i is None or j is None or i == j:
-                continue
-            D[i, j] = d
-            D[j, i] = d
-
-        coords = self._compute_tsne(D)
+        # Avoid N+1 for gene lookups: build a single mapping.
+        protein_ids = list(rows.values_list('protein_id', flat=True))
+        gene_map = self._first_gene_map(protein_ids)
+        pdb_map = self._rep_structure_pdb_map(state, protein_ids)
 
         points = []
-        for i, sid in enumerate(struct_ids):
-            protein, pdb = struct_meta.get(sid, (None, ""))
-            stem = self._entry_stem(getattr(protein, 'entry_name', None))
-            label = f"{stem}_{pdb}" if stem and pdb else (stem or pdb or str(sid))
-            ann = self._protein_annotations_db(protein, pf_class_map)
+        for r in rows.iterator():
+            p = getattr(r, 'protein', None)
+            stem = self._entry_stem(getattr(p, 'entry_name', None))
+            gene = gene_map.get(getattr(p, 'id', None), "")
+            gtop = (getattr(p, 'name', None) or stem or "")
+            pdb = pdb_map.get(getattr(p, 'id', None), "")
+            ann = self._protein_annotations_db(p, pf_class_map)
             points.append({
-                "label": label,
+                "label": gtop,
+                "gene": gene,
                 "uniprot": stem,
-                "x": float(coords[i, 0]),
-                "y": float(coords[i, 1]),
+                "pdb": pdb,
+                "x": float(r.x),
+                "y": float(r.y),
                 "cluster": None,
                 "dataset": f"struct_{state}",
                 **ann,
             })
 
-        return {"method": "tsne", "points": points, "n": len(points), "state": state}
+        method = "tsne" if plot_type == ClusterCoord.PLOT_TSNE else "pca_tsne"
+        return {"method": method, "points": points, "n": len(points), "state": state}
 
-    def _build_payload_db(self):
+    def _build_payload_db(self, plot_type):
         pf_class_map = self._get_pf_classification_map_db()
-        return {
-            "sequence": self._build_sequence_dataset_db(pf_class_map),
+        payload = {
+            "sequence": self._build_sequence_dataset_db(pf_class_map, plot_type),
             "structure": {
-                "inactive": self._build_structure_dataset_db("inactive", pf_class_map),
-                "active": self._build_structure_dataset_db("active", pf_class_map),
+                "inactive": self._build_structure_dataset_db("inactive", pf_class_map, plot_type),
+                "active": self._build_structure_dataset_db("active", pf_class_map, plot_type),
             },
         }
+        # DB-only mode: coordinates must exist; otherwise instruct user to build them.
+        missing = []
+        if not (payload.get("sequence", {}).get("n") or 0):
+            missing.append("sequence")
+        if not (payload.get("structure", {}).get("inactive", {}).get("n") or 0):
+            missing.append("structure_inactive")
+        if not (payload.get("structure", {}).get("active", {}).get("n") or 0):
+            missing.append("structure_active")
+        if missing:
+            raise ValueError(
+                "Missing ClusterCoord datasets: %s (plot_type=%s). Run: python manage.py build_clustercoord"
+                % (", ".join(missing), plot_type)
+            )
+        return payload
 
     def _build_payload(self):
         """
@@ -2548,13 +2571,7 @@ class StructureSim(TemplateView):
           - structure inactive / active t-SNE
         DB-backed payload (no Excel/CSV).
         """
-        cached = cache_alignment.get(self.PAYLOAD_CACHE_KEY)
-        if cached is not None:
-            return cached
-
-        payload = self._build_payload_db()
-        cache_alignment.set(self.PAYLOAD_CACHE_KEY, payload, self.PAYLOAD_CACHE_TIMEOUT)
-        return payload
+        return self._build_payload_db(ClusterCoord.PLOT_TSNE)
 
     # ---------- TemplateView overrides ----------
 
@@ -2570,7 +2587,49 @@ class StructureSim(TemplateView):
         )
         if want_json:
             try:
-                payload = self._build_payload()
+                plots_param = request.GET.get("plots")
+                if plots_param:
+                    plots = []
+                    for raw in str(plots_param).split(","):
+                        p = (raw or "").strip().lower()
+                        if p and p not in plots:
+                            plots.append(p)
+
+                    out = {}
+                    errors = {}
+                    key_to_plot_type = {
+                        "tsne": ClusterCoord.PLOT_TSNE,
+                        "pca": ClusterCoord.PLOT_PCA_TSNE,
+                        "pca_tsne": ClusterCoord.PLOT_PCA_TSNE,
+                        "pca-tsne": ClusterCoord.PLOT_PCA_TSNE,
+                    }
+                    for p in plots:
+                        t0 = time.time()
+                        print(f"[StructureSim] Calculating {p.upper()}…")
+                        try:
+                            plot_type = key_to_plot_type.get(p, ClusterCoord.PLOT_TSNE)
+                            out_key = "tsne" if plot_type == ClusterCoord.PLOT_TSNE else "pca_tsne"
+                            out[out_key] = self._build_payload_db(plot_type)
+                        except Exception as e:
+                            errors[p] = str(e)
+                        finally:
+                            dt = time.time() - t0
+                            print(f"[StructureSim] {p.upper()} done in {dt:.2f}s")
+
+                    payload = {"plots": out}
+                    if errors:
+                        payload["plot_errors"] = errors
+                    return JsonResponse(payload, safe=True)
+
+                plot = (request.GET.get("plot") or "tsne").strip().lower()
+                key_to_plot_type = {
+                    "tsne": ClusterCoord.PLOT_TSNE,
+                    "pca": ClusterCoord.PLOT_PCA_TSNE,
+                    "pca_tsne": ClusterCoord.PLOT_PCA_TSNE,
+                    "pca-tsne": ClusterCoord.PLOT_PCA_TSNE,
+                }
+                plot_type = key_to_plot_type.get(plot, ClusterCoord.PLOT_TSNE)
+                payload = self._build_payload_db(plot_type)
             except Exception as e:
                 return JsonResponse({"error": str(e)}, status=400)
             return JsonResponse(payload, safe=True)

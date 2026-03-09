@@ -154,3 +154,56 @@ class StructureSimilarity(_StructureSimilarityBase):
             models.Index(fields=['distance_normalized'], name='css_distn_idx'),
         ]
 
+
+class ClusterCoord(models.Model):
+    """
+    Persisted 2D coordinates for clustering/embedding plots (e.g. StructureSim).
+
+    One row per (protein, dataset_type, plot_type).
+    """
+
+    DATASET_SEQUENCE = 'sequence'
+    DATASET_STRUCTURE_ACTIVE = 'structure_active'
+    DATASET_STRUCTURE_INACTIVE = 'structure_inactive'
+
+    PLOT_TSNE = 'tsne'
+    PLOT_PCA_TSNE = 'pca_tsne'
+
+    DATASET_CHOICES = (
+        (DATASET_SEQUENCE, 'Sequence'),
+        (DATASET_STRUCTURE_ACTIVE, 'Structure (active)'),
+        (DATASET_STRUCTURE_INACTIVE, 'Structure (inactive)'),
+    )
+
+    PLOT_CHOICES = (
+        (PLOT_TSNE, 't-SNE'),
+        (PLOT_PCA_TSNE, 'PCA→t-SNE'),
+    )
+
+    protein = models.ForeignKey(
+        'protein.Protein',
+        on_delete=models.CASCADE,
+        related_name='+',
+        db_index=True,
+    )
+    dataset_type = models.CharField(max_length=32, choices=DATASET_CHOICES, db_index=True)
+    plot_type = models.CharField(max_length=16, choices=PLOT_CHOICES, default=PLOT_TSNE, db_index=True)
+
+    x = models.FloatField()
+    y = models.FloatField()
+
+    class Meta:
+        db_table = 'classification_clustercoord'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['protein', 'dataset_type', 'plot_type'],
+                name='ccoord_uniq_prot_dataset_plot',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['dataset_type', 'plot_type'], name='ccoord_ds_plot_idx'),
+            models.Index(fields=['protein', 'dataset_type'], name='ccoord_prot_ds_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.protein_id} {self.dataset_type}/{self.plot_type}: ({self.x:.3f}, {self.y:.3f})'
