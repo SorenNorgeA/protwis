@@ -9,7 +9,6 @@ import math
 import time
 
 import numpy as np
-from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
 
@@ -63,13 +62,23 @@ class Command(BaseBuild):
         )
 
     @staticmethod
-    def _compute_tsne(D):
+    def _resolve_perplexity(n, perplexity=None):
+        if n < 2:
+            return 1.0
+        if perplexity is None:
+            perplexity = min(40.0, max(1.0, (n - 1) / 3.0))
+        else:
+            perplexity = float(perplexity)
+        if perplexity >= (n - 1):
+            perplexity = float(max(1, n - 2))
+        return perplexity
+
+    @classmethod
+    def _compute_tsne(cls, D, perplexity=None):
         n = D.shape[0]
         if n < 2:
             return np.zeros((n, 2), dtype=float)
-        perplexity = min(40.0, max(1.0, (n - 1) / 3.0))
-        if perplexity >= (n - 1):
-            perplexity = float(max(1, n - 2))
+        perplexity = cls._resolve_perplexity(n, perplexity=perplexity)
 
         base_kwargs = dict(
             n_components=2,
@@ -85,44 +94,22 @@ class Command(BaseBuild):
         return tsne.fit_transform(D)
 
     @staticmethod
-    def _compute_pca_tsne_from_distance_rows(D):
-        """
-        PCA -> t-SNE on NxN distance matrix rows (each item represented by distances to all others).
-        """
-        n = D.shape[0]
-        if n < 2:
-            return np.zeros((n, 2), dtype=float)
-
-        X = np.asarray(D, dtype=float)
-        X = X - np.mean(X, axis=0, keepdims=True)
-
-        pca_dim = int(min(50, max(2, n - 1), X.shape[1]))
-        Xp = PCA(n_components=pca_dim, svd_solver="randomized", random_state=42).fit_transform(X)
-
-        perplexity = min(40.0, max(1.0, (n - 1) / 3.0))
-        if perplexity >= (n - 1):
-            perplexity = float(max(1, n - 2))
-
-        init_2d = PCA(n_components=2, svd_solver="randomized", random_state=42).fit_transform(Xp)
-        base_kwargs = dict(
-            n_components=2,
-            metric="euclidean",
-            perplexity=perplexity,
-            random_state=42,
-            init=init_2d,
-        )
-        try:
-            tsne = TSNE(learning_rate="auto", **base_kwargs)
-        except TypeError:
-            tsne = TSNE(learning_rate=200.0, **base_kwargs)
-        return tsne.fit_transform(Xp)
-
-    @staticmethod
     def _delete_dataset(model, *, dataset_type, plot_type):
         model.objects.filter(dataset_type=dataset_type, plot_type=plot_type).delete()
 
-    def _build_sequence(self, *, ClusterCoord, ReceptorSimilarity, Protein, batch_size, verbose, dry_run):
-        qs = ReceptorSimilarity.objects.filter(
+    def _build_similarity_dataset(
+        self,
+        *,
+        label,
+        dataset_type,
+        similarity_model,
+        ClusterCoord,
+        Protein,
+        batch_size,
+        verbose,
+        dry_run,
+    ):
+        qs = similarity_model.objects.filter(
             protein_ref__species_id=1,
             protein_target__species_id=1,
         ).values_list('protein_ref_id', 'protein_target_id', 'similarity')
@@ -140,7 +127,7 @@ class Command(BaseBuild):
         )
         n = len(proteins)
         if verbose:
-            print(f"[sequence] proteins: {n}")
+            print(f"[{label}] proteins: {n}")
         if n == 0:
             return 0
 
@@ -161,14 +148,11 @@ class Command(BaseBuild):
             D[j, i] = dist
 
         coords_tsne = self._compute_tsne(D)
-        coords_pca_tsne = self._compute_pca_tsne_from_distance_rows(D)
 
         if dry_run:
             return n
 
-        # Clear both plot types for this dataset
-        self._delete_dataset(ClusterCoord, dataset_type=ClusterCoord.DATASET_SEQUENCE, plot_type=ClusterCoord.PLOT_TSNE)
-        self._delete_dataset(ClusterCoord, dataset_type=ClusterCoord.DATASET_SEQUENCE, plot_type=ClusterCoord.PLOT_PCA_TSNE)
+        self._delete_dataset(ClusterCoord, dataset_type=dataset_type, plot_type=ClusterCoord.PLOT_TSNE)
 
         buffer = []
         total = 0
@@ -182,27 +166,32 @@ class Command(BaseBuild):
             total += len(buffer)
             buffer.clear()
             if verbose:
-                print(f"[sequence] inserted rows: {total}")
+                print(f"[{label}] inserted rows: {total}")
 
         for i, p in enumerate(proteins):
             buffer.append(ClusterCoord(
                 protein_id=p.id,
-                dataset_type=ClusterCoord.DATASET_SEQUENCE,
+                dataset_type=dataset_type,
                 plot_type=ClusterCoord.PLOT_TSNE,
                 x=float(coords_tsne[i, 0]),
                 y=float(coords_tsne[i, 1]),
-            ))
-            buffer.append(ClusterCoord(
-                protein_id=p.id,
-                dataset_type=ClusterCoord.DATASET_SEQUENCE,
-                plot_type=ClusterCoord.PLOT_PCA_TSNE,
-                x=float(coords_pca_tsne[i, 0]),
-                y=float(coords_pca_tsne[i, 1]),
             ))
             if len(buffer) >= batch_size:
                 _flush()
         _flush()
         return total
+
+    def _build_sequence(self, *, ClusterCoord, ReceptorSimilarity, Protein, batch_size, verbose, dry_run):
+        return self._build_similarity_dataset(
+            label="sequence",
+            dataset_type=ClusterCoord.DATASET_SEQUENCE,
+            similarity_model=ReceptorSimilarity,
+            ClusterCoord=ClusterCoord,
+            Protein=Protein,
+            batch_size=batch_size,
+            verbose=verbose,
+            dry_run=dry_run,
+        )
 
     def _build_structure_state(self, state_slug, *, ClusterCoord, StructureSimilarity, ProteinState, Protein, batch_size, verbose, dry_run):
         state_obj = ProteinState.objects.only('id').get(slug=state_slug)
@@ -267,7 +256,6 @@ class Command(BaseBuild):
             D[j, i] = dist
 
         coords_tsne = self._compute_tsne(D)
-        coords_pca_tsne = self._compute_pca_tsne_from_distance_rows(D)
 
         if dry_run:
             return n
@@ -277,9 +265,7 @@ class Command(BaseBuild):
             if state_slug == 'active'
             else ClusterCoord.DATASET_STRUCTURE_INACTIVE
         )
-        # Clear both plot types for this dataset
         self._delete_dataset(ClusterCoord, dataset_type=dataset_type, plot_type=ClusterCoord.PLOT_TSNE)
-        self._delete_dataset(ClusterCoord, dataset_type=dataset_type, plot_type=ClusterCoord.PLOT_PCA_TSNE)
 
         buffer = []
         total = 0
@@ -302,13 +288,6 @@ class Command(BaseBuild):
                 plot_type=ClusterCoord.PLOT_TSNE,
                 x=float(coords_tsne[i, 0]),
                 y=float(coords_tsne[i, 1]),
-            ))
-            buffer.append(ClusterCoord(
-                protein_id=p.id,
-                dataset_type=dataset_type,
-                plot_type=ClusterCoord.PLOT_PCA_TSNE,
-                x=float(coords_pca_tsne[i, 0]),
-                y=float(coords_pca_tsne[i, 1]),
             ))
             if len(buffer) >= batch_size:
                 _flush()
@@ -339,7 +318,7 @@ class Command(BaseBuild):
                 print("[clustercoord] clearing classification_clustercoord …")
             ClusterCoord.objects.all().delete()
 
-        # Always rebuild sequence on each run (independent of --state)
+        # Always rebuild sequence datasets on each run (independent of --state)
         seq_n = self._build_sequence(
             ClusterCoord=ClusterCoord,
             ReceptorSimilarity=ReceptorSimilarity,

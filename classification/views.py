@@ -20,8 +20,10 @@ from string import Template
 
 import numpy as np
 import pandas as pd
+import scipy.cluster.hierarchy as sch
+import scipy.spatial.distance as ssd
 from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
+from sklearn.manifold import MDS, TSNE
 
 
 try:
@@ -1242,9 +1244,7 @@ class ClassificationWheel(TemplateView):
 
         return context
 
-class CrossClassSimilarity(TemplateView):
-    template_name = 'classification/CrossClassSimilarity.html'
-
+class ClassSimilarityDataMixin:
     # Core fixed classes (original order)
     CLASS_ORDER = [
         "Class A (Rhodopsin)",
@@ -1268,6 +1268,390 @@ class CrossClassSimilarity(TemplateView):
         "Class O2 (tetrapod specific)": "008",
         "Class T2 (Taste 2)": "009",
     }
+
+    CLASS_SYMBOL_BY_NAME = {
+        "Class A (Rhodopsin)": "A",
+        "Class B1 (Secretin)": "B1",
+        "Class B2 (Adhesion)": "B2",
+        "Class C (Glutamate)": "C",
+        "Class F (Frizzled)": "F",
+        "Class O1 (fish-like)": "O1",
+        "Class O2 (tetrapod specific)": "O2",
+        "Class T2 (Taste 2)": "T2",
+    }
+
+    CLASS_COLOR_BY_SYMBOL = {
+        "A": "#1f78b4",
+        "B1": "#33a02c",
+        "B2": "#6A3D9A",
+        "C": "#d62728",
+        "F": "#FF7F0E",
+        "O1": "#17becf",
+        "O2": "#bc80bd",
+        "T2": "#F7B6D2",
+    }
+
+    SUMMARY_VARIANTS = OrderedDict([
+        ("max", "Max similarity"),
+        ("top10_mean", "Top-10 mean similarity"),
+        ("mean", "Mean similarity"),
+        ("median", "Median similarity"),
+    ])
+
+    def _resolve_family_ids(self, slug_codes):
+        qs = ProteinFamily.objects.filter(slug__in=slug_codes).only('id', 'slug', 'name')
+        return {f.slug: f.id for f in qs}
+
+    @staticmethod
+    def _pair_summary_similarity(similarities, summary_key):
+        values = []
+        for score in similarities or []:
+            try:
+                values.append(float(score))
+            except Exception:
+                continue
+        if not values:
+            return None
+        values = sorted(values, reverse=True)
+        if summary_key == "mean":
+            return float(sum(values) / len(values))
+        if summary_key == "median":
+            return float(np.median(values))
+        if summary_key == "top10_mean":
+            subset = values[:min(10, len(values))]
+            return float(sum(subset) / len(subset))
+        return float(values[0])
+
+    def _build_class_only_similarity_data(self):
+        code_to_famid = self._resolve_family_ids(list(self.CLASS_CODE_BY_NAME.values()))
+        classes = []
+        for display_name in self.CLASS_ORDER:
+            slug_code = self.CLASS_CODE_BY_NAME.get(display_name)
+            family_id = code_to_famid.get(slug_code)
+            if not family_id:
+                continue
+            symbol = self.CLASS_SYMBOL_BY_NAME.get(display_name, display_name)
+            classes.append({
+                "name": display_name,
+                "symbol": symbol,
+                "slug": slug_code,
+                "family_id": family_id,
+                "color": self.CLASS_COLOR_BY_SYMBOL.get(symbol, "#808080"),
+            })
+
+        allowed_class_ids = [row["family_id"] for row in classes]
+        pair_scores = defaultdict(list)
+        pair_qs = (
+            ReceptorSimilarity.objects
+            .filter(ref_class_id__in=allowed_class_ids, target_class_id__in=allowed_class_ids)
+            .annotate(
+                pair_a=Least('ref_class_id', 'target_class_id'),
+                pair_b=Greatest('ref_class_id', 'target_class_id'),
+            )
+            .values_list('pair_a', 'pair_b', 'similarity')
+        )
+        for pair_a, pair_b, similarity in pair_qs.iterator():
+            if not pair_a or not pair_b or pair_a == pair_b:
+                continue
+            pair_scores[(pair_a, pair_b)].append(similarity)
+
+        n_classes = len(classes)
+        variants = OrderedDict()
+        for summary_key, summary_label in self.SUMMARY_VARIANTS.items():
+            similarity_matrix = [[100.0 if i == j else None for j in range(n_classes)] for i in range(n_classes)]
+            distance_matrix = np.full((n_classes, n_classes), np.nan, dtype=float)
+            np.fill_diagonal(distance_matrix, 0.0)
+
+            seen_distances = []
+            for i in range(n_classes):
+                for j in range(i + 1, n_classes):
+                    pair_key = (min(classes[i]["family_id"], classes[j]["family_id"]), max(classes[i]["family_id"], classes[j]["family_id"]))
+                    similarity = self._pair_summary_similarity(pair_scores.get(pair_key), summary_key)
+                    if similarity is None:
+                        continue
+
+                    distance = max(0.0, 100.0 - similarity)
+                    similarity_matrix[i][j] = similarity
+                    similarity_matrix[j][i] = similarity
+                    distance_matrix[i, j] = distance
+                    distance_matrix[j, i] = distance
+                    seen_distances.append(distance)
+
+            fill_distance = float(max(seen_distances)) if seen_distances else 100.0
+
+            missing_pairs = 0
+            for i in range(n_classes):
+                for j in range(i + 1, n_classes):
+                    if np.isnan(distance_matrix[i, j]):
+                        distance_matrix[i, j] = fill_distance
+                        distance_matrix[j, i] = fill_distance
+                        missing_pairs += 1
+
+            matrix_rows = []
+            for i, class_row in enumerate(classes):
+                row_values = []
+                for j, other_row in enumerate(classes):
+                    similarity = similarity_matrix[i][j]
+                    distance = float(distance_matrix[i, j])
+                    row_values.append({
+                        "source": class_row["symbol"],
+                        "target": other_row["symbol"],
+                        "similarity": float(similarity) if similarity is not None else None,
+                        "distance": distance,
+                    })
+                matrix_rows.append(row_values)
+
+            variants[summary_key] = {
+                "key": summary_key,
+                "label": summary_label,
+                "matrix": matrix_rows,
+                "distance_matrix": distance_matrix,
+                "missing_pairs": missing_pairs,
+                "fill_distance": fill_distance,
+            }
+
+        return {
+            "classes": classes,
+            "variants": variants,
+            "default_variant": "max",
+        }
+
+    @staticmethod
+    def _manual_tsne_fallback(distance_matrix):
+        n_items = int(distance_matrix.shape[0])
+        if n_items <= 0:
+            return np.zeros((0, 2), dtype=float)
+        if n_items == 1:
+            return np.array([[0.0, 0.0]], dtype=float)
+        angles = np.linspace(0.0, 2.0 * math.pi, num=n_items, endpoint=False)
+        return np.column_stack((np.cos(angles), np.sin(angles)))
+
+    def _compute_tsne_coords(self, distance_matrix):
+        try:
+            perplexity = max(1.0, min(3.0, float(distance_matrix.shape[0] - 1) - 1e-3))
+            tsne = TSNE(
+                n_components=2,
+                metric="precomputed",
+                perplexity=perplexity,
+                random_state=42,
+                init="random",
+                learning_rate="auto",
+                square_distances=True,
+            )
+            return tsne.fit_transform(distance_matrix)
+        except Exception:
+            return self._manual_tsne_fallback(distance_matrix)
+
+    def _compute_mds_coords(self, distance_matrix, metric=True):
+        try:
+            mds = MDS(
+                n_components=2,
+                metric=metric,
+                dissimilarity="precomputed",
+                random_state=42,
+                normalized_stress="auto",
+            )
+            return mds.fit_transform(distance_matrix)
+        except Exception:
+            return self._manual_tsne_fallback(distance_matrix)
+
+    def _compute_pca_coords(self, distance_matrix):
+        try:
+            pca = PCA(n_components=2, random_state=42)
+            return pca.fit_transform(distance_matrix)
+        except Exception:
+            return self._manual_tsne_fallback(distance_matrix)
+
+    def _compute_pcoa_coords(self, distance_matrix):
+        try:
+            n_items = int(distance_matrix.shape[0])
+            if n_items <= 1:
+                return self._manual_tsne_fallback(distance_matrix)
+            squared = np.square(distance_matrix)
+            center = np.eye(n_items) - np.ones((n_items, n_items)) / float(n_items)
+            gram = -0.5 * center.dot(squared).dot(center)
+            eigvals, eigvecs = np.linalg.eigh(gram)
+            order = np.argsort(eigvals)[::-1]
+            eigvals = eigvals[order]
+            eigvecs = eigvecs[:, order]
+            positive = eigvals > 1e-12
+            if not np.any(positive):
+                return self._manual_tsne_fallback(distance_matrix)
+            eigvals = eigvals[positive][:2]
+            eigvecs = eigvecs[:, positive][:, :2]
+            coords = eigvecs * np.sqrt(eigvals)
+            if coords.shape[1] < 2:
+                coords = np.pad(coords, ((0, 0), (0, 2 - coords.shape[1])), mode='constant')
+            return coords
+        except Exception:
+            return self._manual_tsne_fallback(distance_matrix)
+
+    def _build_projection_points(self, classes, coords):
+        points = []
+        for idx, class_row in enumerate(classes):
+            points.append({
+                "id": idx,
+                "symbol": class_row["symbol"],
+                "label": class_row["name"],
+                "color": class_row["color"],
+                "x": float(coords[idx, 0]),
+                "y": float(coords[idx, 1]),
+            })
+        return points
+
+    def _build_scatter_methods(self, classes, distance_matrix):
+        return OrderedDict([
+            ("tsne", {
+                "label": "t-SNE",
+                "points": self._build_projection_points(classes, self._compute_tsne_coords(distance_matrix)),
+            }),
+            ("mds", {
+                "label": "MDS",
+                "points": self._build_projection_points(classes, self._compute_mds_coords(distance_matrix, metric=True)),
+            }),
+            ("mds_nonmetric", {
+                "label": "Non-metric MDS",
+                "points": self._build_projection_points(classes, self._compute_mds_coords(distance_matrix, metric=False)),
+            }),
+            ("pcoa", {
+                "label": "PCoA",
+                "points": self._build_projection_points(classes, self._compute_pcoa_coords(distance_matrix)),
+            }),
+            ("pca", {
+                "label": "PCA",
+                "points": self._build_projection_points(classes, self._compute_pca_coords(distance_matrix)),
+            }),
+        ])
+
+    def _linkage_to_newick(self, node, newick, parentdist, leaf_names):
+        """Convert scipy linkage tree to Newick format (like contactnetwork getNewick)."""
+        if node.is_leaf():
+            return "%s:%.4f%s" % (leaf_names[node.id], parentdist - node.dist, newick)
+        else:
+            branch_len = parentdist - node.dist
+            if len(newick) > 0:
+                newick = ")0:%.4f%s" % (branch_len, newick)
+            else:
+                newick = ");"
+            newick = self._linkage_to_newick(node.get_left(), newick, node.dist, leaf_names)
+            newick = self._linkage_to_newick(node.get_right(), ",%s" % (newick), node.dist, leaf_names)
+            newick = "(%s" % (newick)
+            return newick
+
+    def _build_class_cluster_tree_payload(self):
+        class_data = self._build_class_only_similarity_data()
+        classes = class_data["classes"]
+        n_classes = len(classes)
+        variants = OrderedDict()
+
+        if n_classes < 2:
+            points = []
+            for idx, class_row in enumerate(classes):
+                points.append({
+                    "id": idx,
+                    "symbol": class_row["symbol"],
+                    "label": class_row["name"],
+                    "color": class_row["color"],
+                    "x": 0.0,
+                    "y": 0.0,
+                })
+            base_scatter = OrderedDict([
+                ("tsne", {"label": "t-SNE", "points": points}),
+                ("mds", {"label": "MDS", "points": points}),
+                ("mds_nonmetric", {"label": "Non-metric MDS", "points": points}),
+                ("pcoa", {"label": "PCoA", "points": points}),
+                ("pca", {"label": "PCA", "points": points}),
+            ])
+            for variant_key, variant_data in class_data["variants"].items():
+                variants[variant_key] = {
+                    "key": variant_key,
+                    "label": variant_data["label"],
+                    "scatter": {
+                        "default_method": "tsne",
+                        "methods": base_scatter,
+                    },
+                    "tree": {
+                        "segments": [],
+                        "leaf_positions": [],
+                        "newick": "",
+                        "max_distance": 0.0,
+                        "linkage_method": "average",
+                    },
+                    "matrix": variant_data["matrix"],
+                    "meta": {
+                        "n_classes": n_classes,
+                        "missing_pairs": variant_data["missing_pairs"],
+                        "fill_distance": variant_data["fill_distance"],
+                        "summary_label": variant_data["label"],
+                    },
+                }
+            return {
+                "classes": classes,
+                "default_variant": class_data["default_variant"],
+                "variants": variants,
+            }
+
+        for variant_key, variant_data in class_data["variants"].items():
+            distance_matrix = np.array(variant_data["distance_matrix"], dtype=float)
+            scatter_methods = self._build_scatter_methods(classes, distance_matrix)
+
+            condensed = ssd.squareform(distance_matrix, checks=False)
+            linkage = sch.linkage(condensed, method='average')
+            dendro = sch.dendrogram(
+                linkage,
+                labels=[row["symbol"] for row in classes],
+                no_plot=True,
+            )
+
+            segments = []
+            for xs, ys in zip(dendro.get("dcoord", []), dendro.get("icoord", [])):
+                segments.append({
+                    "x": [float(x) for x in xs],
+                    "y": [float(y) for y in ys],
+                })
+
+            leaf_positions = []
+            for idx, symbol in enumerate(dendro.get("ivl", [])):
+                leaf_positions.append({
+                    "symbol": symbol,
+                    "y": float(5 + 10 * idx),
+                })
+
+            tree_obj = sch.to_tree(linkage, False)
+            tree_newick = self._linkage_to_newick(tree_obj, "", tree_obj.dist, [row["symbol"] for row in classes])
+
+            variants[variant_key] = {
+                "key": variant_key,
+                "label": variant_data["label"],
+                "scatter": {
+                    "default_method": "tsne",
+                    "methods": scatter_methods,
+                },
+                "tree": {
+                    "segments": segments,
+                    "leaf_positions": leaf_positions,
+                    "newick": tree_newick,
+                    "max_distance": float(np.max(dendro.get("dcoord", [0.0])) if dendro.get("dcoord") else 0.0),
+                    "linkage_method": "average",
+                },
+                "matrix": variant_data["matrix"],
+                "meta": {
+                    "n_classes": n_classes,
+                    "missing_pairs": variant_data["missing_pairs"],
+                    "fill_distance": variant_data["fill_distance"],
+                    "summary_label": variant_data["label"],
+                },
+            }
+
+        return {
+            "classes": classes,
+            "default_variant": class_data["default_variant"],
+            "variants": variants,
+        }
+
+
+class CrossClassSimilarity(ClassSimilarityDataMixin, TemplateView):
+    template_name = 'classification/CrossClassSimilarity.html'
 
     # Five single-protein “Classless” items as separate groups (display order)
     SINGLE_PROTEIN_LABELS = ["GPR107", "GPR137", "TPRA1", "GPR143", "GPR157"]
@@ -1319,10 +1703,6 @@ class CrossClassSimilarity(TemplateView):
         }
 
     # ---- resolvers
-    def _resolve_family_ids(self, slug_codes):
-        qs = ProteinFamily.objects.filter(slug__in=slug_codes).only('id', 'slug', 'name')
-        return {f.slug: f.id for f in qs}
-
     def _fetch_by_entry_names(self, entry_names_lower):
         if not entry_names_lower:
             return {}
@@ -1706,6 +2086,30 @@ class CrossClassSimilarity(TemplateView):
         context["classes"] = [g["display"] for g in groups]
         context["matrix_json"] = json.dumps(matrix)
         return context
+
+
+class NewClassClusterTree(ClassSimilarityDataMixin, TemplateView):
+    template_name = 'classification/NewClassClusterTree.html'
+
+    def get(self, request, *args, **kwargs):
+        want_json = (
+            request.GET.get('format') == 'json'
+            or request.GET.get('data') == '1'
+            or 'application/json' in request.headers.get('Accept', '')
+        )
+        if want_json:
+            try:
+                payload = self._build_class_cluster_tree_payload()
+            except Exception as e:
+                return JsonResponse({"error": str(e)}, status=400)
+            return JsonResponse(payload, safe=True)
+        return super(NewClassClusterTree, self).get(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        ctx = super(NewClassClusterTree, self).get_context_data(**kwargs)
+        base = self.request.build_absolute_uri(self.request.path)
+        ctx['embed_url'] = "%s?format=json" % base
+        return ctx
 
 
 # ----------------------------- Shared helpers ------------------------------
@@ -2269,6 +2673,32 @@ class StructureSim(TemplateView):
     # -------------------------- DB-backed embedding + annotations --------------------------
 
     @staticmethod
+    def _sequence_only_plot_types():
+        return {
+            ClusterCoord.PLOT_TSNE_P60,
+            ClusterCoord.PLOT_TSNE_P80,
+            ClusterCoord.PLOT_TSNE_P100,
+        }
+
+    @classmethod
+    def _is_sequence_only_plot_type(cls, plot_type):
+        return plot_type in cls._sequence_only_plot_types()
+
+    @staticmethod
+    def _plot_method_key(plot_type):
+        return plot_type
+
+    @staticmethod
+    def _neighbor_dataset_types():
+        return {
+            ClusterCoord.DATASET_SEQUENCE,
+        }
+
+    @staticmethod
+    def _neighbor_similarity_model(dataset_type):
+        return ReceptorSimilarity
+
+    @staticmethod
     def _entry_stem(entry_name):
         if not entry_name:
             return ""
@@ -2315,6 +2745,146 @@ class StructureSim(TemplateView):
             if prot_id not in gene_map:
                 gene_map[prot_id] = gene_name or ""
         return gene_map
+
+    def _build_similarity_context(self, protein_ids, similarity_model, top_n=10):
+        """
+        Return sequence similarity context for StructureSim:
+          - top-neighbor rows per protein
+        """
+        protein_ids = [int(pid) for pid in protein_ids if pid]
+        if not protein_ids:
+            return {
+                "top_neighbors": {},
+            }
+
+        ref_ids = set(protein_ids)
+        rows_by_ref = defaultdict(list)
+        related_ids = set(ref_ids)
+
+        pair_qs = (
+            similarity_model.objects
+            .filter(
+                protein_ref_id__in=ref_ids,
+                protein_target_id__in=ref_ids,
+                protein_ref__species_id=1,
+                protein_target__species_id=1,
+            )
+            .values('protein_ref_id', 'protein_target_id', 'similarity', 'identity')
+        )
+
+        for rec in pair_qs.iterator():
+            a = rec.get('protein_ref_id')
+            b = rec.get('protein_target_id')
+            if not a or not b or a == b:
+                continue
+            related_ids.add(a)
+            related_ids.add(b)
+            try:
+                sim = float(rec.get('similarity'))
+            except Exception:
+                continue
+            try:
+                identity = float(rec.get('identity'))
+            except Exception:
+                identity = 0.0
+
+            rows_by_ref[a].append({
+                'other_id': b,
+                'similarity': sim,
+                'identity': identity,
+            })
+            rows_by_ref[b].append({
+                'other_id': a,
+                'similarity': sim,
+                'identity': identity,
+            })
+
+        if not rows_by_ref:
+            return {
+                "top_neighbors": {pid: [] for pid in protein_ids},
+            }
+
+        proteins = (
+            Protein.objects
+            .filter(id__in=related_ids)
+            .select_related('family__parent__parent__parent')
+        )
+        protein_map = {p.id: p for p in proteins}
+        gene_map = self._first_gene_map(related_ids)
+
+        LT_ORPHAN = 'Orphan receptors'
+
+        def is_orphan(pid):
+            p = protein_map.get(pid)
+            if not p:
+                return False
+            try:
+                ligand_type = getattr(getattr(getattr(p, 'family', None), 'parent', None), 'parent', None)
+                ligand_type_name = getattr(ligand_type, 'name', '') or ''
+            except Exception:
+                ligand_type_name = ''
+            return ligand_type_name.strip().lower() == LT_ORPHAN.lower()
+
+        def sort_key(row):
+            try:
+                sim = float(row.get('similarity') or 0)
+            except Exception:
+                sim = 0.0
+            try:
+                identity = float(row.get('identity') or 0)
+            except Exception:
+                identity = 0.0
+            other_id = row.get('other_id')
+            op = protein_map.get(other_id)
+            label = (getattr(op, 'name', None) or getattr(op, 'entry_name', None) or '')
+            return (-sim, -identity, str(label).lower())
+
+        neighbor_map = {}
+        for ref_id in protein_ids:
+            rows = sorted(rows_by_ref.get(ref_id, []), key=sort_key)
+            if not rows:
+                neighbor_map[ref_id] = []
+                continue
+
+            liganded_rows = [row for row in rows if not is_orphan(row.get('other_id'))]
+            if liganded_rows:
+                cutoff_idx = min(top_n - 1, len(liganded_rows) - 1)
+                cutoff = liganded_rows[cutoff_idx].get('similarity')
+            else:
+                cutoff_idx = min(top_n - 1, len(rows) - 1)
+                cutoff = rows[cutoff_idx].get('similarity')
+
+            kept = [row for row in rows if row.get('similarity') >= cutoff]
+            out = []
+            for row in kept:
+                other_id = row.get('other_id')
+                op = protein_map.get(other_id)
+                if not op:
+                    continue
+                stem = self._entry_stem(getattr(op, 'entry_name', None))
+                out.append({
+                    'id': other_id,
+                    'label': (getattr(op, 'name', None) or stem or ''),
+                    'gene': gene_map.get(other_id, ''),
+                    'uniprot': stem,
+                    'receptor_family': (
+                        getattr(getattr(op, 'family', None), 'parent', None).name
+                        if getattr(getattr(op, 'family', None), 'parent', None)
+                        else ''
+                    ),
+                    'class_name': (
+                        getattr(getattr(getattr(getattr(op, 'family', None), 'parent', None), 'parent', None), 'parent', None).name
+                        if getattr(getattr(getattr(getattr(op, 'family', None), 'parent', None), 'parent', None), 'parent', None)
+                        else ''
+                    ),
+                    'similarity': row.get('similarity') or 0,
+                    'identity': row.get('identity') or 0,
+                })
+            neighbor_map[ref_id] = out
+
+        return {
+            "top_neighbors": neighbor_map,
+        }
 
     @staticmethod
     def _rep_structure_pdb_map(state_slug, protein_ids):
@@ -2442,10 +3012,21 @@ class StructureSim(TemplateView):
         """
         Load persisted coordinates for the sequence dataset from ClusterCoord.
         """
+        return self._build_clustercoord_sequence_dataset_db(
+            pf_class_map=pf_class_map,
+            plot_type=plot_type,
+            dataset_type=ClusterCoord.DATASET_SEQUENCE,
+            point_dataset="sequence",
+        )
+
+    def _build_clustercoord_sequence_dataset_db(self, pf_class_map, plot_type, dataset_type, point_dataset):
+        """
+        Shared loader for sequence-like datasets stored in ClusterCoord.
+        """
         rows = (
             ClusterCoord.objects
             .filter(
-                dataset_type=ClusterCoord.DATASET_SEQUENCE,
+                dataset_type=dataset_type,
                 plot_type=plot_type,
                 protein__species_id=1,
             )
@@ -2462,6 +3043,12 @@ class StructureSim(TemplateView):
         # Avoid N+1 for gene lookups: build a single mapping.
         protein_ids = list(rows.values_list('protein_id', flat=True))
         gene_map = self._first_gene_map(protein_ids)
+        neighbor_context = {
+            "top_neighbors": {},
+        }
+        if dataset_type in self._neighbor_dataset_types():
+            similarity_model = self._neighbor_similarity_model(dataset_type)
+            neighbor_context = self._build_similarity_context(protein_ids, similarity_model)
 
         points = []
         for r in rows.iterator():
@@ -2471,18 +3058,26 @@ class StructureSim(TemplateView):
             gtop = (getattr(p, 'name', None) or stem or "")
             ann = self._protein_annotations_db(p, pf_class_map)
             points.append({
+                "id": getattr(p, 'id', None),
                 "label": gtop,
                 "gene": gene,
                 "uniprot": stem,
+                "entry_name": getattr(p, 'entry_name', None) or "",
+                "accession": getattr(p, 'accession', None) or "",
                 "x": float(r.x),
                 "y": float(r.y),
                 "cluster": None,
-                "dataset": "sequence",
+                "dataset": point_dataset,
+                "top_neighbors": neighbor_context["top_neighbors"].get(getattr(p, 'id', None), []),
                 **ann,
             })
 
-        method = "tsne" if plot_type == ClusterCoord.PLOT_TSNE else "pca_tsne"
-        return {"method": method, "points": points, "n": len(points)}
+        method = self._plot_method_key(plot_type)
+        return {
+            "method": method,
+            "points": points,
+            "n": len(points),
+        }
 
     def _build_structure_dataset_db(self, state, pf_class_map, plot_type):
         """
@@ -2526,9 +3121,12 @@ class StructureSim(TemplateView):
             pdb = pdb_map.get(getattr(p, 'id', None), "")
             ann = self._protein_annotations_db(p, pf_class_map)
             points.append({
+                "id": getattr(p, 'id', None),
                 "label": gtop,
                 "gene": gene,
                 "uniprot": stem,
+                "entry_name": getattr(p, 'entry_name', None) or "",
+                "accession": getattr(p, 'accession', None) or "",
                 "pdb": pdb,
                 "x": float(r.x),
                 "y": float(r.y),
@@ -2537,7 +3135,7 @@ class StructureSim(TemplateView):
                 **ann,
             })
 
-        method = "tsne" if plot_type == ClusterCoord.PLOT_TSNE else "pca_tsne"
+        method = self._plot_method_key(plot_type)
         return {"method": method, "points": points, "n": len(points), "state": state}
 
     def _build_payload_db(self, plot_type):
@@ -2545,17 +3143,25 @@ class StructureSim(TemplateView):
         payload = {
             "sequence": self._build_sequence_dataset_db(pf_class_map, plot_type),
             "structure": {
-                "inactive": self._build_structure_dataset_db("inactive", pf_class_map, plot_type),
-                "active": self._build_structure_dataset_db("active", pf_class_map, plot_type),
+                "inactive": (
+                    {"method": self._plot_method_key(plot_type), "points": [], "n": 0, "state": "inactive"}
+                    if self._is_sequence_only_plot_type(plot_type)
+                    else self._build_structure_dataset_db("inactive", pf_class_map, plot_type)
+                ),
+                "active": (
+                    {"method": self._plot_method_key(plot_type), "points": [], "n": 0, "state": "active"}
+                    if self._is_sequence_only_plot_type(plot_type)
+                    else self._build_structure_dataset_db("active", pf_class_map, plot_type)
+                ),
             },
         }
         # DB-only mode: coordinates must exist; otherwise instruct user to build them.
         missing = []
         if not (payload.get("sequence", {}).get("n") or 0):
             missing.append("sequence")
-        if not (payload.get("structure", {}).get("inactive", {}).get("n") or 0):
+        if (not self._is_sequence_only_plot_type(plot_type)) and not (payload.get("structure", {}).get("inactive", {}).get("n") or 0):
             missing.append("structure_inactive")
-        if not (payload.get("structure", {}).get("active", {}).get("n") or 0):
+        if (not self._is_sequence_only_plot_type(plot_type)) and not (payload.get("structure", {}).get("active", {}).get("n") or 0):
             missing.append("structure_active")
         if missing:
             raise ValueError(
@@ -2599,6 +3205,15 @@ class StructureSim(TemplateView):
                     errors = {}
                     key_to_plot_type = {
                         "tsne": ClusterCoord.PLOT_TSNE,
+                        "tsne_p60": ClusterCoord.PLOT_TSNE_P60,
+                        "tsne-p60": ClusterCoord.PLOT_TSNE_P60,
+                        "p60": ClusterCoord.PLOT_TSNE_P60,
+                        "tsne_p80": ClusterCoord.PLOT_TSNE_P80,
+                        "tsne-p80": ClusterCoord.PLOT_TSNE_P80,
+                        "p80": ClusterCoord.PLOT_TSNE_P80,
+                        "tsne_p100": ClusterCoord.PLOT_TSNE_P100,
+                        "tsne-p100": ClusterCoord.PLOT_TSNE_P100,
+                        "p100": ClusterCoord.PLOT_TSNE_P100,
                         "pca": ClusterCoord.PLOT_PCA_TSNE,
                         "pca_tsne": ClusterCoord.PLOT_PCA_TSNE,
                         "pca-tsne": ClusterCoord.PLOT_PCA_TSNE,
@@ -2608,7 +3223,7 @@ class StructureSim(TemplateView):
                         print(f"[StructureSim] Calculating {p.upper()}…")
                         try:
                             plot_type = key_to_plot_type.get(p, ClusterCoord.PLOT_TSNE)
-                            out_key = "tsne" if plot_type == ClusterCoord.PLOT_TSNE else "pca_tsne"
+                            out_key = plot_type
                             out[out_key] = self._build_payload_db(plot_type)
                         except Exception as e:
                             errors[p] = str(e)
@@ -2624,6 +3239,15 @@ class StructureSim(TemplateView):
                 plot = (request.GET.get("plot") or "tsne").strip().lower()
                 key_to_plot_type = {
                     "tsne": ClusterCoord.PLOT_TSNE,
+                    "tsne_p60": ClusterCoord.PLOT_TSNE_P60,
+                    "tsne-p60": ClusterCoord.PLOT_TSNE_P60,
+                    "p60": ClusterCoord.PLOT_TSNE_P60,
+                    "tsne_p80": ClusterCoord.PLOT_TSNE_P80,
+                    "tsne-p80": ClusterCoord.PLOT_TSNE_P80,
+                    "p80": ClusterCoord.PLOT_TSNE_P80,
+                    "tsne_p100": ClusterCoord.PLOT_TSNE_P100,
+                    "tsne-p100": ClusterCoord.PLOT_TSNE_P100,
+                    "p100": ClusterCoord.PLOT_TSNE_P100,
                     "pca": ClusterCoord.PLOT_PCA_TSNE,
                     "pca_tsne": ClusterCoord.PLOT_PCA_TSNE,
                     "pca-tsne": ClusterCoord.PLOT_PCA_TSNE,

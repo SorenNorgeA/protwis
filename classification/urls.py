@@ -22,6 +22,7 @@ urlpatterns = [
     url(r'^StructureSim[/]?$', views.StructureSim.as_view(), name='classification-structuresim'),
     url(r'^Classification_tree[/]?$', views.Classification_tree.as_view(), name='classification-tree'),
     url(r'^CrossClassSimilarity[/]?$', views.CrossClassSimilarity.as_view(), name='classification-crossclass'),
+    url(r'^NewClassClusterTree[/]?$', views.NewClassClusterTree.as_view(), name='classification-newclassclustertree'),
 
     # Backwards-compatible aliases (old URL shape)
     url(
@@ -47,6 +48,10 @@ urlpatterns = [
     url(
         r'^class_similarity/CrossClassSimilarity[/]?$',
         RedirectView.as_view(url='/classification/CrossClassSimilarity', permanent=False),
+    ),
+    url(
+        r'^class_similarity/NewClassClusterTree[/]?$',
+        RedirectView.as_view(url='/classification/NewClassClusterTree', permanent=False),
     ),
 ]
 

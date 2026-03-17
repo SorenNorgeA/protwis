@@ -23,7 +23,7 @@
         <li><strong>Structure datasets</strong>: include <strong>representative structures only</strong> (active/inactive sets).</li>
         <li><strong>Colour by</strong>: recolours points by Class/Chemotype/Receptor family/Modality/Sense.</li>
         <li><strong>Shape by</strong>: toggles marker shapes (None/Class). Note: choosing <strong>Colour by = Class</strong> forces <strong>Shape by = None</strong>; any other colour setting forces <strong>Shape by = Class</strong>.</li>
-        <li><strong>Hover</strong> any point to see details (e.g., label and UniProt).</li>
+        <li><strong>Click</strong> any point to see details in the left-side panel.</li>
         <li><strong>Legend</strong>: click legend items to exclude/include groups in the plot.</li>
       </ul>
     </div>
@@ -49,17 +49,6 @@
         <button type="button" class="btn btn-primary btn-block ss-dataset-opt" data-dataset="sequence">Sequence</button>
         <button type="button" class="btn btn-outline-primary btn-block ss-dataset-opt" data-dataset="inactive">Inactive structures</button>
         <button type="button" class="btn btn-outline-primary btn-block ss-dataset-opt" data-dataset="active">Active structures</button>
-      </div>
-    </div>
-
-    <!-- Method (plot type) -->
-    <div class="dropdown">
-      <button id="ssMethodDropdownBtn" class="btn btn-primary btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
-        Method <span class="caret"></span>
-      </button>
-      <div class="dropdown-menu" style="min-width: 200px;">
-        <button type="button" class="btn btn-outline-primary btn-block ss-method-opt" data-plot="tsne">t-SNE (precomputed)</button>
-        <button type="button" class="btn btn-outline-primary btn-block ss-method-opt" data-plot="pca_tsne">PCA → t-SNE</button>
       </div>
     </div>
 
@@ -118,17 +107,21 @@
       </div>
     </div>
 
+    <!-- Table on hover (sequence only) -->
+    <button id="ssTableOnHoverBtn" type="button" class="btn btn-outline-primary btn-sm" style="display:none;" title="Show similarity table when hovering over datapoints">
+      Table on hover
+    </button>
+
   </div>
 
-  <!-- NEW: download button (temporarily disabled) -->
-  <!--
-  <button id="download-btn" class="btn btn-default btn-xs">
-    Download SVG
-  </button>
-  -->
-
   <div class="ss-plot-grid" aria-label="Plot and legends">
-    <div class="ss-plot-grid-pad" aria-hidden="true"></div>
+    <div class="ss-left-col">
+      <div class="ss-search-wrap">
+        <select id="ssReceptorSearch" class="form-control" style="width: 100%;">
+          <option value="">Search receptor</option>
+        </select>
+      </div>
+    </div>
 
     <div class="ss-plot-wrap">
       <div id="plot" style="min-height: 540px;"></div>
@@ -144,6 +137,8 @@
 {% endblock %}
 
 {% block addon_css %}
+<link rel="stylesheet" href="{% static 'home/css/NewDrugsBrowser_datatables.min.css' %}" type="text/css"/>
+<link rel="stylesheet" href="{% static 'home/css/select2_4.1.0-rc.0._full.css' %}" type="text/css" />
 <link rel="stylesheet" href="{% static 'home/css/Spectrum_1_8_1.css' %}" type="text/css" />
 <style>
 /* Wheel-like outline button (bootstrap3-compatible) */
@@ -184,6 +179,13 @@
   gap:10px;
   flex-wrap:wrap;
   margin: 10px 0 8px;
+  padding-left: 90px;
+}
+.ss-left-col{
+  min-width: 0;
+  align-self: start;
+  display: flex;
+  justify-content: flex-end;
 }
 .ss-toolbar .btn{
   text-align:center;
@@ -195,9 +197,6 @@
 }
 .ss-toolbar #ssDatasetDropdownBtn{
   width: 190px;                 /* baseline width */
-}
-.ss-toolbar #ssMethodDropdownBtn{
-  width: 170px;
 }
 .ss-toolbar #ssColorDropdownBtn{
   width: 175px;                 /* ~20% less than 240 */
@@ -229,6 +228,34 @@
 }
 .ss-toolbar .btn-block:last-child{
   margin-bottom: 0;
+}
+.ss-search-wrap{
+  width: 208px;
+  min-width: 208px;
+  max-width: 208px;
+  box-sizing: border-box;
+  margin-right: 10px;
+  font-size: 12px;
+}
+.ss-search-wrap .select2-container,
+.ss-search-wrap .form-control{
+  width: 100% !important;
+  max-width: 100%;
+  box-sizing: border-box;
+  font-size: 12px;
+}
+.ss-search-wrap .select2-selection--single{
+  padding-right: 4px;
+  font-size: 12px;
+}
+.ss-search-wrap .select2-selection__rendered{
+  font-size: 12px;
+}
+.ss-receptor-search-dropdown .select2-results__option{
+  font-size: 12px;
+}
+.ss-receptor-search-dropdown .select2-search--dropdown .select2-search__field{
+  font-size: 12px;
 }
 
 /* =========================
@@ -310,15 +337,127 @@
   padding-right: 0;
 }
 
-/* 17% padding | 65% plot | 13% legend | 5% padding */
+/* 30% left (search) | 55% plot | 15% legend | 0% right padding */
 .ss-plot-grid{
   display: grid;
-  grid-template-columns: 17% 55% 13% 5%;
-  align-items: center;
+  grid-template-columns: 30% 55% 15% 0%;
+  align-items: start;
   column-gap: 14px;
   margin-top: 14px; /* whitespace between toolbar and plot */
 }
 .ss-plot-grid-pad{ min-height: 1px; }
+.ss-hover-panel{
+  position: fixed;
+  z-index: 1;
+  width: auto;
+  min-width: min(208px, calc(100vw - 40px));
+  max-width: min(400px, calc(100vw - 40px));
+  background: rgba(255,255,255,.98);
+  color: #111;
+  border: 1px solid #cfcfcf;
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(0,0,0,.18);
+  padding: 12px;
+  display: none;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-family: 'Source Code Pro', monospace;
+  font-size: 12px;
+}
+.ss-hover-panel.is-expanded{
+  width: min(400px, calc(100vw - 40px));
+  max-width: min(400px, calc(100vw - 40px));
+}
+.ss-hover-panel-body{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.ss-hover-panel-empty{
+  color: #555;
+  line-height: 1.5;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.ss-hover-panel-section{
+  border: 1px solid #e6e6e6;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+  min-width: 0;
+}
+.ss-hover-panel-title{
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+}
+.ss-hover-panel-kv{
+  margin: 0 0 4px 0;
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.ss-hover-panel-kv:last-child{
+  margin-bottom: 0;
+}
+.ss-hover-panel-note{
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.ss-plot-hover{
+  position: fixed;
+  z-index: 2;
+  min-width: 260px;
+  max-width: 420px;
+  background: rgba(255,255,255,.98);
+  color: #111;
+  border: 1px solid #cfcfcf;
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(0,0,0,.18);
+  padding: 10px 12px;
+  display: none;
+  pointer-events: none;
+  box-sizing: border-box;
+  font-family: 'Source Code Pro', monospace;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.ss-plot-hover b{
+  font-weight: 700;
+}
+.ss-hover-panel-table-wrap{
+  overflow-x: auto;
+}
+#ssSimilarTable{
+  width: 100%;
+  border-collapse: collapse;
+}
+#ssSimilarTable thead th,
+#ssSimilarTable tbody td{
+  text-align: center;
+  white-space: nowrap;
+  border: 0.5px solid #000;
+}
+#ssSimilarTable thead th{
+  font-size: 11px;
+  padding: 6px 8px;
+  background: #f7f9fb;
+}
+#ssSimilarTable tbody td{
+  padding: 6px 8px;
+}
+#ssSimilarTable tbody tr:nth-child(odd) td{
+  background: #fafafa;
+}
+#ssSimilarTable tbody tr.ss-hovered td{
+  background: #dff3df !important;
+}
+#ssSimilarTable td.ss-num,
+#ssSimilarTable th.ss-num{
+  text-align: center;
+}
 
 .ss-plot-wrap{
   border: 1px solid #e6e6e6;
@@ -336,6 +475,7 @@
 .ss-legend{
   width: 100%;
   flex: initial;
+  align-self: center;
 }
 .ss-legend{
   width: 320px;
@@ -365,6 +505,9 @@
   padding: 8px;
   max-height: 520px;
   overflow:auto;
+}
+.ss-legend-list.ss-legend-list--disabled{
+  background: #fafafa;
 }
 .ss-legend-list.ss-legend-list--shapes{
   /* Trim right-side whitespace so this box can match the color legend width */
@@ -452,12 +595,14 @@
 .ss-modal .ss-modal-close:hover{ opacity:1; }
 .ss-modal .ss-modal-body{ padding: 14px 16px 18px; max-height: 70vh; overflow:auto; }
 .ss-modal footer{ padding: 10px 16px; border-top:1px solid #e6e6e6; text-align:right; }
+
 </style>
 {% endblock %}
 
 {% block addon_js %}
 <script src="{% static 'home/js/plotly_v1_58_5.js' %}"></script>
 <script src="{% static 'home/js/spectrum_v1_8_1.js' %}"></script>
+<script src="{% static 'home/js/select2_4.1.0-rc.0_full.js' %}"></script>
 <script>
 (async function () {
   const statusEl    = document.getElementById('sim-status');
@@ -467,6 +612,12 @@
   const downloadPngBtn = document.getElementById('ssDownloadPngBtn');
   const downloadSvgBtn = document.getElementById('ssDownloadSvgBtn');
   // const downloadBtn = document.getElementById('download-btn');   // NEW (temporarily disabled)
+  const hoverPanelEl = document.createElement('div');
+  hoverPanelEl.className = 'ss-hover-panel';
+  document.body.appendChild(hoverPanelEl);
+  const plotHoverEl = document.createElement('div');
+  plotHoverEl.className = 'ss-plot-hover';
+  document.body.appendChild(plotHoverEl);
 
   const EMBED_URL = "{{ embed_url }}";
 
@@ -571,6 +722,18 @@
       const el = document.createElement('textarea');
       el.innerHTML = s;
       return el.value || s;
+    } catch (e) {
+      return s;
+    }
+  }
+
+  function escapeHtml(raw) {
+    const s = normKey(raw);
+    if (!s) return '';
+    try {
+      const el = document.createElement('div');
+      el.textContent = s;
+      return el.innerHTML || s;
     } catch (e) {
       return s;
     }
@@ -870,108 +1033,439 @@
     return receptorFamilyColorsGlobal || {};
   }
 
+  function formatNeighborScore(v) {
+    const n = Number(v);
+    if (!isFinite(n)) return '-';
+    return (Math.round(n * 10) / 10).toString();
+  }
+
+  function allowSubsOnly(raw) {
+    return escapeHtml(decodeHtmlEntities(raw || '')).replace(/&lt;(\/?)sub&gt;/gi, '<$1sub>');
+  }
+
+  function buildNeighborReceptorHtml(row) {
+    if (row && row.label) return allowSubsOnly(row.label);
+    return '';
+  }
+
+  function buildNeighborClassText(row) {
+    return normClassCodeFromString((row && row.class_name) || '') || '';
+  }
+
+  function buildPointDetailsHtml(p) {
+    const rows = [];
+    const receptorParts = [];
+    if (p && p.label) receptorParts.push(allowSubsOnly(p.label));
+    if (p && p.uniprot) receptorParts.push(escapeHtml(p.uniprot));
+    if (p && p.gene) receptorParts.push(escapeHtml(p.gene));
+    if (p && p.pdb) rows.push('<div class="ss-hover-panel-kv"><b>PDB</b>: ' + escapeHtml(p.pdb) + '</div>');
+    if (receptorParts.length) rows.push('<div class="ss-hover-panel-kv"><b>Receptor</b>: ' + receptorParts.join(' | ') + '</div>');
+    if (p && p['Receptor family']) rows.push('<div class="ss-hover-panel-kv"><b>Receptor family</b>: ' + escapeHtml(p['Receptor family']) + '</div>');
+    if (p && p.Class) rows.push('<div class="ss-hover-panel-kv"><b>Class</b>: ' + escapeHtml(p.Class) + '</div>');
+    if (p && p.Modality) rows.push('<div class="ss-hover-panel-kv"><b>Modality</b>: ' + escapeHtml(p.Modality) + '</div>');
+    if (p && p.Chemotype) rows.push('<div class="ss-hover-panel-kv"><b>Chemotype</b>: ' + escapeHtml(p.Chemotype) + '</div>');
+    if (p && p.Sense) rows.push('<div class="ss-hover-panel-kv"><b>Sense</b>: ' + escapeHtml(p.Sense) + '</div>');
+    return (
+      '<div class="ss-hover-panel-section">' +
+        rows.join('') +
+      '</div>'
+    );
+  }
+
+  function buildPlotHoverHtml(p) {
+    const rows = [];
+    const receptorParts = [];
+    if (p && p.pdb) rows.push('<b>PDB</b>: ' + escapeHtml(p.pdb));
+    if (p && p.label) receptorParts.push(allowSubsOnly(p.label));
+    if (p && p.uniprot) receptorParts.push(escapeHtml(p.uniprot));
+    if (p && p.gene) receptorParts.push(escapeHtml(p.gene));
+    if (receptorParts.length) rows.push('<b>Receptor</b>: ' + receptorParts.join(' | '));
+    if (p && p['Receptor family']) rows.push('<b>Receptor family</b>: ' + escapeHtml(p['Receptor family']));
+    if (p && p.Class) rows.push('<b>Class</b>: ' + escapeHtml(p.Class));
+    if (p && p.Modality) rows.push('<b>Modality</b>: ' + escapeHtml(p.Modality));
+    if (p && p.Chemotype) rows.push('<b>Chemotype</b>: ' + escapeHtml(p.Chemotype));
+    if (p && p.Sense) rows.push('<b>Sense</b>: ' + escapeHtml(p.Sense));
+    return rows.join('<br>');
+  }
+
+  function hidePlotHover() {
+    if (!plotHoverEl) return;
+    plotHoverEl.style.display = 'none';
+    plotHoverEl.innerHTML = '';
+  }
+
+  function showPlotHover(html, clientX, clientY) {
+    if (!plotHoverEl || !html) return;
+    plotHoverEl.innerHTML = html;
+    plotHoverEl.style.display = 'block';
+
+    const pad = 14;
+    const rect = plotHoverEl.getBoundingClientRect();
+    let left = Number(clientX || 0) + 18;
+    let top = Number(clientY || 0) + 18;
+
+    if ((left + rect.width + pad) > window.innerWidth) {
+      left = Math.max(pad, window.innerWidth - rect.width - pad);
+    }
+    if ((top + rect.height + pad) > window.innerHeight) {
+      top = Math.max(pad, Number(clientY || 0) - rect.height - 18);
+    }
+
+    plotHoverEl.style.left = left + 'px';
+    plotHoverEl.style.top = top + 'px';
+  }
+
+  function updateHoverPanelWidth(isExpanded) {
+    if (!hoverPanelEl) return;
+    const viewportMax = Math.max(220, window.innerWidth - 40);
+    const minWidth = Math.min(208, viewportMax);
+    const maxWidth = Math.min(400, viewportMax);
+
+    if (isExpanded) {
+      hoverPanelEl.style.width = maxWidth + 'px';
+      hoverPanelEl.style.minWidth = maxWidth + 'px';
+      hoverPanelEl.style.maxWidth = maxWidth + 'px';
+      return;
+    }
+
+    let desiredWidth = minWidth;
+    const detailsSection = hoverPanelEl.querySelector('.ss-hover-panel-section');
+    if (detailsSection) {
+      const measureEl = detailsSection.cloneNode(true);
+      measureEl.style.position = 'absolute';
+      measureEl.style.visibility = 'hidden';
+      measureEl.style.width = 'max-content';
+      measureEl.style.maxWidth = maxWidth + 'px';
+      measureEl.style.left = '-99999px';
+      measureEl.style.top = '0';
+      document.body.appendChild(measureEl);
+      desiredWidth = Math.max(minWidth, Math.min(maxWidth, Math.ceil(measureEl.getBoundingClientRect().width) + 24));
+      document.body.removeChild(measureEl);
+    }
+
+    hoverPanelEl.style.width = desiredWidth + 'px';
+    hoverPanelEl.style.minWidth = desiredWidth + 'px';
+    hoverPanelEl.style.maxWidth = desiredWidth + 'px';
+  }
+
+  function positionHoverPanel() {
+    if (!hoverPanelEl || hoverPanelEl.style.display === 'none' || !plotDiv) return;
+    const pad = 14;
+    const gap = 8;
+    const plotWrap = plotDiv.closest('.ss-plot-wrap');
+    const plotRect = (plotWrap || plotDiv).getBoundingClientRect();
+    const searchWrap = document.querySelector('.ss-search-wrap');
+    const searchRect = searchWrap && searchWrap.offsetParent ? searchWrap.getBoundingClientRect() : null;
+    const panelTop = (searchRect && searchRect.height > 0) ? searchRect.bottom + gap : Math.max(pad, plotRect.top);
+    const plotBottom = plotRect.bottom;
+    const viewportBottom = window.innerHeight - pad;
+    const availableHeight = Math.max(0, Math.min(plotBottom, viewportBottom) - panelTop - pad);
+    const maxHeight = Math.max(220, Math.min(Math.floor(plotRect.height), Math.floor(availableHeight)));
+    hoverPanelEl.style.maxHeight = maxHeight + 'px';
+    const rect = hoverPanelEl.getBoundingClientRect();
+    let left = Math.max(pad, plotRect.left - rect.width - 24);
+    hoverPanelEl.style.left = left + 'px';
+    hoverPanelEl.style.top = Math.max(pad, panelTop) + 'px';
+  }
+
+  let similarTableDT = null;
+  let hoveredFrozenPointId = null;
+
+  function destroySimilarTable() {
+    if (!window.jQuery || !jQuery.fn || !jQuery.fn.dataTable) {
+      similarTableDT = null;
+      return;
+    }
+    if (similarTableDT) {
+      similarTableDT.destroy();
+      similarTableDT = null;
+    }
+  }
+
+  function applySimilarTableHoverHighlight() {
+    const tableEl = document.getElementById('ssSimilarTable');
+    if (!tableEl) return;
+    const targetId = Number(hoveredFrozenPointId);
+    tableEl.querySelectorAll('tbody tr').forEach(tr => {
+      const rowId = Number(tr.getAttribute('data-point-id'));
+      const isOn = isFinite(targetId) && isFinite(rowId) && rowId === targetId;
+      tr.classList.toggle('ss-hovered', isOn);
+    });
+  }
+
+  function initSimilarTable() {
+    if (!window.jQuery || !jQuery.fn || !jQuery.fn.dataTable) return null;
+    if (similarTableDT) return similarTableDT;
+    similarTableDT = jQuery('#ssSimilarTable').DataTable({
+      dom: 't',
+      paging: false,
+      ordering: true,
+      searching: false,
+      info: false,
+      autoWidth: false,
+      deferRender: true,
+      order: [[0, 'desc'], [1, 'desc'], [2, 'asc']],
+      columns: [
+        { data: 'similarity' },
+        { data: 'identity' },
+        { data: 'receptor_html' },
+        { data: 'receptor_family' },
+        { data: 'class_text' }
+      ],
+      columnDefs: [
+        {
+          targets: [0, 1],
+          className: 'ss-num',
+          render: function (data, type) {
+            if (type === 'sort' || type === 'type') {
+              const n = (data === '' || data == null) ? NaN : parseFloat(data);
+              return isNaN(n) ? -Infinity : n;
+            }
+            return data;
+          }
+        },
+        {
+          targets: [2, 3, 4],
+          render: function (data) {
+            return data == null ? '' : data;
+          }
+        }
+      ],
+      createdRow: function (row, data) {
+        if (data && data.id != null) {
+          row.setAttribute('data-point-id', String(data.id));
+        }
+      }
+    });
+    jQuery('#ssSimilarTable').on('draw.dt', function () {
+      applySimilarTableHoverHighlight();
+    });
+    return similarTableDT;
+  }
+
+  function renderSimilarTable(rows) {
+    const tableEl = document.getElementById('ssSimilarTable');
+    if (!tableEl) return;
+    const safeRows = Array.isArray(rows) ? rows : [];
+
+    if (window.jQuery && jQuery.fn && jQuery.fn.dataTable) {
+      const dt = initSimilarTable();
+      if (!dt) return;
+      dt.clear();
+      dt.rows.add(safeRows.map(row => ({
+        id: row && row.id,
+        similarity: formatNeighborScore(row && row.similarity),
+        identity: formatNeighborScore(row && row.identity),
+        receptor_html: buildNeighborReceptorHtml(row) || '-',
+        receptor_family: escapeHtml((row && row.receptor_family) || ''),
+        class_text: escapeHtml(buildNeighborClassText(row)),
+      })));
+      dt.draw();
+      applySimilarTableHoverHighlight();
+      return;
+    }
+
+    const tbody = tableEl.querySelector('tbody');
+    if (!tbody) return;
+    tbody.innerHTML = safeRows.map(row => (
+      '<tr data-point-id="' + escapeHtml(row && row.id) + '">' +
+        '<td class="ss-num">' + escapeHtml(formatNeighborScore(row && row.similarity)) + '</td>' +
+        '<td class="ss-num">' + escapeHtml(formatNeighborScore(row && row.identity)) + '</td>' +
+        '<td>' + (buildNeighborReceptorHtml(row) || '-') + '</td>' +
+        '<td>' + escapeHtml((row && row.receptor_family) || '') + '</td>' +
+        '<td>' + escapeHtml(buildNeighborClassText(row)) + '</td>' +
+      '</tr>'
+    )).join('');
+    applySimilarTableHoverHighlight();
+  }
+
+  function renderSidePanelPlaceholder() {
+    if (!hoverPanelEl) return;
+    destroySimilarTable();
+    hoverPanelEl.className = 'ss-hover-panel';
+    hoverPanelEl.innerHTML = (
+      '<div class="ss-hover-panel-body">' +
+        '<div class="ss-hover-panel-empty">' +
+          'Hover datapoints to view details. Click datapoints to view the most similar receptors.' +
+        '</div>' +
+      '</div>'
+    );
+    hoverPanelEl.style.display = 'block';
+    updateHoverPanelWidth(false);
+    positionHoverPanel();
+  }
+
+  function renderSidePanelSelection(point, neighborRows) {
+    if (!hoverPanelEl || !point) return;
+    const rows = Array.isArray(neighborRows) ? neighborRows : [];
+    const showTable = supportsNeighborHover(currentDataset) && (!!selectedPointData || showTableOnHover);
+    destroySimilarTable();
+    hoverPanelEl.className = 'ss-hover-panel' + (showTable ? ' is-expanded' : '');
+    hoverPanelEl.innerHTML =
+      '<div class="ss-hover-panel-body">' +
+      buildPointDetailsHtml(point) +
+      (showTable
+        ? (
+            '<div class="ss-hover-panel-section">' +
+              '<div class="ss-hover-panel-title">Most similar receptors</div>' +
+              '<div class="ss-hover-panel-kv ss-hover-panel-note">Top 10 receptors plus ties at the cutoff are shown below.</div>' +
+              '<div class="ss-hover-panel-table-wrap">' +
+                '<table id="ssSimilarTable" class="display compact hover nowrap stripe" style="width:100%">' +
+                  '<thead><tr>' +
+                    '<th class="ss-num">SIM</th>' +
+                    '<th class="ss-num">ID</th>' +
+                    '<th>Receptor</th>' +
+                    '<th>Receptor family</th>' +
+                    '<th>Class</th>' +
+                  '</tr></thead>' +
+                  '<tbody></tbody>' +
+                '</table>' +
+              '</div>' +
+            '</div>'
+          )
+        : (
+            '<div class="ss-hover-panel-section">' +
+              '<div class="ss-hover-panel-title">Details</div>' +
+              '<div class="ss-hover-panel-kv ss-hover-panel-note">' +
+                (supportsNeighborHover(currentDataset)
+                  ? 'Click this datapoint to freeze the selection and view the most similar receptors.'
+                  : 'Structure datasets show receptor details here. Similarity tables are available for the primary sequence dataset.') +
+              '</div>' +
+            '</div>'
+          )) +
+      '</div>';
+    hoverPanelEl.style.display = 'block';
+    updateHoverPanelWidth(showTable);
+    positionHoverPanel();
+
+    if (showTable) {
+      requestAnimationFrame(() => {
+        renderSimilarTable(rows);
+        positionHoverPanel();
+      });
+    }
+  }
+
   function buildTraces(points, colorKey, shapeKey) {
-    const tracesByCombo = new Map();
     let familyColors = null;
+    const frozenActive = hasFrozenSelection();
     if (colorKey === 'Receptor family') {
       familyColors = getGlobalReceptorFamilyColors();
     }
 
-    points.forEach(p => {
-      const cCat      = normalizedCategoryForKey(colorKey, p);
-      const classCode = normClassCodeFromString(p.Class || '');
-      const override = getOverride(colorKey, cCat);
-      const color = override || defaultColorForCategory(colorKey, cCat, familyColors);
+    function makeBuckets(pointsSubset, styleForPoint, opts) {
+      const tracesByCombo = new Map();
+      (pointsSubset || []).forEach(p => {
+        const cCat = normalizedCategoryForKey(colorKey, p);
+        const classCode = normClassCodeFromString(p.Class || '');
+        const override = getOverride(colorKey, cCat);
+        const baseColor = override || defaultColorForCategory(colorKey, cCat, familyColors);
+        const style = styleForPoint(p, { colorCategory: cCat, classCode: classCode, baseColor: baseColor });
+        const key = cCat + '|' + classCode;
+        if (!tracesByCombo.has(key)) {
+          tracesByCombo.set(key, {
+            name: cCat,
+            cls: classCode,
+            color: baseColor,
+            xs: [],
+            ys: [],
+            colors: [],
+            sizes: [],
+            customdata: [],
+          });
+        }
+        const bucket = tracesByCombo.get(key);
+        bucket.xs.push(p.x);
+        bucket.ys.push(p.y);
+        bucket.colors.push(style.color);
+        bucket.sizes.push(style.size);
+        bucket.customdata.push({
+          id: p.id,
+          point: p,
+          top_neighbors: Array.isArray(p.top_neighbors) ? p.top_neighbors : [],
+        });
+      });
 
-      const key = cCat + '|' + classCode;
-      if (!tracesByCombo.has(key)) {
-        tracesByCombo.set(key, {
-          name: cCat,
-          cls:  classCode,
-          color: color,
-          xs: [],
-          ys: [],
-          texts: []
+      const traces = [];
+      for (const [, b] of tracesByCombo.entries()) {
+        const hidden = isHidden(currentDataset, colorKey, b.name) || isClassHidden(currentDataset, b.cls);
+        traces.push({
+          x: b.xs,
+          y: b.ys,
+          type: 'scatter',
+          mode: 'markers',
+          visible: hidden ? false : true,
+          marker: {
+            size: b.sizes,
+            line: { width: opts.lineWidth, color: opts.lineColor },
+            color: b.colors,
+            opacity: opts.opacity,
+            symbol: getShapeFor(b.cls, shapeKey)
+          },
+          name: b.name,
+          hoverinfo: opts.hoverinfo || 'none',
+          text: [],
+          customdata: b.customdata,
+          showlegend: !!opts.showLegend,
+          _classCode: b.cls,
+          _colorCat: b.name,
+          _legendColor: b.color
         });
       }
-      const bucket = tracesByCombo.get(key);
-      bucket.xs.push(p.x);
-      bucket.ys.push(p.y);
-
-      const gtopdb   = decodeHtmlEntities(p.label || '');
-      const gene     = p.gene || '';
-      const uni      = p.uniprot || '';
-      const pdb      = p.pdb || '';
-      const clazz    = p.Class || '';
-      const rfam     = p['Receptor family'] || '';
-      const modality = p.Modality || '';
-      const chemotype= p.Chemotype || '';
-      const sense    = p.Sense || '';
-      const lines = [];
-      const receptorParts = [gtopdb, uni, gene].filter(Boolean);
-      if (receptorParts.length) lines.push('<b>Receptor</b>: ' + receptorParts.join(' | '));
-      if (pdb)      lines.push('<b>PDB</b>: ' + pdb);
-      if (rfam)     lines.push('<b>Receptor family</b>: ' + rfam);
-      if (clazz)    lines.push('<b>Class</b>: ' + clazz);
-      if (modality) lines.push('<b>Modality</b>: ' + modality);
-      if (chemotype)lines.push('<b>Chemotype</b>: ' + chemotype);
-      if (sense)    lines.push('<b>Sense</b>: ' + sense);
-      bucket.texts.push(lines.join('<br>'));
-    });
-
-    const traces = [];
-    for (const [, b] of tracesByCombo.entries()) {
-      const hidden = isHidden(currentDataset, colorKey, b.name) || isClassHidden(currentDataset, b.cls);
-      traces.push({
-        x: b.xs,
-        y: b.ys,
-        type: 'scatter',
-        mode: 'markers',
-        visible: hidden ? false : true,
-        marker: {
-          size: 9,
-          line: { width: 0.5, color: '#000' },
-          color: b.color,
-          symbol: getShapeFor(b.cls, shapeKey)
-        },
-        name: b.name,
-        hoverinfo: 'text',
-        text: b.texts,
-        showlegend: true,
-        _classCode: b.cls,
-        _colorCat: b.name
-      });
+      return traces;
     }
 
-    // >>> these two lines were missing <<<
-    return traces;
+    if (!frozenActive) {
+      return makeBuckets(
+        points,
+        (p, ctx) => ({ color: ctx.baseColor, size: 9 }),
+        { opacity: 1, lineWidth: 0.5, lineColor: '#000', showLegend: true, hoverinfo: 'none' }
+      );
+    }
+
+    const highlightIds = new Set([Number(frozenPointId)]);
+    frozenNeighborIds.forEach(id => highlightIds.add(Number(id)));
+    const backgroundPoints = points;
+    const highlightPoints = points.filter(p => highlightIds.has(Number(p.id)));
+
+    const backgroundTraces = makeBuckets(
+      backgroundPoints,
+      () => ({ color: FROZEN_OTHER_COLOR, size: 8 }),
+      { opacity: 0.25, lineWidth: 0.25, lineColor: '#999', showLegend: true, hoverinfo: 'skip' }
+    );
+
+    const highlightTraces = makeBuckets(
+      highlightPoints,
+      (p) => getFrozenColorSpec(Number(p.id)),
+      { opacity: 1, lineWidth: 0.8, lineColor: '#000', showLegend: false, hoverinfo: 'none' }
+    );
+
+    return backgroundTraces.concat(highlightTraces);
   }
 
 
   /* ---------- data + rendering ---------- */
 
   const emptyDatasets = () => ({ sequence: [], inactive: [], active: [] });
-  let datasetsByPlot = {
-    tsne: emptyDatasets(),
-    pca_tsne:  emptyDatasets(),
-  };
-  let datasets = datasetsByPlot.pca_tsne;
-  let plotErrors = {};
+  let datasetsByPlot = { tsne: emptyDatasets() };
+  let datasets = datasetsByPlot.tsne;
   let currentDataset = 'sequence';
-  let plotType = 'pca_tsne';
+  let plotType = 'tsne';
   let colorKey = 'Class';
   let shapeKey = 'None';
+  let frozenPointId = null;
+  let frozenNeighborIds = new Set();
+  let selectedPointData = null;
+  let suppressPlotBackgroundClickUntil = 0;
+  let showTableOnHover = false;
+
+  const FROZEN_SELECTED_COLOR = '#2ca02c';
+  const FROZEN_NEIGHBOR_COLOR = '#d62728';
+  const FROZEN_OTHER_COLOR = '#bfbfbf';
 
   // Holds the live Plotly div used for the shape legend (when enabled).
   // Used by export to include the exact Plotly symbols.
   let shapeLegendPlotDivForExport = null;
-
-  // Optional: allow linking directly via the page URL (?plot=tsne|pca_tsne)
-  try {
-    const q = new URLSearchParams(window.location.search || '');
-    const p = (q.get('plot') || '').toLowerCase();
-    if (p === 'tsne' || p === 'pca_tsne' || p === 'pca') plotType = (p === 'pca') ? 'pca_tsne' : p;
-  } catch (e) {}
 
   function datasetTitle(ds) {
     if (ds === 'sequence') return 'Sequence similarity';
@@ -987,9 +1481,187 @@
     return '';
   }
 
-  function plotButtonLabel(p) {
-    if (p === 'pca_tsne') return 'PCA→t-SNE';
-    return 't-SNE';
+  function supportsNeighborHover(ds) {
+    return ds === 'sequence';
+  }
+
+  function hasFrozenSelection() {
+    return supportsNeighborHover(currentDataset) && frozenPointId !== null && frozenPointId !== undefined;
+  }
+
+  function clearFrozenSelection() {
+    frozenPointId = null;
+    frozenNeighborIds = new Set();
+    selectedPointData = null;
+    hoveredFrozenPointId = null;
+    hidePlotHover();
+    renderSidePanelPlaceholder();
+    try {
+      if (typeof Plotly !== 'undefined' && Plotly.Fx && plotDiv) Plotly.Fx.unhover(plotDiv);
+    } catch (e) {}
+  }
+
+  function freezePointByProteinId(proteinId) {
+    const pid = Number(proteinId);
+    if (!isFinite(pid)) return;
+    let point = null;
+    let foundDataset = null;
+    for (const ds of ['sequence', 'inactive', 'active']) {
+      const pts = datasets[ds] || [];
+      point = pts.find(p => Number(p && p.id) === pid);
+      if (point) {
+        foundDataset = ds;
+        break;
+      }
+    }
+    if (!point || !foundDataset) return;
+    if (foundDataset !== currentDataset) {
+      clearFrozenSelection();
+      setCurrentDataset(foundDataset);
+    }
+    suppressPlotBackgroundClickUntil = Date.now() + 250;
+    selectedPointData = point;
+    hidePlotHover();
+    if (supportsNeighborHover(currentDataset)) {
+      frozenPointId = pid;
+      frozenNeighborIds = new Set(
+        (Array.isArray(point.top_neighbors) ? point.top_neighbors : [])
+          .map(row => Number(row && row.id))
+          .filter(id => isFinite(id))
+      );
+    } else {
+      frozenPointId = null;
+      frozenNeighborIds = new Set();
+    }
+    renderSidePanelSelection(point, Array.isArray(point.top_neighbors) ? point.top_neighbors : []);
+    render();
+  }
+
+  function initReceptorSearch() {
+    const sel = document.getElementById('ssReceptorSearch');
+    if (!sel || typeof jQuery === 'undefined' || !jQuery.fn.select2) return;
+    const allPoints = [];
+    for (const ds of ['sequence', 'inactive', 'active']) {
+      (datasets[ds] || []).forEach(p => {
+        if (!p || p.id == null) return;
+        const receptorParts = [];
+        if (p.label) receptorParts.push(allowSubsOnly(p.label));
+        if (p.uniprot) receptorParts.push(escapeHtml(p.uniprot));
+        if (p.gene) receptorParts.push(escapeHtml(p.gene));
+        const text = receptorParts.join(' | ') || String(p.id);
+        allPoints.push({ id: p.id, text: text, point: p });
+      });
+    }
+    const seen = new Set();
+    const select2Data = [];
+    allPoints.forEach(item => {
+      if (seen.has(item.id)) return;
+      seen.add(item.id);
+      select2Data.push({ id: item.id, text: item.text });
+    });
+    select2Data.sort((a, b) => (a.text || '').localeCompare(b.text || '', undefined, { sensitivity: 'base' }));
+    jQuery(sel).empty().append(jQuery('<option value="">Search receptor</option>'));
+    select2Data.forEach(item => {
+      jQuery(sel).append(jQuery('<option></option>').attr('value', item.id).text(item.text));
+    });
+    if (jQuery(sel).data('select2')) jQuery(sel).select2('destroy');
+    jQuery(sel).off('select2:select').select2({
+      placeholder: 'Search receptor',
+      allowClear: true,
+      width: '100%',
+      dropdownParent: jQuery(document.body),
+      dropdownCssClass: 'ss-receptor-search-dropdown',
+      escapeMarkup: function (m) { return m; }
+    });
+    jQuery(sel).on('select2:select', function (e) {
+      const val = e.params && e.params.data && e.params.data.id;
+      if (val != null && val !== '') freezePointByProteinId(val);
+    });
+  }
+
+  function buildDefaultRangeForPoints(points) {
+    let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
+    (points || []).forEach(p => {
+      const x = Number(p && p.x);
+      const y = Number(p && p.y);
+      if (!isFinite(x) || !isFinite(y)) return;
+      if (x < xmin) xmin = x;
+      if (x > xmax) xmax = x;
+      if (y < ymin) ymin = y;
+      if (y > ymax) ymax = y;
+    });
+    if (xmin === Infinity) { xmin = -1; xmax = 1; ymin = -1; ymax = 1; }
+    const xpad = (xmax - xmin) * 0.05 || 1;
+    const ypad = (ymax - ymin) * 0.05 || 1;
+    return {
+      x: [xmin - xpad, xmax + xpad],
+      y: [ymin - ypad, ymax + ypad],
+    };
+  }
+
+  function readAxisRange(axisLayout) {
+    if (!axisLayout) return null;
+    const raw = axisLayout.range;
+    let lo = null;
+    let hi = null;
+    if (Array.isArray(raw) && raw.length >= 2) {
+      lo = Number(raw[0]);
+      hi = Number(raw[1]);
+    } else {
+      lo = Number(axisLayout['range[0]']);
+      hi = Number(axisLayout['range[1]']);
+    }
+    if (!isFinite(lo) || !isFinite(hi)) return null;
+    return [lo, hi];
+  }
+
+  function syncLiveRangeCache() {
+    const renderedDataset = render._renderedDataset;
+    if (!renderedDataset || !plotDiv || !plotDiv.layout) return;
+    const xRange = readAxisRange(plotDiv.layout.xaxis);
+    const yRange = readAxisRange(plotDiv.layout.yaxis);
+    if (!xRange || !yRange) return;
+    const rangeCache = (render._rangeCache = render._rangeCache || {});
+    rangeCache[renderedDataset] = { x: xRange, y: yRange };
+  }
+
+  function getFrozenColorSpec(pointId) {
+    const pid = Number(pointId);
+    const isSelected = pid === Number(frozenPointId);
+    if (isSelected) {
+      return { color: FROZEN_SELECTED_COLOR, size: 12 };
+    }
+    return {
+      color: frozenNeighborIds.has(pid) ? FROZEN_NEIGHBOR_COLOR : FROZEN_OTHER_COLOR,
+      size: frozenNeighborIds.has(pid) ? 10 : 9,
+    };
+  }
+
+  function syncDatasetButtons() {
+    document.querySelectorAll('.ss-dataset-opt').forEach(b => {
+      const k = b.getAttribute('data-dataset') || 'sequence';
+      const isOn = (k === currentDataset);
+      b.classList.toggle('btn-primary', isOn);
+      b.classList.toggle('btn-outline-primary', !isOn);
+    });
+  }
+
+  function setCurrentDataset(ds) {
+    currentDataset = ds;
+    syncDatasetButtons();
+    syncTableOnHoverButton();
+    if (datasetDropBtn) datasetDropBtn.childNodes[0].nodeValue = 'Source: ' + datasetButtonLabel(ds) + ' ';
+  }
+
+  function syncTableOnHoverButton() {
+    const btn = document.getElementById('ssTableOnHoverBtn');
+    if (!btn) return;
+    const isSequence = currentDataset === 'sequence';
+    btn.style.display = isSequence ? '' : 'none';
+    if (isSequence) {
+      btn.classList.toggle('btn-primary', showTableOnHover);
+      btn.classList.toggle('btn-outline-primary', !showTableOnHover);
+    }
   }
 
   // Custom legend visibility state (per dataset + colorKey).
@@ -1102,7 +1774,7 @@
         y: [0],
         name: cls,
         legendgroup: 'cls_' + cls,
-        hoverinfo: 'skip',
+          hoverinfo: 'none',
         marker: {
           size: 11,
           symbol: getShapeFor(cls, 'Class'),
@@ -1249,6 +1921,7 @@
 
   function renderLegend(traces) {
     if (!legendEl) return;
+    const frozenActive = hasFrozenSelection();
 
     // Legend width can be tuned per Color by key
     const baseW = 320;
@@ -1271,7 +1944,7 @@
       const cat = t && t._colorCat;
       if (!cat) return;
       if (!catTo.has(cat)) {
-        const c = (t.marker && t.marker.color) ? t.marker.color : '#999';
+        const c = t && t._legendColor ? t._legendColor : ((t.marker && t.marker.color) ? t.marker.color : '#999');
         catTo.set(cat, { color: c, idxs: [] });
       }
       catTo.get(cat).idxs.push(idx);
@@ -1289,56 +1962,66 @@
     const left = document.createElement('div');
     const leftList = document.createElement('div');
     leftList.className = 'ss-legend-list';
-    cats.forEach(cat => {
-      const rec = catTo.get(cat);
-      const item = document.createElement('div');
-      item.className = 'ss-legend-item';
-      if (isHidden(currentDataset, colorKey, cat)) item.classList.add('is-off');
+    if (frozenActive) {
+      leftList.classList.add('ss-legend-list--disabled');
 
-      const sw = document.createElement('span');
-      sw.className = 'ss-legend-swatch';
-      sw.style.background = rec.color || '#999';
-      item.appendChild(sw);
+      const frozenNote = document.createElement('div');
+      frozenNote.className = 'ss-legend-note';
+      frozenNote.style.marginTop = '0';
+      frozenNote.textContent = 'Color legend disabled while frozen.';
+      leftList.appendChild(frozenNote);
+    } else {
+      cats.forEach(cat => {
+        const rec = catTo.get(cat);
+        const item = document.createElement('div');
+        item.className = 'ss-legend-item';
+        if (isHidden(currentDataset, colorKey, cat)) item.classList.add('is-off');
 
-      const txt = document.createElement('span');
-      txt.textContent = cat;
-      item.appendChild(txt);
+        const sw = document.createElement('span');
+        sw.className = 'ss-legend-swatch';
+        sw.style.background = rec.color || '#999';
+        item.appendChild(sw);
 
-      attachLegendClicks(
-        item,
-        () => {
-          toggleHidden(currentDataset, colorKey, cat);
-          if (isClassSyncMode()) {
-            const hiddenNow = isHidden(currentDataset, 'Class', cat);
-            setClassHidden(currentDataset, cat, hiddenNow);
-          }
-          render();
-        },
-        () => {
-          // Isolate on double-click (Plotly-like)
-          const key = colorKey;
-          const ds = currentDataset;
-          const all = cats;
-          const onlyThisVisible = all.every(c => (c === cat) ? !isHidden(ds, key, c) : isHidden(ds, key, c));
-          if (onlyThisVisible) {
-            // reset
-            if (legendHidden[ds] && legendHidden[ds][key]) legendHidden[ds][key] = {};
-            if (isClassSyncMode()) clearAllClassHidden(ds);
-          } else {
-            if (!legendHidden[ds]) legendHidden[ds] = {};
-            legendHidden[ds][key] = {};
-            all.forEach(c => { if (c !== cat) legendHidden[ds][key][c] = true; });
+        const txt = document.createElement('span');
+        txt.textContent = cat;
+        item.appendChild(txt);
+
+        attachLegendClicks(
+          item,
+          () => {
+            toggleHidden(currentDataset, colorKey, cat);
             if (isClassSyncMode()) {
-              classHidden[ds] = {};
-              all.forEach(c => { if (c !== cat) classHidden[ds][c] = true; });
+              const hiddenNow = isHidden(currentDataset, 'Class', cat);
+              setClassHidden(currentDataset, cat, hiddenNow);
             }
+            render();
+          },
+          () => {
+            // Isolate on double-click (Plotly-like)
+            const key = colorKey;
+            const ds = currentDataset;
+            const all = cats;
+            const onlyThisVisible = all.every(c => (c === cat) ? !isHidden(ds, key, c) : isHidden(ds, key, c));
+            if (onlyThisVisible) {
+              // reset
+              if (legendHidden[ds] && legendHidden[ds][key]) legendHidden[ds][key] = {};
+              if (isClassSyncMode()) clearAllClassHidden(ds);
+            } else {
+              if (!legendHidden[ds]) legendHidden[ds] = {};
+              legendHidden[ds][key] = {};
+              all.forEach(c => { if (c !== cat) legendHidden[ds][key][c] = true; });
+              if (isClassSyncMode()) {
+                classHidden[ds] = {};
+                all.forEach(c => { if (c !== cat) classHidden[ds][c] = true; });
+              }
+            }
+            render();
           }
-          render();
-        }
-      );
+        );
 
-      leftList.appendChild(item);
-    });
+        leftList.appendChild(item);
+      });
+    }
     left.appendChild(leftList);
 
     grid.appendChild(left);
@@ -1383,7 +2066,7 @@
       requestAnimationFrame(() => {
         // Give Plotly a bit of extra vertical room so it doesn't render its internal legend scrollbar.
         // In Class sync mode, match the class color legend height exactly.
-        const shapeBoxH = isClassSyncMode()
+        const shapeBoxH = (isClassSyncMode() && !frozenActive)
           ? Math.round(leftList.getBoundingClientRect().height)
           : (computeLegendBoxHeight(usedClasses.length) + 14);
         syncShapeLegendBoxToFixedHeight(rightList, shapeHolder, shapeBoxH);
@@ -1395,7 +2078,95 @@
     }
   }
 
+  function bindPlotInteractions() {
+    if (!plotDiv || plotDiv._ssInteractionsBound) return;
+    plotDiv._ssInteractionsBound = true;
+
+    plotDiv.on('plotly_relayout', () => {
+      syncLiveRangeCache();
+    });
+
+    plotDiv.on('plotly_hover', (ev) => {
+      const pt = (ev && ev.points && ev.points[0]) ? ev.points[0] : null;
+      const data = pt && pt.customdata;
+      const point = data && data.point;
+      if (!data || !point) return;
+      if (selectedPointData) {
+        if (!hasFrozenSelection()) return;
+        const pid = Number(data.id);
+        const isHighlighted = pid === Number(frozenPointId) || frozenNeighborIds.has(pid);
+        if (!isHighlighted) {
+          hoveredFrozenPointId = null;
+          applySimilarTableHoverHighlight();
+          hidePlotHover();
+          return;
+        }
+        hoveredFrozenPointId = pid;
+        applySimilarTableHoverHighlight();
+        const mouseEv = ev && ev.event;
+        showPlotHover(buildPlotHoverHtml(point), mouseEv && mouseEv.clientX, mouseEv && mouseEv.clientY);
+        return;
+      }
+      renderSidePanelSelection(point, Array.isArray(data.top_neighbors) ? data.top_neighbors : []);
+    });
+
+    plotDiv.on('plotly_unhover', () => {
+      hoveredFrozenPointId = null;
+      applySimilarTableHoverHighlight();
+      hidePlotHover();
+      if (!selectedPointData) {
+        renderSidePanelPlaceholder();
+      }
+    });
+
+    plotDiv.on('plotly_click', (ev) => {
+      const pt = (ev && ev.points && ev.points[0]) ? ev.points[0] : null;
+      const data = pt && pt.customdata;
+      const point = data && data.point;
+      if (!data || !point || data.id === undefined || data.id === null) return;
+      suppressPlotBackgroundClickUntil = Date.now() + 250;
+      selectedPointData = point;
+      hidePlotHover();
+      if (supportsNeighborHover(currentDataset)) {
+        frozenPointId = Number(data.id);
+        frozenNeighborIds = new Set(
+          (Array.isArray(data.top_neighbors) ? data.top_neighbors : [])
+            .map(row => Number(row && row.id))
+            .filter(id => isFinite(id))
+        );
+      } else {
+        frozenPointId = null;
+        frozenNeighborIds = new Set();
+      }
+      renderSidePanelSelection(point, Array.isArray(data.top_neighbors) ? data.top_neighbors : []);
+      render();
+    });
+
+    plotDiv.addEventListener('click', (ev) => {
+      if (!hasFrozenSelection() && !selectedPointData) return;
+      if (Date.now() < suppressPlotBackgroundClickUntil) return;
+      const target = ev.target;
+      if (!target || !target.closest) return;
+      if (target.closest('.modebar')) return;
+      if (target.closest('.scatterlayer .trace .points path, .scatterlayer .trace .points text')) return;
+      clearFrozenSelection();
+      render();
+    });
+
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Escape' || (!hasFrozenSelection() && !selectedPointData)) return;
+      clearFrozenSelection();
+      render();
+    });
+
+    window.addEventListener('scroll', () => {
+      positionHoverPanel();
+      hidePlotHover();
+    }, true);
+  }
+
   function render() {
+    syncLiveRangeCache();
     const pts = datasets[currentDataset] || [];
     if (!pts.length) {
       statusEl.textContent = 'No data for ' + currentDataset;
@@ -1424,22 +2195,7 @@
     // Fix ranges per dataset so toggling legend doesn't autoscale/shift the view.
     const rangeCache = (render._rangeCache = render._rangeCache || {});
     if (!rangeCache[currentDataset]) {
-      let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
-      pts.forEach(p => {
-        const x = Number(p.x), y = Number(p.y);
-        if (!isFinite(x) || !isFinite(y)) return;
-        if (x < xmin) xmin = x;
-        if (x > xmax) xmax = x;
-        if (y < ymin) ymin = y;
-        if (y > ymax) ymax = y;
-      });
-      if (xmin === Infinity) { xmin = -1; xmax = 1; ymin = -1; ymax = 1; }
-      const xpad = (xmax - xmin) * 0.05 || 1;
-      const ypad = (ymax - ymin) * 0.05 || 1;
-      rangeCache[currentDataset] = {
-        x: [xmin - xpad, xmax + xpad],
-        y: [ymin - ypad, ymax + ypad],
-      };
+      rangeCache[currentDataset] = buildDefaultRangeForPoints(pts);
     }
     layout.xaxis.autorange = false;
     layout.yaxis.autorange = false;
@@ -1447,9 +2203,12 @@
     layout.yaxis.range = rangeCache[currentDataset].y;
 
     layout.showlegend = false;
-    Plotly.react(plotDiv, traces, layout, { displayModeBar: true, responsive: true });
-    requestAnimationFrame(() => {
-      try { Plotly.Plots.resize(plotDiv); } catch (e) {}
+    Plotly.react(plotDiv, traces, layout, { displayModeBar: true, responsive: true }).then(() => {
+      render._renderedDataset = currentDataset;
+      bindPlotInteractions();
+      requestAnimationFrame(() => {
+        try { Plotly.Plots.resize(plotDiv); } catch (e) {}
+      });
     });
 
     renderLegend(traces);
@@ -1481,10 +2240,16 @@
         border:1px solid #e6e6e6; border-radius:8px; padding:8px;
         background:#fff; box-sizing:border-box;
       }
+      .ss-legend-list.ss-legend-list--disabled{ background:#fafafa; }
       .ss-legend-list.ss-legend-list--shapes{ padding-right:0; }
       .ss-legend-item{ display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:6px; }
       .ss-legend-item.is-off{ opacity:0.35; }
       .ss-legend-swatch{ width:22px; height:8px; border:1px solid #000; border-radius:2px; flex:0 0 22px; }
+      .ss-legend-note{ color:#666; font-size:11px; margin-top:6px; }
+      .ss-freeze-scale{ margin-top:10px; }
+      .ss-freeze-scale-title{ font-weight:700; margin:0 0 6px 0; }
+      .ss-freeze-scale-bar{ height:12px; border:1px solid #b9b9b9; border-radius:999px; background:linear-gradient(90deg, #1f4fff 0%, #7a2cff 50%, #ff1a1a 100%); }
+      .ss-freeze-scale-labels{ display:flex; justify-content:space-between; gap:10px; margin-top:4px; color:#555; font-size:11px; }
       .ss-class-legend-plot .legend{ transform: translateX(-6px); transform-origin: top left; }
       .ss-class-legend-plot .legend text{ font-family:'Source Code Pro', monospace !important; font-size:12px !important; fill:#111 !important; transform: translateY(-1.2px); }
     `;
@@ -1943,7 +2708,6 @@
 
   // Similarity source (dropdown options)
   const datasetDropBtn = document.getElementById('ssDatasetDropdownBtn');
-  const methodDropBtn = document.getElementById('ssMethodDropdownBtn');
   const resetColorsBtn = document.getElementById('ssResetColorsBtn');
   const pickerContainer = document.getElementById('ss-color-pickers');
   const customizeDropdown = document.getElementById('ssCustomizeColorsBtn')?.closest?.('.dropdown');
@@ -2121,43 +2885,11 @@
     btn.addEventListener('click', () => {
       const ds = btn.getAttribute('data-dataset');
       if (!ds || ds === currentDataset) return;
-      document.querySelectorAll('.ss-dataset-opt').forEach(b => {
-        b.classList.remove('btn-primary');
-        b.classList.add('btn-outline-primary');
-      });
-      btn.classList.remove('btn-outline-primary');
-      btn.classList.add('btn-primary');
-      currentDataset = ds;
-      if (datasetDropBtn) datasetDropBtn.childNodes[0].nodeValue = 'Source: ' + datasetButtonLabel(ds) + ' ';
+      clearFrozenSelection();
+      setCurrentDataset(ds);
       buildColorPickerUI();
       render();
       // Keep Source dropdown open; user closes manually.
-    });
-  });
-
-  // Method (plot type) options
-  document.querySelectorAll('.ss-method-opt').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const p = (btn.getAttribute('data-plot') || 'tsne').toLowerCase();
-      if (p === plotType) return;
-      document.querySelectorAll('.ss-method-opt').forEach(b => {
-        b.classList.remove('btn-primary');
-        b.classList.add('btn-outline-primary');
-      });
-      btn.classList.remove('btn-outline-primary');
-      btn.classList.add('btn-primary');
-      plotType = (p === 'pca_tsne') ? p : 'tsne';
-      if (methodDropBtn) methodDropBtn.childNodes[0].nodeValue = 'Method: ' + plotButtonLabel(plotType) + ' ';
-      // Switch plot without refetch: data for all plots is preloaded on page load.
-      if (plotErrors && plotErrors[plotType]) {
-        statusEl.textContent = 'Failed to load ' + plotButtonLabel(plotType) + ': ' + plotErrors[plotType];
-        return;
-      }
-      datasets = datasetsByPlot[plotType] || emptyDatasets();
-      render._rangeCache = {};
-      buildColorPickerUI();
-      render();
-      // Keep Method dropdown open; user closes manually.
     });
   });
 
@@ -2165,6 +2897,7 @@
   const colorDropBtn = document.getElementById('ssColorDropdownBtn');
   document.querySelectorAll('.ss-colorby-opt').forEach(btn => {
     btn.addEventListener('click', () => {
+      clearFrozenSelection();
       document.querySelectorAll('.ss-colorby-opt').forEach(b => {
         b.classList.remove('btn-primary');
         b.classList.add('btn-outline-primary');
@@ -2205,6 +2938,7 @@
     btn.addEventListener('click', () => {
       const key = btn.getAttribute('data-key') || 'None';
       if (key === shapeKey) return;
+      clearFrozenSelection();
       document.querySelectorAll('.ss-shapeby-opt').forEach(b => {
         b.classList.remove('btn-primary');
         b.classList.add('btn-outline-primary');
@@ -2223,22 +2957,29 @@
 
   // Initialize dropdown button labels to current state
   if (datasetDropBtn) datasetDropBtn.childNodes[0].nodeValue = 'Source: ' + datasetButtonLabel(currentDataset) + ' ';
-  if (methodDropBtn) methodDropBtn.childNodes[0].nodeValue = 'Method: ' + plotButtonLabel(plotType) + ' ';
   if (colorDropBtn) colorDropBtn.childNodes[0].nodeValue = 'Color by: ' + colorKey + ' ';
   if (shapeDropBtn) shapeDropBtn.childNodes[0].nodeValue = 'Shape by: ' + shapeKey + ' ';
   updateCustomizeHeader();
   buildColorPickerUI();
 
-  // Ensure Method dropdown button styles match initial plotType (supports ?plot=...)
-  document.querySelectorAll('.ss-method-opt').forEach(b => {
-    const k = (b.getAttribute('data-plot') || 'tsne').toLowerCase();
-    const isOn = (k === plotType);
-    b.classList.toggle('btn-primary', isOn);
-    b.classList.toggle('btn-outline-primary', !isOn);
-  });
+  syncDatasetButtons();
+  syncTableOnHoverButton();
+
+  const tableOnHoverBtn = document.getElementById('ssTableOnHoverBtn');
+  if (tableOnHoverBtn) {
+    tableOnHoverBtn.addEventListener('click', () => {
+      if (currentDataset !== 'sequence') return;
+      showTableOnHover = !showTableOnHover;
+      syncTableOnHoverButton();
+      if (!selectedPointData) {
+        renderSidePanelPlaceholder();
+      }
+    });
+  }
 
   if (resetColorsBtn) {
     resetColorsBtn.addEventListener('click', () => {
+      clearFrozenSelection();
       clearOverridesForKey(colorKey);
       buildColorPickerUI();
       render();
@@ -2246,6 +2987,7 @@
   }
 
   window.addEventListener('resize', () => {
+    positionHoverPanel();
     try { Plotly.Plots.resize(plotDiv); } catch (e) {}
   });
 
@@ -2254,9 +2996,8 @@
 
   async function loadData() {
     try {
-      statusEl.textContent = 'Loading t-SNE + PCA→t-SNE…';
-      const url = EMBED_URL + '&plots=tsne,pca_tsne';
-      const res = await fetch(url, { headers: { 'Accept': 'application/json' }});
+      statusEl.textContent = 'Loading StructureSim embeddings…';
+      const res = await fetch(EMBED_URL, { headers: { 'Accept': 'application/json' }});
       if (!res.ok) {
         let detail = '';
         try {
@@ -2267,7 +3008,7 @@
       }
       const data = await res.json();
 
-      function applyTransforms(dsObj) {
+      function applyTransforms(dsObj, plotKey) {
         if (!dsObj) return;
         const activePts = dsObj.active || [];
         const inactivePts = dsObj.inactive || [];
@@ -2289,45 +3030,28 @@
           });
         });
       }
-
-      const plots = (data && data.plots) ? data.plots : null;
-      if (plots) {
-        plotErrors = (data && data.plot_errors) ? data.plot_errors : {};
-        ['tsne','pca_tsne'].forEach(pk => {
-          const pl = plots[pk];
-          if (!pl) return;
-          datasetsByPlot[pk] = {
-            sequence: (pl.sequence && pl.sequence.points) || [],
-            inactive: (pl.structure && pl.structure.inactive && pl.structure.inactive.points) || [],
-            active:   (pl.structure && pl.structure.active   && pl.structure.active.points)   || [],
-          };
-          applyTransforms(datasetsByPlot[pk]);
-          applyWheelFamilyRenames(datasetsByPlot[pk]);
-        });
-      } else {
-        // Backwards-compatible: single payload response
-        plotErrors = {};
-        datasetsByPlot[plotType] = {
-          sequence: (data.sequence && data.sequence.points) || [],
-          inactive: (data.structure && data.structure.inactive && data.structure.inactive.points) || [],
-          active:   (data.structure && data.structure.active   && data.structure.active.points)   || [],
-        };
-        applyTransforms(datasetsByPlot[plotType]);
-        applyWheelFamilyRenames(datasetsByPlot[plotType]);
-      }
+      datasetsByPlot.tsne = {
+        sequence: (data.sequence && data.sequence.points) || [],
+        inactive: (data.structure && data.structure.inactive && data.structure.inactive.points) || [],
+        active:   (data.structure && data.structure.active   && data.structure.active.points)   || [],
+      };
+      applyTransforms(datasetsByPlot.tsne, 'tsne');
+      applyWheelFamilyRenames(datasetsByPlot.tsne);
 
       // Rebuild global receptor-family palette now that data is loaded.
       receptorFamilyColorsGlobal = null;
       rebuildGlobalReceptorFamilyColors();
 
-      datasets = datasetsByPlot[plotType] || emptyDatasets();
+      datasets = datasetsByPlot.tsne || emptyDatasets();
 
       // New embedding => reset fixed axis ranges
       render._rangeCache = {};
 
       statusEl.textContent = '';
       buildColorPickerUI();
+      renderSidePanelPlaceholder();
       render();
+      initReceptorSearch();
     } catch (e) {
       console.error('Load error:', e);
       statusEl.textContent = 'Failed to load data: ' + (e && e.message ? e.message : String(e));

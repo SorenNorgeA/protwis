@@ -1,0 +1,441 @@
+{% extends "home/base.html" %}
+{% load static %}
+
+{% block addon_css %}
+<style>
+.ncct-page {
+  padding: 16px 20px 28px;
+}
+.ncct-status {
+  text-align: center;
+  font-size: 15px;
+  margin-bottom: 14px;
+  color: #555;
+}
+.ncct-intro {
+  max-width: 1080px;
+  margin: 0 auto 18px;
+  text-align: center;
+  color: #444;
+}
+.ncct-global-toolbar {
+  max-width: 1180px;
+  margin: 0 auto 14px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ncct-toolbar-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #555;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.ncct-tabs {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+.ncct-pane {
+  padding-top: 16px;
+}
+.ncct-plot-card {
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px 16px 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.ncct-toolbar {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.ncct-plot-title {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.ncct-plot {
+  min-height: 620px;
+}
+.ncct-class-key {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 14px;
+  margin-top: 14px;
+}
+.ncct-class-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e1e1e1;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: #fafafa;
+  font-size: 12px;
+  color: #333;
+}
+.ncct-class-key-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  flex: 0 0 auto;
+}
+.ncct-meta {
+  text-align: center;
+  font-size: 12px;
+  color: #666;
+  margin-top: 12px;
+}
+.ncct-tree-plot .annotation-text {
+  font-weight: 700;
+}
+.ncct-tree-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 580px;
+}
+.ncct-tree-container svg {
+  max-width: 100%;
+}
+.ncct-tree-container .branch {
+  fill: none;
+  stroke: #999;
+  stroke-width: 2px;
+}
+.ncct-tree-container .branch-tracer {
+  fill: none;
+  stroke: #bbb;
+  stroke-width: 1px;
+  stroke-dasharray: 3, 4;
+}
+.ncct-tree-container .internal-node circle {
+  display: none;
+}
+.ncct-tree-container .node.leaf circle {
+  stroke: #444;
+  stroke-width: 1px;
+}
+.ncct-tree-container .node text {
+  font: 10px sans-serif;
+  fill: #111;
+  cursor: default;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid ncct-page">
+  <div id="ncct-status" class="ncct-status">Loading class clusters…</div>
+
+  <div class="ncct-intro">
+    This page summarizes the highest sequence similarity between GPCR classes as a compact 2D class-cluster plot and a distance-driven hierarchical dendrogram.
+  </div>
+
+  <div class="ncct-global-toolbar">
+    <span class="ncct-toolbar-label">Distance summary</span>
+    <div class="ncct-toolbar" id="ncct-distance-methods" aria-label="Distance summary methods"></div>
+  </div>
+
+  <div class="ncct-tabs">
+    <ul class="nav nav-tabs" role="tablist">
+      <li role="presentation" class="active">
+        <a href="#ncct-cluster-pane" aria-controls="ncct-cluster-pane" role="tab" data-toggle="tab">Cluster</a>
+      </li>
+      <li role="presentation">
+        <a href="#ncct-tree-pane" aria-controls="ncct-tree-pane" role="tab" data-toggle="tab">Tree</a>
+      </li>
+    </ul>
+
+    <div class="tab-content">
+      <div role="tabpanel" class="tab-pane active ncct-pane" id="ncct-cluster-pane">
+        <div class="ncct-plot-card">
+          <div class="ncct-toolbar" id="ncct-cluster-methods" aria-label="Cluster methods"></div>
+          <div id="ncct-cluster-title" class="ncct-plot-title">Class cluster</div>
+          <div id="ncct-cluster-plot" class="ncct-plot"></div>
+          <div id="ncct-class-key" class="ncct-class-key"></div>
+          <div id="ncct-cluster-meta" class="ncct-meta"></div>
+        </div>
+      </div>
+
+      <div role="tabpanel" class="tab-pane ncct-pane" id="ncct-tree-pane">
+        <div class="ncct-plot-card">
+          <div class="ncct-plot-title">Distance dendrogram</div>
+          <div class="ncct-tree-container ncct-plot">
+            <svg id="ncct-clustering-tree"></svg>
+          </div>
+          <div id="ncct-tree-meta" class="ncct-meta"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block addon_js %}
+<script src="{% static 'home/js/plotly_v1_58_5.js' %}"></script>
+<script src="{% static 'home/js/d3.v3.min.js' %}"></script>
+<script src="{% static 'home/js/d3-color.v1.min.js' %}"></script>
+<script src="{% static 'home/js/d3-interpolate.v1.min.js' %}"></script>
+<script src="{% static 'home/js/d3-scale-chromatic.v1.min.js' %}"></script>
+<script src="{% static 'home/js/d3-selection-multi.v1.min.js' %}"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.3/underscore-min.js" charset="utf-8"></script>
+<script src="{% static 'home/js/phylo_library.js' %}"></script>
+<script src="{% static 'home/js/structures_clustering.js' %}"></script>
+<script>
+(function() {
+  const EMBED_URL = "{{ embed_url }}";
+  const statusEl = document.getElementById('ncct-status');
+  const clusterPlotEl = document.getElementById('ncct-cluster-plot');
+  const treeContainerEl = document.querySelector('.ncct-tree-container');
+  const classKeyEl = document.getElementById('ncct-class-key');
+  const distanceMethodsEl = document.getElementById('ncct-distance-methods');
+  const clusterMethodsEl = document.getElementById('ncct-cluster-methods');
+  const clusterTitleEl = document.getElementById('ncct-cluster-title');
+  const clusterMetaEl = document.getElementById('ncct-cluster-meta');
+  const treeMetaEl = document.getElementById('ncct-tree-meta');
+  let currentDistanceVariant = 'max';
+  let currentClusterMethod = 'tsne';
+  let currentPayload = null;
+
+  function makeClassKey(classes) {
+    classKeyEl.innerHTML = '';
+    (classes || []).forEach(cls => {
+      const item = document.createElement('div');
+      item.className = 'ncct-class-key-item';
+
+      const swatch = document.createElement('span');
+      swatch.className = 'ncct-class-key-swatch';
+      swatch.style.backgroundColor = cls.color || '#808080';
+      item.appendChild(swatch);
+
+      const text = document.createElement('span');
+      text.textContent = (cls.symbol || '') + ' - ' + (cls.name || '');
+      item.appendChild(text);
+
+      classKeyEl.appendChild(item);
+    });
+  }
+
+  function clusterMethodLabel(methodKey) {
+    const variant = currentVariantPayload();
+    const methods = ((variant || {}).scatter || {}).methods || {};
+    return (methods[methodKey] && methods[methodKey].label) || methodKey.toUpperCase();
+  }
+
+  function distanceVariantLabel(variantKey) {
+    const variants = ((currentPayload || {}).variants) || {};
+    return (variants[variantKey] && variants[variantKey].label) || variantKey;
+  }
+
+  function currentVariantPayload() {
+    const variants = ((currentPayload || {}).variants) || {};
+    if (variants[currentDistanceVariant]) return variants[currentDistanceVariant];
+    const defaultKey = (currentPayload && currentPayload.default_variant) || 'max';
+    if (variants[defaultKey]) return variants[defaultKey];
+    const firstKey = Object.keys(variants)[0];
+    return firstKey ? variants[firstKey] : {};
+  }
+
+  function renderCluster(payload, variantKey, methodKey) {
+    const variants = payload.variants || {};
+    const variant = variants[variantKey] || currentVariantPayload();
+    const scatter = variant.scatter || {};
+    const methods = scatter.methods || {};
+    const method = methods[methodKey] ? methodKey : (scatter.default_method || 'tsne');
+    const methodPayload = methods[method] || { points: [] };
+    const points = methodPayload.points || [];
+
+    const trace = {
+      type: 'scatter',
+      mode: 'markers+text',
+      x: points.map(p => p.x),
+      y: points.map(p => p.y),
+      text: points.map(p => p.symbol),
+      textposition: 'top center',
+      textfont: {
+        size: 14,
+        color: '#111',
+        family: 'Source Code Pro, monospace',
+      },
+      hoverinfo: 'skip',
+      marker: {
+        size: 18,
+        color: points.map(p => p.color),
+        line: {
+          width: 1,
+          color: '#222',
+        },
+      },
+    };
+
+    const layout = {
+      margin: { l: 30, r: 20, t: 10, b: 30 },
+      paper_bgcolor: '#fff',
+      plot_bgcolor: '#fff',
+      showlegend: false,
+      hovermode: false,
+      xaxis: {
+        showgrid: false,
+        zeroline: false,
+        showticklabels: false,
+        title: '',
+      },
+      yaxis: {
+        showgrid: false,
+        zeroline: false,
+        showticklabels: false,
+        title: '',
+      },
+      font: {
+        family: 'Source Code Pro, monospace',
+        color: '#111',
+      },
+    };
+
+    const config = {
+      responsive: true,
+      displayModeBar: false,
+    };
+
+    Plotly.newPlot(clusterPlotEl, [trace], layout, config);
+    clusterTitleEl.textContent = 'Class ' + clusterMethodLabel(method) + ' cluster';
+    clusterMetaEl.textContent = 'Projection: ' + clusterMethodLabel(method) + ' using ' + distanceVariantLabel(currentDistanceVariant) + '.';
+    currentClusterMethod = method;
+  }
+
+  function renderClusterMethodButtons(payload, variantKey) {
+    const variant = (payload.variants || {})[variantKey] || currentVariantPayload();
+    const scatter = variant.scatter || {};
+    const methods = scatter.methods || {};
+    clusterMethodsEl.innerHTML = '';
+    Object.keys(methods).forEach(methodKey => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-sm ' + (methodKey === currentClusterMethod ? 'btn-primary' : 'btn-default');
+      btn.textContent = clusterMethodLabel(methodKey);
+      btn.addEventListener('click', function() {
+        if (methodKey === currentClusterMethod) return;
+        renderCluster(payload, currentDistanceVariant, methodKey);
+        renderClusterMethodButtons(payload, currentDistanceVariant);
+      });
+      clusterMethodsEl.appendChild(btn);
+    });
+  }
+
+  function renderDistanceVariantButtons(payload) {
+    const variants = payload.variants || {};
+    distanceMethodsEl.innerHTML = '';
+    Object.keys(variants).forEach(variantKey => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-sm ' + (variantKey === currentDistanceVariant ? 'btn-primary' : 'btn-default');
+      btn.textContent = distanceVariantLabel(variantKey);
+      btn.addEventListener('click', function() {
+        if (variantKey === currentDistanceVariant) return;
+        currentDistanceVariant = variantKey;
+        const variant = variants[currentDistanceVariant] || {};
+        const scatter = variant.scatter || {};
+        if (!((scatter.methods || {})[currentClusterMethod])) {
+          currentClusterMethod = scatter.default_method || 'tsne';
+        }
+        renderDistanceVariantButtons(payload);
+        renderCluster(payload, currentDistanceVariant, currentClusterMethod);
+        renderClusterMethodButtons(payload, currentDistanceVariant);
+        renderTree(payload, currentDistanceVariant);
+        renderStatus(payload, currentDistanceVariant);
+      });
+      distanceMethodsEl.appendChild(btn);
+    });
+  }
+
+  function renderTree(payload, variantKey) {
+    if (!treeContainerEl) return;
+
+    var variant = (payload.variants || {})[variantKey] || currentVariantPayload();
+    var tree = variant.tree || {};
+    var newick = tree.newick || '';
+
+    if (!newick || newick.trim() === '') {
+      treeContainerEl.innerHTML = '<div style="text-align:center;padding:80px 20px;color:#666;">No tree data (need at least 2 classes).</div>';
+      treeMetaEl.textContent = '';
+      return;
+    }
+
+    var colorBySymbol = {};
+    (payload.classes || []).forEach(function(cls) {
+      colorBySymbol[String(cls.symbol || '')] = cls.color || '#808080';
+    });
+
+    if (typeof renderTreeFromNewick === 'function') {
+      renderTreeFromNewick(newick, colorBySymbol, '.ncct-tree-container', 580);
+    }
+
+    treeMetaEl.textContent = 'Circular dendrogram. Linkage: ' + (tree.linkage_method || 'average') + '. Branch lengths use ' + distanceVariantLabel(currentDistanceVariant) + '.';
+  }
+
+  function renderStatus(payload, variantKey) {
+    const variant = (payload.variants || {})[variantKey] || currentVariantPayload();
+    const meta = variant.meta || {};
+    const notes = [];
+    notes.push((meta.n_classes || 0) + ' classes');
+    notes.push(distanceVariantLabel(variantKey));
+    if (meta.missing_pairs) {
+      notes.push(String(meta.missing_pairs) + ' missing pairs filled with max observed distance');
+    }
+    statusEl.textContent = notes.join(' | ');
+  }
+
+  async function loadPage() {
+    try {
+      const res = await fetch(EMBED_URL, { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) {
+        let detail = '';
+        try {
+          const err = await res.json();
+          if (err && err.error) detail = String(err.error);
+        } catch (e) {}
+        throw new Error('HTTP ' + res.status + (detail ? ': ' + detail : ''));
+      }
+
+      const payload = await res.json();
+      currentPayload = payload;
+      currentDistanceVariant = payload.default_variant || 'max';
+      const initialVariant = currentVariantPayload();
+      currentClusterMethod = ((initialVariant.scatter || {}).default_method) || 'tsne';
+      makeClassKey(payload.classes || []);
+      renderDistanceVariantButtons(payload);
+      renderCluster(payload, currentDistanceVariant, currentClusterMethod);
+      renderClusterMethodButtons(payload, currentDistanceVariant);
+      renderTree(payload, currentDistanceVariant);
+      renderStatus(payload, currentDistanceVariant);
+    } catch (err) {
+      statusEl.textContent = 'Failed to load class cluster data.';
+      clusterMetaEl.textContent = String(err && err.message ? err.message : err);
+      treeMetaEl.textContent = '';
+    }
+  }
+
+  $('a[data-toggle="tab"]').on('shown.bs.tab', function () {
+    try { Plotly.Plots.resize(clusterPlotEl); } catch (e) {}
+    if (currentPayload) renderTree(currentPayload, currentDistanceVariant);
+  });
+
+  window.addEventListener('resize', function() {
+    try { Plotly.Plots.resize(clusterPlotEl); } catch (e) {}
+    if (currentPayload) renderTree(currentPayload, currentDistanceVariant);
+  });
+
+  loadPage();
+})();
+</script>
+{% endblock %}
