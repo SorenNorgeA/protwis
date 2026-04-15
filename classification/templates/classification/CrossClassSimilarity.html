@@ -3,6 +3,23 @@
 
 {% block addon_css %}
 <link rel="stylesheet" href="{% static 'home/css/NewDrugsBrowser_datatables.min.css' %}" type="text/css"/>
+{% if embed_mode %}
+<style>
+body > nav.navbar {
+  display: none !important;
+}
+
+body > #content.container {
+  width: 100%;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+body > #content.container > #gpcrdb_alert_placeholder {
+  display: none !important;
+}
+</style>
+{% endif %}
 
 <style>
 /* ===========================================================
@@ -11,6 +28,9 @@
 
 /* --- Page layout / headings --- */
 .page-wrap { padding: 8px 0 16px; margin-top: 20px; }
+{% if embed_mode %}
+.page-wrap { margin-top: 0; }
+{% endif %}
 .title-center { text-align: center; margin-bottom: 8px; }
 
 /* New centering rail — matches .ccs-scroller’s centering */
@@ -36,7 +56,7 @@
 /* Axis wrapper (scope width clamp) */
 .ccs-axis-wrap{ position: relative; width: 100%; margin: 0 auto; --ccs-maxw: 100%; display: grid; row-gap: 12px;}
 .ccs-axis-wrap.scope-human{ --ccs-maxw: 60%; }
-.ccs-axis-wrap.scope-human-classless{ --ccs-maxw: 100%; }
+.ccs-axis-wrap.scope-human-unclassified{ --ccs-maxw: 100%; }
 
 /* Badges look */
 .ccs-axis-badge{ display:inline-block; padding:6px 10px; font-size:18px; line-height:1.1; border-radius:12px; border:1px solid #bbb; color:#000; }
@@ -77,8 +97,8 @@
 /* ====== Fixed-size squares + table base ====== */
 :root{
   /* preset these however you like */
-  --ccs-cell: 80px;            /* width & height of data cells and header cells */
-  --ccs-row-header-w: 80px;    /* width of the left label column */
+  --ccs-cell: 88px;            /* width & height of data cells and header cells */
+  --ccs-row-header-w: 88px;    /* width of the left label column */
   --ccs-empty-bg: #fff;        /* fixed blank background (white) */
 
   /* heatmap text presets (main table only) */
@@ -90,19 +110,19 @@
   --ccs-head2-fs: 12px;        /* second line inside <small.ccs-sub> (e.g., “(Rhodopsin)”) */
 }
 
-/* HUMAN ONLY — larger layout */
+/* HUMAN WITHOUT UNCLASSIFIED — larger layout */
 .ccs-axis-wrap.scope-human {
-  --ccs-cell: 100px;
-  --ccs-row-header-w: 100px;
+  --ccs-cell: 108px;
+  --ccs-row-header-w: 108px;
   --ccs-num-fs: 15px;
   --ccs-head1-fs: 18px;
   --ccs-head2-fs: 14px;
 }
 
-/* HUMAN + CLASSLESS — compact layout */
-.ccs-axis-wrap.scope-human-classless {
-  --ccs-cell: 80px;
-  --ccs-row-header-w: 80px;
+/* HUMAN WITH UNCLASSIFIED — compact layout */
+.ccs-axis-wrap.scope-human-unclassified {
+  --ccs-cell: 88px;
+  --ccs-row-header-w: 88px;
   --ccs-num-fs: 13px;
   --ccs-head1-fs: 15px;
   --ccs-head2-fs: 11px;
@@ -312,7 +332,7 @@ td.cell-empty{ background: var(--ccs-empty-bg); color:#888; }
         <li><strong>Blue (SIM)</strong> = sequence similarity (lower triangle).</li>
         <li>Hover any cell to preview pairs; <strong>click</strong> to lock and open detailed <em>flyout</em>.</li>
         <li>Use the <strong>Download</strong> buttons to export the heatmap or the flyout as JPG/PNG/SVG.</li>
-        <li>Use <strong>Include classless receptors / Exclude classless receptors</strong> to toggle whether <em>(Classless)</em> items are shown.</li>
+        <li>Use <strong>Include unclassified receptors / Exclude unclassified receptors</strong> to toggle whether <em>(Unclassified)</em> items are shown.</li>
         <li><strong>Human</strong>: the classes and receptors shown on this page are those found in humans.</li>
       </ul>
       <p>You can tweak the scope, export with badges, and follow links to GPCRdb, GtoPdb, and UniProt.</p>
@@ -330,7 +350,7 @@ td.cell-empty{ background: var(--ccs-empty-bg); color:#888; }
           How to
         </button>
         <button id="ccsScopeToggle" type="button" class="btn btn-primary">
-          Include classless receptors
+          Include unclassified receptors
         </button>
         <div class="dropdown" id="ccsDownloadDropdown" style="position: relative;">
           <button type="button" class="btn btn-primary dropdown-toggle"
@@ -445,6 +465,39 @@ td.cell-empty{ background: var(--ccs-empty-bg); color:#888; }
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+  function notifyEmbeddedParentHeightChanged() {
+    try {
+      if (window.frameElement) {
+        window.frameElement.dispatchEvent(new Event('cv:content-resize'));
+      }
+    } catch (err) {}
+  }
+
+  function scheduleEmbeddedHeightSync() {
+    window.setTimeout(notifyEmbeddedParentHeightChanged, 0);
+    window.setTimeout(notifyEmbeddedParentHeightChanged, 180);
+    window.setTimeout(notifyEmbeddedParentHeightChanged, 420);
+  }
+
+  function notifyEmbeddedParentContentReady() {
+    try {
+      if (window.frameElement) {
+        window.frameElement.dispatchEvent(new Event('cv:content-ready'));
+      }
+    } catch (err) {}
+  }
+
+  function notifyEmbeddedParentContentFailed() {
+    try {
+      if (window.frameElement) {
+        window.frameElement.dispatchEvent(new Event('cv:content-error'));
+      }
+    } catch (err) {}
+  }
+
+  window.addEventListener('error', function () {
+    notifyEmbeddedParentContentFailed();
+  }, { once: true });
 
   /* ========= DOM cache ========= */
   var axisWrap    = document.querySelector('.ccs-axis-wrap');
@@ -475,15 +528,18 @@ document.addEventListener('DOMContentLoaded', function () {
     thead.innerHTML=''; tbody.innerHTML='';
     var cg=table.querySelector('colgroup'); if(cg) cg.remove();
   }
+  function displayClassLabel(raw){
+    return String(raw || '').replace(/Classless/gi, 'Unclassified');
+  }
   function twoLineLabel(raw){
     if (!raw) return '';
-    var s = String(raw).replace(/^\s*class\s+/i, '');
+    var s = displayClassLabel(raw).replace(/^\s*class\s+/i, '');
     var m = s.match(/^(.*?)(\s*\(([^)]+)\))\s*$/);
     if (!m) return s;
     return m[1].trim() + '<br><small class="ccs-sub">(' + m[3].trim() + ')</small>';
   }
-  function isClassless(name){ return /\(Classless\)\s*$/i.test(name); }
-  function flatClassLabel(raw){ return String(raw || '').replace(/^\s*Class\s+/i, ''); }
+  function isUnclassified(name){ return /\(Classless\)\s*$/i.test(name); }
+  function flatClassLabel(raw){ return displayClassLabel(raw).replace(/^\s*Class\s+/i, ''); }
 
   var baseOrder = Array.from({length: classes.length}, (_, i) => i);
 
@@ -911,15 +967,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
   /* ========= Scope + badges ========= */
   function applyScopeWidth(scope){
-    axisWrap.classList.remove('scope-human', 'scope-human-classless');
+    axisWrap.classList.remove('scope-human', 'scope-human-unclassified');
     if (scope === 'human') axisWrap.classList.add('scope-human');
-    else if (scope === 'human-classless') axisWrap.classList.add('scope-human-classless');
+    else if (scope === 'human-unclassified') axisWrap.classList.add('scope-human-unclassified');
   }
   function indicesForScope(scope){
     var allowed=[]; baseOrder.forEach(function(i){
-      var name=classes[i], clsless=isClassless(name);
-      if (scope==='human'){ if (!clsless) allowed.push(i); }
-      else if (scope==='human-classless'){ allowed.push(i); }
+      var name=classes[i], isUnclassifiedClass=isUnclassified(name);
+      if (scope==='human'){ if (!isUnclassifiedClass) allowed.push(i); }
+      else if (scope==='human-unclassified'){ allowed.push(i); }
     });
     return allowed;
   }
@@ -953,12 +1009,13 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   scopeToggle.addEventListener('click', function(){
-    currentScope = (currentScope === 'human') ? 'human-classless' : 'human';
+    currentScope = (currentScope === 'human') ? 'human-unclassified' : 'human';
     // Label shows the action you can take next (not the current state)
-    scopeToggle.textContent = (currentScope === 'human') ? 'Include classless receptors' : 'Exclude classless receptors';
+    scopeToggle.textContent = (currentScope === 'human') ? 'Include unclassified receptors' : 'Exclude unclassified receptors';
     renderTable(indicesForScope(currentScope));
     applyScopeWidth(currentScope);
     positionBadges();
+    scheduleEmbeddedHeightSync();
   });
 
   (scroller || window).addEventListener('scroll', function(){
@@ -975,6 +1032,8 @@ document.addEventListener('DOMContentLoaded', function () {
   if (!Array.isArray(classes) || !Array.isArray(matrix) || !classes.length) {
     if (axisWrap) axisWrap.style.display='none';
     if (empty) empty.style.display='';
+    scheduleEmbeddedHeightSync();
+    notifyEmbeddedParentContentReady();
     return;
   }
 
@@ -1088,6 +1147,7 @@ document.addEventListener('DOMContentLoaded', function () {
       howToBack.setAttribute('aria-hidden','false');
       // optional: prevent background scroll
       document.documentElement.style.overflow = 'hidden';
+      scheduleEmbeddedHeightSync();
     }
     function closeHowTo(){
       if (!howToModal || !howToBack) return;
@@ -1096,6 +1156,7 @@ document.addEventListener('DOMContentLoaded', function () {
       howToModal.setAttribute('aria-hidden','true');
       howToBack.setAttribute('aria-hidden','true');
       document.documentElement.style.overflow = '';
+      scheduleEmbeddedHeightSync();
     }
 
     if (howToBtn)   howToBtn.addEventListener('click', openHowTo);
@@ -1111,6 +1172,8 @@ document.addEventListener('DOMContentLoaded', function () {
   renderTable(indicesForScope(currentScope));
   applyScopeWidth(currentScope);
   positionBadges();
+  scheduleEmbeddedHeightSync();
+  notifyEmbeddedParentContentReady();
 
 });
 </script>

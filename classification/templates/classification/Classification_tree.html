@@ -5,6 +5,39 @@
 <link rel="stylesheet" href="{% static 'home/css/nv.d3.min.css' %}" type="text/css" />
 <link rel="stylesheet" href="{% static 'home/css/nvd3-update.css' %}" type="text/css" />
 <style>
+  .btn-outline-primary {
+    color: #337ab7;
+    background-color: transparent;
+    border: 1px solid #337ab7;
+  }
+
+  .btn-outline-primary:hover,
+  .btn-outline-primary:focus {
+    color: #fff;
+    background-color: #337ab7;
+    border-color: #2e6da4;
+  }
+
+  .tree-embed-mode {
+    padding-top: 8px;
+  }
+
+  {% if tree_embed_mode %}
+  body > nav.navbar {
+    display: none !important;
+  }
+
+  body > #content.container {
+    width: 100%;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  body > #content.container > #gpcrdb_alert_placeholder {
+    display: none !important;
+  }
+  {% endif %}
+
   /* Scale tree SVG to 95% of page width */
   .tree_plot {
     width: 95%;
@@ -38,10 +71,7 @@
   }
 
   .plot-title {
-    font-size: 18px;
-    font-weight: bold;
-    margin-bottom: 15px;
-    text-align: center;
+    display: none;
   }
 
   .tree-controls-label {
@@ -50,11 +80,45 @@
     color: #444;
     margin-bottom: 4px;
   }
+
+  .tree-toolbar-group--center {
+    text-align: center;
+  }
+
+  .tree-toolbar-group--center .tree-controls-label {
+    text-align: center;
+  }
+
+  .tree-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: flex-end;
+  }
+
+  .tree-toolbar .dropdown-menu {
+    padding: 10px 12px;
+    min-width: 150px;
+  }
+
+  .tree-toolbar .btn-block {
+    width: 100%;
+    margin-bottom: 6px;
+  }
+
+  .tree-toolbar .btn-block:last-child {
+    margin-bottom: 0;
+  }
+
+  .tree-plot-scroll {
+    margin-bottom: 30px;
+    overflow: visible;
+  }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="col-md-12">
+<div class="col-md-12{% if tree_embed_mode %} tree-embed-mode{% endif %}">
   {% if error %}
     <div class="alert alert-danger">
       <strong>Error:</strong> {{ error }}
@@ -63,33 +127,45 @@
     <!-- Controls -->
     <div class="row" style="margin-top: 20px; margin-bottom: 16px;">
       <div class="col-md-12">
-        <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;">
-          <div>
+        <div class="tree-toolbar">
+          <div class="tree-toolbar-group--center">
             <div class="tree-controls-label">Layout</div>
-            <select id="tree_layout" class="form-control input-sm">
-              <option value="Tree - Circular" selected>Tree - Circular</option>
-              <option value="Tree - Organic">Tree - Organic</option>
-              <option value="Tree - Straight">Tree - Straight</option>
-            </select>
-          </div>
-
-          <div>
-            <div class="tree-controls-label">Type</div>
-            <div id="tree_type_group" class="btn-group" role="group" aria-label="Type">
-              <button type="button" class="btn btn-primary btn-sm active" data-type="Class">Class</button>
-              <button type="button" class="btn btn-default btn-sm" data-type="Modality">Modality</button>
-              <button type="button" class="btn btn-default btn-sm" data-type="Chemotype">Chemotype</button>
+            <div id="tree_layout_group" class="btn-group" role="group" aria-label="Layout">
+              <button type="button" class="btn btn-primary btn-sm active" data-layout="Tree - Circular">Circular</button>
+              <button type="button" class="btn btn-default btn-sm" data-layout="Tree - Organic">Organic</button>
+              <button type="button" class="btn btn-default btn-sm" data-layout="Tree - Straight">Straight</button>
             </div>
           </div>
 
-          <div style="min-width: 260px; flex: 1;">
-            <div class="tree-controls-label">Selection</div>
-            <select id="tree_selection" class="form-control input-sm"></select>
-          </div>
+          {% if tree_locked %}
+            <select id="tree_selection" class="form-control input-sm" style="display:none;"></select>
+          {% else %}
+            <div>
+              <div class="tree-controls-label">Type</div>
+              <div id="tree_type_group" class="btn-group" role="group" aria-label="Type">
+                <button type="button" class="btn btn-primary btn-sm active" data-type="Class">Class</button>
+                <button type="button" class="btn btn-default btn-sm" data-type="Modality">Modality</button>
+                <button type="button" class="btn btn-default btn-sm" data-type="Chemotype">Chemotype</button>
+              </div>
+            </div>
+
+            <div style="min-width: 260px; flex: 1;">
+              <div class="tree-controls-label">Selection</div>
+              <select id="tree_selection" class="form-control input-sm"></select>
+            </div>
+          {% endif %}
 
           <div>
             <div class="tree-controls-label">&nbsp;</div>
-            <button id="download_png_main" type="button" class="btn btn-default btn-sm">Download PNG</button>
+            <div class="dropdown">
+              <button id="treeDownloadDropdownBtn" class="btn btn-primary btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+                <span class="glyphicon glyphicon-download"></span> Download <span class="caret"></span>
+              </button>
+              <div class="dropdown-menu">
+                <button id="download_svg_main" type="button" class="btn btn-primary btn-block">SVG</button>
+                <button id="download_png_main" type="button" class="btn btn-primary btn-block">PNG</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -98,7 +174,7 @@
     <!-- Single plot -->
     <div class="plot-container">
       <div id="tree_plot_title" class="plot-title"></div>
-      <div class="col-md-12" style="margin-bottom: 30px; overflow: auto;">
+      <div class="col-md-12 tree-plot-scroll">
         <div id="tree_plot_main" class="tree_plot text-center"></div>
       </div>
     </div>
@@ -1428,6 +1504,10 @@ function custom_changeLeavesLabels(location, value, dict, styling_dict) {
 // ========================
 const tree_sets_raw = '{{ tree_sets|escapejs }}';
 const tree_sets = JSON.parse(tree_sets_raw);
+const TREE_INITIAL_TYPE = '{{ tree_initial_type|default:"Class"|escapejs }}';
+const TREE_INITIAL_SELECTION = '{{ tree_initial_selection|default:""|escapejs }}';
+const TREE_LOCKED_TYPE = '{{ tree_locked_type|default:""|escapejs }}';
+const TREE_LOCKED_SELECTION = '{{ tree_locked_selection|default:""|escapejs }}';
 
 // ========================
 // === Manual scaling   ===
@@ -1541,14 +1621,38 @@ function downloadSvgAsPng(svgElement, filename, scale) {
 }
 
 function wireDownloadButton() {
-    const btn = document.getElementById("download_png_main");
-    if (!btn) return;
-    btn.addEventListener("click", function () {
-        const svg = document.getElementById("tree_plot_main_svg");
-        const title = (document.getElementById("tree_plot_title") || {}).textContent || "Classification_tree";
-        const safe = String(title).trim().replace(/\s+/g, "_").replace(/[^A-Za-z0-9_\-]+/g, "");
-        downloadSvgAsPng(svg, (safe || "Classification_tree") + ".png", 2);
-    });
+    const pngBtn = document.getElementById("download_png_main");
+    const svgBtn = document.getElementById("download_svg_main");
+    function safeTitle() {
+        const plotHost = document.getElementById("tree_plot_main");
+        const title = (plotHost && plotHost.getAttribute("data-export-title")) || (document.getElementById("tree_plot_title") || {}).textContent || "Classification_tree";
+        return String(title).trim().replace(/\s+/g, "_").replace(/[^A-Za-z0-9_\-]+/g, "") || "Classification_tree";
+    }
+    if (pngBtn) {
+        pngBtn.addEventListener("click", function () {
+            const svg = document.getElementById("tree_plot_main_svg");
+            downloadSvgAsPng(svg, safeTitle() + ".png", 2);
+        });
+    }
+    if (svgBtn) {
+        svgBtn.addEventListener("click", function () {
+            const svg = document.getElementById("tree_plot_main_svg");
+            if (!svg) return;
+            const clone = svg.cloneNode(true);
+            clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+            clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+            const serializer = new XMLSerializer();
+            const blob = new Blob([serializer.serializeToString(clone)], { type: "image/svg+xml;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = safeTitle() + ".svg";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        });
+    }
 }
 
 // UI controller (single plot)
@@ -1590,20 +1694,48 @@ function setActiveType(type) {
     populateSelectionDropdown(type);
 }
 
+function setActiveLayout(layout) {
+    TREE_UI.layout = layout;
+    const group = document.getElementById("tree_layout_group");
+    if (group) {
+        Array.prototype.slice.call(group.querySelectorAll("button[data-layout]")).forEach(function (btn) {
+            const v = btn.getAttribute("data-layout");
+            if (v === layout) {
+                btn.classList.add("active");
+                btn.classList.add("btn-primary");
+                btn.classList.remove("btn-default");
+            } else {
+                btn.classList.remove("active");
+                btn.classList.remove("btn-primary");
+                btn.classList.add("btn-default");
+            }
+        });
+    }
+    scheduleRender();
+}
+
 function populateSelectionDropdown(type) {
     const sel = document.getElementById("tree_selection");
     if (!sel) return;
     const opts = getTypeOptions(type);
     sel.innerHTML = "";
-    opts.forEach(function (o) {
+    let visibleOpts = opts.slice();
+    if (TREE_LOCKED_TYPE && TREE_LOCKED_SELECTION && type === TREE_LOCKED_TYPE) {
+        visibleOpts = opts.filter(function (o) { return o.key === TREE_LOCKED_SELECTION; });
+    }
+    visibleOpts.forEach(function (o) {
         const opt = document.createElement("option");
         opt.value = o.key;
         opt.textContent = o.label;
         sel.appendChild(opt);
     });
     // Default to "A" for Class type; otherwise use first option
-    var defaultKey = opts.length ? opts[0].key : null;
-    if (type === "Class" && opts.some(function (o) { return o.key === "A"; })) {
+    var defaultKey = visibleOpts.length ? visibleOpts[0].key : null;
+    if (TREE_LOCKED_TYPE && TREE_LOCKED_SELECTION && type === TREE_LOCKED_TYPE) {
+        defaultKey = TREE_LOCKED_SELECTION;
+    } else if (type === TREE_INITIAL_TYPE && TREE_INITIAL_SELECTION && visibleOpts.some(function (o) { return o.key === TREE_INITIAL_SELECTION; })) {
+        defaultKey = TREE_INITIAL_SELECTION;
+    } else if (type === "Class" && visibleOpts.some(function (o) { return o.key === "A"; })) {
         defaultKey = "A";
     }
     TREE_UI.selectionKey = defaultKey;
@@ -1617,6 +1749,56 @@ function scheduleRender() {
             renderCurrent();
         });
     });
+}
+
+function getEmbeddedContentHeight() {
+    const anchor = document.querySelector(".plot-container");
+    if (!anchor) return 0;
+    const body = document.body;
+    const html = document.documentElement;
+    const bodyTop = body ? body.getBoundingClientRect().top : 0;
+    const htmlTop = html ? html.getBoundingClientRect().top : 0;
+    const topBase = Math.min(bodyTop || 0, htmlTop || 0);
+    const rect = anchor.getBoundingClientRect();
+    const rectBased = Math.ceil(rect.bottom - topBase + 8);
+    const offsetBased = Math.ceil((anchor.offsetTop || 0) + (anchor.scrollHeight || 0) + 8);
+    return Math.max(rectBased, offsetBased);
+}
+
+function notifyEmbeddedParentHeightChanged() {
+    try {
+        if (window.frameElement) {
+            const nextHeight = getEmbeddedContentHeight();
+            if (nextHeight > 0) {
+                window.frameElement.setAttribute("data-content-height", String(nextHeight));
+                window.frameElement.style.height = nextHeight + "px";
+            }
+            window.frameElement.dispatchEvent(new CustomEvent("cv:content-resize"));
+        }
+    } catch (e) {}
+}
+
+function scheduleEmbeddedHeightSync() {
+    [0, 60, 180, 360, 720].forEach(function (delay) {
+        window.setTimeout(function () {
+            requestAnimationFrame(function () {
+                notifyEmbeddedParentHeightChanged();
+            });
+        }, delay);
+    });
+}
+
+function setupEmbeddedHeightObserver() {
+    try {
+        if (!window.ResizeObserver) return;
+        const anchor = document.querySelector(".plot-container");
+        if (!anchor || anchor._cvHeightObserverBound) return;
+        const observer = new ResizeObserver(function () {
+            scheduleEmbeddedHeightSync();
+        });
+        observer.observe(anchor);
+        anchor._cvHeightObserverBound = true;
+    } catch (e) {}
 }
 
 function collapse_singletons(root, labels) {
@@ -1790,12 +1972,15 @@ function renderCurrent() {
         if (container) container.innerHTML = plot && plot.error
             ? `<div class="alert alert-warning">${plot.error}</div>`
             : '<div class="alert alert-info">No data available</div>';
+        scheduleEmbeddedHeightSync();
         return;
     }
 
     const meta = plot.meta || {};
     const plotTitle = meta.title || selectionKey || "";
-    if (titleEl) titleEl.textContent = plotTitle;
+    if (titleEl) titleEl.textContent = "";
+    const plotHost = document.getElementById(containerId);
+    if (plotHost) plotHost.setAttribute("data-export-title", plotTitle);
 
     // Clone inputs so we never mutate the backend-provided JSON.
     let tree_data = JSON.parse(JSON.stringify(plot.tree));
@@ -2040,10 +2225,16 @@ function renderCurrent() {
     if (layout === "Tree - Circular" && type === "Class" && selectionKey === "A" && meta.orphanLeafLabels && meta.orphanLeafLabels.length) {
         renderOrphanLegendPills(containerId + "_svg", meta.orphanLeafLabels, tree_options);
     }
+
+    setupEmbeddedHeightObserver();
+    scheduleEmbeddedHeightSync();
 }
 
 $(function () {
     wireDownloadButton();
+    setupEmbeddedHeightObserver();
+    window.addEventListener("load", scheduleEmbeddedHeightSync);
+    window.addEventListener("resize", scheduleEmbeddedHeightSync);
 
     const group = document.getElementById("tree_type_group");
     if (group) {
@@ -2064,16 +2255,28 @@ $(function () {
         });
     }
 
-    const layoutSel = document.getElementById("tree_layout");
-    if (layoutSel) {
-        layoutSel.addEventListener("change", function () {
-            TREE_UI.layout = layoutSel.value;
-            scheduleRender();
+    const layoutGroup = document.getElementById("tree_layout_group");
+    if (layoutGroup) {
+        layoutGroup.addEventListener("click", function (e) {
+            const btn = e.target && e.target.closest ? e.target.closest("button[data-layout]") : null;
+            if (!btn) return;
+            const layout = btn.getAttribute("data-layout");
+            if (!layout || layout === TREE_UI.layout) return;
+            setActiveLayout(layout);
         });
     }
 
     // Initialize default
-    setActiveType("Class");
+    setActiveType(TREE_LOCKED_TYPE || TREE_INITIAL_TYPE || "Class");
+    setActiveLayout(TREE_UI.layout || "Tree - Circular");
+    if (TREE_INITIAL_SELECTION && TREE_UI.selectionKey !== TREE_INITIAL_SELECTION && !TREE_LOCKED_SELECTION) {
+        const sel = document.getElementById("tree_selection");
+        if (sel) {
+            sel.value = TREE_INITIAL_SELECTION;
+            TREE_UI.selectionKey = sel.value;
+            scheduleRender();
+        }
+    }
 });
 </script>
 {% endif %}

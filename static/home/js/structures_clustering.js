@@ -492,12 +492,16 @@ function toggleTreeType(event){
 }
 
 function windowResize(){
+  var treeContainer = document.getElementById('tree-container');
+  var plot = document.getElementById("clustering-tree");
+  if (!treeContainer || !plot) {
+    return;
+  }
   var plotsize = window.innerHeight*0.9;
   // maximum is window height - resize if available width is less
-  if (document.getElementById('tree-container').offsetWidth*0.9 < plotsize)
-    plotsize = document.getElementById('tree-container').offsetWidth*0.9
+  if (treeContainer.offsetWidth*0.9 < plotsize)
+    plotsize = treeContainer.offsetWidth*0.9
 
-  var plot = document.getElementById("clustering-tree")
   plot.style.height = plotsize + "px"
   plot.style.width = plotsize + "px"
 

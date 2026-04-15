@@ -1,0 +1,1399 @@
+{% extends "home/base.html" %}
+
+{% block addon_css %}
+<style>
+.cv-landing {
+  position: relative;
+  padding: 22px 0 36px;
+}
+
+.cv-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.cv-scheme-toggle .btn {
+  min-width: 74px;
+}
+
+.cv-landing-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr) minmax(320px, 1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.cv-panel {
+  border: 1px solid #7f8fa3;
+  border-radius: 12px;
+  background: #fbfdff;
+  box-shadow: 0 10px 24px rgba(31, 120, 180, 0.08);
+  padding: 18px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: var(--cv-column-height, auto);
+}
+
+.cv-panel h3 {
+  margin-top: 0;
+  margin-bottom: 22px;
+  font-size: 21px;
+  text-align: center;
+}
+
+.cv-heading-box {
+  display: inline-block;
+  padding: 8px 16px;
+  border: 1px solid #7f8fa3;
+  border-radius: 999px;
+  background: #f4f9ff;
+  box-shadow: 0 4px 12px rgba(31, 120, 180, 0.08);
+}
+
+.cv-btn-theme {
+  color: #fff;
+  border-width: 1px;
+  border-style: solid;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.cv-btn-theme:hover,
+.cv-btn-theme:focus,
+.cv-btn-theme:active,
+.cv-btn-theme.active {
+  color: #fff;
+}
+
+.cv-column-mount {
+  min-height: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#cvClassColumn {
+  justify-content: flex-start;
+  padding-top: var(--cv-class-column-offset, 0px);
+}
+
+#cvClassColumn.cv-class-column-centered {
+  justify-content: center;
+  padding-top: 0;
+}
+
+.cv-node-btn {
+  color: #fff;
+  border-color: #000;
+}
+
+.cv-node-btn:hover,
+.cv-node-btn:focus,
+.cv-node-btn:active,
+.cv-node-btn.active {
+  color: #fff;
+}
+
+.cv-node-btn[data-role="superfamily"] {
+  background: #3C5488;
+}
+
+.cv-node-btn[data-role="class"] {
+  background: #5C78B0;
+}
+
+.cv-node-btn[data-role="family"] {
+  background: #8FB4E8;
+}
+
+.cv-node-btn[data-role="modality"] {
+  background: #7A68C3;
+}
+
+.cv-node-btn[data-role="chemotype"] {
+  background: #A691E6;
+}
+
+.cv-landing.cv-scheme-test .cv-node-btn[data-role="superfamily"],
+.cv-landing.cv-scheme-test .cv-node-btn[data-role="class"] {
+  background: #5C78B0;
+}
+
+.cv-landing.cv-scheme-test .cv-node-btn[data-role="modality"][data-branch-theme="orphan-receptors"] {
+  background: #5B6067;
+}
+
+.cv-landing.cv-scheme-test .cv-node-btn[data-role="chemotype"][data-branch-theme="orphan-receptors"] {
+  background: #A9B0B8;
+}
+
+.cv-landing.cv-scheme-test .cv-node-btn[data-role="family"][data-branch-theme="orphan-receptors"] {
+  background: #C8CFD6;
+  color: #31404b;
+}
+
+.cv-landing.cv-scheme-test .cv-node-btn[data-role="modality"][data-branch-theme="polypeptide-receptors"] {
+  background: #3F7A49;
+}
+
+.cv-landing.cv-scheme-test .cv-node-btn[data-role="chemotype"][data-branch-theme="polypeptide-receptors"] {
+  background: #66A96A;
+}
+
+.cv-landing.cv-scheme-test .cv-node-btn[data-role="family"][data-branch-theme="polypeptide-receptors"] {
+  background: #93C893;
+  color: #23462c;
+}
+
+.cv-landing.cv-scheme-test .cv-node-btn[data-role="modality"][data-branch-theme="small-molecule-receptors"] {
+  background: #5A4A8A;
+}
+
+.cv-landing.cv-scheme-test .cv-node-btn[data-role="chemotype"][data-branch-theme="small-molecule-receptors"] {
+  background: #876FBE;
+}
+
+.cv-landing.cv-scheme-test .cv-node-btn[data-role="family"][data-branch-theme="small-molecule-receptors"] {
+  background: #B29BDD;
+  color: #342a4f;
+}
+
+.cv-family-tree-shell {
+  position: relative;
+}
+
+.cv-family-connectors {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.cv-family-tree-content {
+  position: relative;
+  z-index: 1;
+  --cv-family-parent-width: 220px;
+  --cv-family-branch-origin: 20%;
+  --cv-family-child-offset: 22px;
+  --cv-family-chemotype-width: 220px;
+  --cv-family-class-a-family-offset: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cv-family-class-row[open] > .cv-family-class-summary::after,
+.cv-family-class-content::before,
+.cv-family-class-content::after,
+.cv-family-family-row::before,
+.cv-family-chemotype-row::before,
+.cv-family-chemotype-row-last::before,
+.cv-family-chemotype-row[open] > .cv-family-chemotype-summary::after,
+.cv-family-chemotype-row-static > .cv-family-chemotype-summary::after,
+.cv-family-chemotype-families::before,
+.cv-family-chemotype-family::before,
+.cv-family-class-content > .cv-family-chemotype-row:last-child::after,
+.cv-family-class-content > .cv-family-chemotype-row-static:last-child::after {
+  content: none;
+  display: none;
+}
+
+.cv-connector-line,
+.cv-family-connector-line {
+  stroke: #000;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.cv-column-tree-shell {
+  position: relative;
+}
+
+.cv-static-column-box {
+  width: min(100%, 540px);
+  margin: 0 auto;
+  border: 1px solid #d9e2ef;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f7fbff 100%);
+  padding: 12px 14px;
+}
+
+.cv-column-connectors {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.cv-class-tree {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 18px;
+  align-items: stretch;
+}
+
+.cv-root-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.cv-root-node {
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.cv-root-node .btn {
+  width: 100%;
+  white-space: normal;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.2;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.cv-button-note {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.9;
+  margin-top: 4px;
+}
+
+.cv-branch-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  padding-left: 18px;
+}
+
+.cv-branch-row {
+  position: relative;
+}
+
+.cv-branch-row .btn {
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  white-space: normal;
+  line-height: 1.2;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.cv-family-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: center;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.cv-family-search {
+  display: block;
+  width: 100%;
+  max-width: 280px;
+  margin: 0;
+  text-align: center;
+  border: 1px solid #000;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: inset 0 1px 2px rgba(31, 120, 180, 0.05);
+}
+
+.cv-family-search::placeholder {
+  color: #000;
+  text-align: center;
+}
+
+.cv-family-search-box {
+  width: min(100%, 320px);
+  display: flex;
+  justify-content: center;
+  border: 1px solid #d9e2ef;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f7fbff 100%);
+  padding: 10px 12px;
+}
+
+.cv-family-browser {
+  width: 100%;
+  border: 1px solid #d9e2ef;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f7fbff 100%);
+  padding: 12px 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.cv-family-browser-title {
+  margin-bottom: 10px;
+  color: #52657a;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: center;
+}
+
+.cv-family-class-row {
+  position: relative;
+}
+
+.cv-family-class-summary {
+  list-style: none;
+  cursor: pointer;
+  position: relative;
+  display: block;
+  width: var(--cv-family-parent-width);
+}
+
+.cv-family-class-summary::-webkit-details-marker {
+  display: none;
+}
+
+.cv-family-class-summary .btn {
+  width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+
+.cv-family-class-summary .cv-node-btn,
+.cv-family-chemotype-summary:not(.cv-family-chemotype-summary-static) .cv-node-btn {
+  position: relative;
+  padding-right: 34px;
+}
+
+.cv-family-class-summary .cv-node-btn::after,
+.cv-family-chemotype-summary:not(.cv-family-chemotype-summary-static) .cv-node-btn::after {
+  content: "";
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -6px;
+  border-right: 1px solid #000;
+  border-bottom: 1px solid #000;
+  transform: rotate(45deg);
+  transition: transform 0.15s ease-in-out, margin-top 0.15s ease-in-out;
+}
+
+.cv-family-class-row[open] > .cv-family-class-summary .cv-node-btn::after,
+.cv-family-chemotype-row[open] > .cv-family-chemotype-summary .cv-node-btn::after {
+  margin-top: -2px;
+  transform: rotate(-135deg);
+}
+
+.cv-family-class-row[open] > .cv-family-class-summary::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: var(--cv-family-branch-origin);
+  height: 18px;
+  border-left: 2px solid #c9d7e6;
+}
+
+.cv-family-class-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+  margin-left: var(--cv-family-child-offset);
+  padding-left: 18px;
+}
+
+.cv-family-class-content::before {
+  content: "";
+  position: absolute;
+  left: calc(-1 * (var(--cv-family-child-offset) - (var(--cv-family-parent-width) * var(--cv-family-branch-origin))));
+  top: 0;
+  width: calc(var(--cv-family-child-offset) - (var(--cv-family-parent-width) * var(--cv-family-branch-origin)));
+  border-top: 2px solid #c9d7e6;
+}
+
+.cv-family-class-content::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: var(--cv-family-class-spine-height, calc(100% - 16px));
+  border-left: 2px solid #c9d7e6;
+}
+
+.cv-family-family-row {
+  position: relative;
+}
+
+.cv-family-family-row::before {
+  content: "";
+  position: absolute;
+  left: -18px;
+  top: 50%;
+  width: 18px;
+  border-top: 2px solid #c9d7e6;
+}
+
+.cv-family-chemotype-row {
+  position: relative;
+}
+
+.cv-family-chemotype-row-static {
+  display: block;
+}
+
+.cv-family-chemotype-row::before {
+  content: "";
+  position: absolute;
+  left: -18px;
+  top: 18px;
+  width: 18px;
+  border-top: 2px solid #c9d7e6;
+}
+
+.cv-family-chemotype-row-last::before {
+  left: -18px;
+  width: 20px;
+}
+
+.cv-family-chemotype-summary {
+  list-style: none;
+  cursor: pointer;
+  position: relative;
+  display: block;
+  width: var(--cv-family-chemotype-width);
+}
+
+.cv-family-chemotype-summary-static {
+  cursor: default;
+}
+
+.cv-family-chemotype-summary::-webkit-details-marker {
+  display: none;
+}
+
+.cv-family-chemotype-summary .btn {
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+}
+
+.cv-family-chemotype-row[open] > .cv-family-chemotype-summary::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: var(--cv-family-branch-origin);
+  height: 16px;
+  border-left: 2px solid #c9d7e6;
+}
+
+.cv-family-chemotype-row-static > .cv-family-chemotype-summary::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: var(--cv-family-branch-origin);
+  height: 16px;
+  border-left: 2px solid #c9d7e6;
+}
+
+.cv-family-chemotype-families {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  margin-left: var(--cv-family-class-a-family-offset);
+  padding-left: 18px;
+}
+
+.cv-family-chemotype-families::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 16px;
+  border-left: 2px solid #c9d7e6;
+}
+
+.cv-family-chemotype-family {
+  position: relative;
+}
+
+.cv-family-chemotype-family::before {
+  content: "";
+  position: absolute;
+  left: -18px;
+  top: 50%;
+  width: 18px;
+  border-top: 2px solid #c9d7e6;
+}
+
+.cv-family-class-content > .cv-family-chemotype-row:last-child::after,
+.cv-family-class-content > .cv-family-chemotype-row-static:last-child::after {
+  content: "";
+  position: absolute;
+  left: -18px;
+  top: 18px;
+  bottom: -10px;
+  width: 2px;
+  background: #f7fbff;
+  pointer-events: none;
+}
+
+.cv-family-leaf {
+  width: 100%;
+  white-space: normal;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cv-family-leaf:focus {
+  outline: none;
+}
+
+.cv-family-leaf-meta {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.cv-modality-list {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cv-modality-row {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  column-gap: 18px;
+  align-items: start;
+}
+
+.cv-modality-node {
+  position: relative;
+}
+
+.cv-modality-node .btn {
+  width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+
+.cv-chemotype-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 18px;
+}
+
+.cv-chemotype-item {
+  position: relative;
+}
+
+.cv-chemotype-item .btn {
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+}
+
+@media (max-width: 1199px) {
+  .cv-landing-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .cv-panel {
+    height: auto;
+  }
+
+  .cv-class-tree,
+  .cv-modality-row {
+    grid-template-columns: 1fr;
+    row-gap: 12px;
+  }
+
+  .cv-root-wrap::after,
+  .cv-family-class-summary::after,
+  .cv-family-class-content::before,
+  .cv-family-class-content::after,
+  .cv-family-family-row::before,
+  .cv-family-chemotype-row::before,
+  .cv-family-chemotype-summary::after,
+  .cv-family-chemotype-row-static > .cv-family-chemotype-summary::after,
+  .cv-family-chemotype-families::before,
+  .cv-family-chemotype-families::after,
+  .cv-family-chemotype-family::before,
+  .cv-modality-node::after,
+  .cv-branch-list::before,
+  .cv-branch-row::before,
+  .cv-chemotype-list::before,
+  .cv-chemotype-item::before {
+    display: none;
+  }
+
+  .cv-family-class-content,
+  .cv-family-chemotype-families,
+  .cv-branch-list,
+  .cv-chemotype-list {
+    padding-left: 0;
+    margin-top: 12px;
+    margin-left: 0;
+  }
+
+  .cv-family-class-summary,
+  .cv-family-chemotype-summary {
+    width: 100%;
+    max-width: none;
+  }
+
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container cv-landing cv-scheme-default" data-cv-scheme="default">
+  <div class="cv-toolbar">
+    <div class="btn-group btn-group-sm cv-scheme-toggle" role="group" aria-label="Color scheme toggle">
+      <button type="button" class="btn btn-primary active" data-cv-scheme-btn="default">Default</button>
+      <button type="button" class="btn btn-default" data-cv-scheme-btn="test">Test</button>
+    </div>
+    <div class="btn-group btn-group-sm cv-browser-toggle" role="group" aria-label="Browser chemotype toggle">
+      <button type="button" class="btn btn-primary active" data-cv-browser-mode-btn="default">Browser Default</button>
+      <button type="button" class="btn btn-default" data-cv-browser-mode-btn="test">Browser Test</button>
+    </div>
+  </div>
+  <div class="cv-landing-layout">
+    <div class="cv-panel">
+      <h3><span class="cv-heading-box">Superfamily &amp; classes</span></h3>
+      <div id="cvClassColumn" class="cv-column-mount"></div>
+    </div>
+
+    <div class="cv-panel">
+      <h3><span class="cv-heading-box">Receptor families</span></h3>
+      <div id="cvFamilyColumn" class="cv-column-mount"></div>
+    </div>
+
+    <div class="cv-panel">
+      <h3><span class="cv-heading-box">Modalities &amp; chemotypes</span></h3>
+      <div id="cvModalityColumn" class="cv-column-mount"></div>
+    </div>
+  </div>
+</div>
+
+<script id="cvLandingData" type="application/json">{{ landing_payload_json|safe }}</script>
+{% endblock %}
+
+{% block addon_js %}
+<script>
+(function() {
+  const landing = document.querySelector(".cv-landing");
+  const dataElement = document.getElementById("cvLandingData");
+  if (!landing || !dataElement) return;
+
+  const payload = JSON.parse(dataElement.textContent || "{}");
+  if (window.console && typeof window.console.log === "function") {
+    window.console.log("cv-landing-receptor-families", payload.receptorFamilies || {});
+    window.console.log("cv-landing-browser-nodes", (payload.receptorFamilies && payload.receptorFamilies.browserNodes) || []);
+    window.console.log("cv-landing-family-entries", (payload.receptorFamilies && payload.receptorFamilies.entries) || []);
+  }
+  const classMount = document.getElementById("cvClassColumn");
+  const familyMount = document.getElementById("cvFamilyColumn");
+  const modalityMount = document.getElementById("cvModalityColumn");
+  const schemeButtons = Array.prototype.slice.call(document.querySelectorAll("[data-cv-scheme-btn]"));
+  const browserModeButtons = Array.prototype.slice.call(document.querySelectorAll("[data-cv-browser-mode-btn]"));
+  const storageKey = "classification-visualizations-scheme";
+  const browserModeStorageKey = "classification-visualizations-browser-mode";
+  let classTreeShell = null;
+  let classTreeContent = null;
+  let familyTreeShell = null;
+  let familyTreeContent = null;
+  let modalityTreeShell = null;
+  let modalityTreeContent = null;
+  let connectorDrawFrame = null;
+  let connectorDrawFollowupFrame = null;
+  let activeBrowserMode = "default";
+
+  function setLabel(node, value) {
+    node.innerHTML = value || "";
+  }
+
+  function createSvgElement(tagName) {
+    return document.createElementNS("http://www.w3.org/2000/svg", tagName);
+  }
+
+  function appendConnectorLine(layer, className, x1, y1, x2, y2) {
+    const line = createSvgElement("line");
+    line.setAttribute("class", className);
+    line.setAttribute("x1", x1);
+    line.setAttribute("y1", y1);
+    line.setAttribute("x2", x2);
+    line.setAttribute("y2", y2);
+    layer.appendChild(line);
+  }
+
+  function sizeConnectorLayer(shell, content, svgSelector, layerSelector) {
+    const width = Math.max(content.scrollWidth, shell.clientWidth);
+    const height = Math.max(content.scrollHeight, content.offsetHeight);
+    const svg = shell.querySelector(svgSelector);
+    const layer = shell.querySelector(layerSelector);
+    svg.setAttribute("width", width);
+    svg.setAttribute("height", height);
+    svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+    svg.style.width = width + "px";
+    svg.style.height = height + "px";
+    layer.innerHTML = "";
+    return layer;
+  }
+
+  function createNodeButton(options) {
+    const opts = options || {};
+    const tagName = opts.tagName || "a";
+    const node = document.createElement(tagName);
+    node.className = "btn cv-btn-theme cv-node-btn";
+    node.setAttribute("data-role", opts.role || "");
+    if (opts.branchTheme) {
+      node.setAttribute("data-branch-theme", opts.branchTheme);
+    }
+    if (tagName === "a") {
+      node.href = opts.url || "#";
+      node.target = "_blank";
+      node.rel = "noopener noreferrer";
+    } else if (tagName === "button") {
+      node.type = "button";
+    }
+    setLabel(node, opts.label || "");
+    return node;
+  }
+
+  function applyScheme(scheme) {
+    const activeScheme = scheme === "test" ? "test" : "default";
+    landing.classList.toggle("cv-scheme-default", activeScheme === "default");
+    landing.classList.toggle("cv-scheme-test", activeScheme === "test");
+    landing.setAttribute("data-cv-scheme", activeScheme);
+    schemeButtons.forEach(function(button) {
+      const isActive = button.getAttribute("data-cv-scheme-btn") === activeScheme;
+      button.classList.toggle("btn-primary", isActive);
+      button.classList.toggle("btn-default", !isActive);
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
+    try {
+      window.localStorage.setItem(storageKey, activeScheme);
+    } catch (error) {
+      // Ignore storage failures and keep the current in-memory scheme.
+    }
+  }
+
+  schemeButtons.forEach(function(button) {
+    button.addEventListener("click", function() {
+      applyScheme(button.getAttribute("data-cv-scheme-btn"));
+    });
+  });
+
+  function attachFamilyToggleListeners() {
+    if (!familyTreeContent) return;
+    Array.prototype.slice.call(familyTreeContent.querySelectorAll("details")).forEach(function(details) {
+      details.addEventListener("toggle", function() {
+        if (
+          details.classList.contains("cv-family-class-row")
+          && !details.open
+        ) {
+          Array.prototype.slice.call(
+            details.querySelectorAll(".cv-family-chemotype-row[open]")
+          ).forEach(function(chemotypeRow) {
+            chemotypeRow.open = false;
+          });
+        }
+        queueConnectorDraw();
+      });
+    });
+  }
+
+  function applyBrowserMode(mode) {
+    activeBrowserMode = mode === "test" ? "test" : "default";
+    landing.setAttribute("data-cv-browser-mode", activeBrowserMode);
+    browserModeButtons.forEach(function(button) {
+      const isActive = button.getAttribute("data-cv-browser-mode-btn") === activeBrowserMode;
+      button.classList.toggle("btn-primary", isActive);
+      button.classList.toggle("btn-default", !isActive);
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
+    try {
+      window.localStorage.setItem(browserModeStorageKey, activeBrowserMode);
+    } catch (error) {
+      // Ignore storage failures and keep the current in-memory mode.
+    }
+    renderFamilyColumn();
+    attachFamilyToggleListeners();
+    syncClassColumnAlignment();
+    queueConnectorDraw();
+  }
+
+  browserModeButtons.forEach(function(button) {
+    button.addEventListener("click", function() {
+      applyBrowserMode(button.getAttribute("data-cv-browser-mode-btn"));
+    });
+  });
+
+  function openFamily(entry) {
+    if (!entry || !entry.url) return;
+    const popup = window.open(entry.url, "_blank");
+    if (popup) {
+      popup.opener = null;
+      return;
+    }
+    window.location.assign(entry.url);
+  }
+
+  function renderClassColumn() {
+    classMount.innerHTML = "";
+    classTreeShell = document.createElement("div");
+    classTreeShell.className = "cv-column-tree-shell cv-static-column-box";
+    const svg = createSvgElement("svg");
+    svg.setAttribute("class", "cv-column-connectors cv-class-connectors");
+    const connectorLayer = createSvgElement("g");
+    connectorLayer.setAttribute("class", "cv-column-connector-layer cv-class-connector-layer");
+    svg.appendChild(connectorLayer);
+    classTreeShell.appendChild(svg);
+
+    const tree = document.createElement("div");
+    tree.className = "cv-class-tree";
+    classTreeContent = tree;
+
+    const rootWrap = document.createElement("div");
+    rootWrap.className = "cv-root-wrap";
+    const rootNode = document.createElement("div");
+    rootNode.className = "cv-root-node";
+    rootNode.appendChild(createNodeButton({
+      tagName: "a",
+      role: "superfamily",
+      label: payload.superfamily.label + '<span class="cv-button-note">' + payload.superfamily.note + "</span>",
+      url: payload.superfamily.url,
+    }));
+    rootWrap.appendChild(rootNode);
+
+    const branchList = document.createElement("div");
+    branchList.className = "cv-branch-list";
+    (payload.classButtons || []).forEach(function(button) {
+      const row = document.createElement("div");
+      row.className = "cv-branch-row";
+      const anchor = createNodeButton({
+        tagName: "a",
+        role: "class",
+        label: button.title,
+        url: button.url,
+      });
+      anchor.title = button.title;
+      row.appendChild(anchor);
+      branchList.appendChild(row);
+    });
+
+    tree.appendChild(rootWrap);
+    tree.appendChild(branchList);
+    classTreeShell.appendChild(tree);
+    classMount.appendChild(classTreeShell);
+  }
+
+  function renderModalityColumn() {
+    modalityMount.innerHTML = "";
+    modalityTreeShell = document.createElement("div");
+    modalityTreeShell.className = "cv-column-tree-shell cv-static-column-box";
+    const svg = createSvgElement("svg");
+    svg.setAttribute("class", "cv-column-connectors cv-modality-connectors");
+    const connectorLayer = createSvgElement("g");
+    connectorLayer.setAttribute("class", "cv-column-connector-layer cv-modality-connector-layer");
+    svg.appendChild(connectorLayer);
+    modalityTreeShell.appendChild(svg);
+
+    const list = document.createElement("div");
+    list.className = "cv-modality-list";
+    modalityTreeContent = list;
+
+    (payload.modalityBranches || []).forEach(function(branch) {
+      const row = document.createElement("div");
+      row.className = "cv-modality-row";
+      row.setAttribute("data-modality-theme", branch.theme_key || "");
+
+      const nodeWrap = document.createElement("div");
+      nodeWrap.className = "cv-modality-node";
+      nodeWrap.appendChild(createNodeButton({
+        tagName: "a",
+        role: "modality",
+        branchTheme: branch.theme_key,
+        label: branch.label,
+        url: branch.url,
+      }));
+
+      const chemotypeList = document.createElement("div");
+      chemotypeList.className = "cv-chemotype-list";
+      (branch.chemotypes || []).forEach(function(chemotype) {
+        const item = document.createElement("div");
+        item.className = "cv-chemotype-item";
+        item.appendChild(createNodeButton({
+          tagName: "a",
+          role: "chemotype",
+          branchTheme: chemotype.modality_theme || branch.theme_key,
+          label: chemotype.label,
+          url: chemotype.url,
+        }));
+        chemotypeList.appendChild(item);
+      });
+
+      row.appendChild(nodeWrap);
+      row.appendChild(chemotypeList);
+      list.appendChild(row);
+    });
+
+    modalityTreeShell.appendChild(list);
+    modalityMount.appendChild(modalityTreeShell);
+  }
+
+  function buildFamilyButton(family, branchTheme, rowClass) {
+    const row = document.createElement("div");
+    row.className = rowClass || "cv-family-chemotype-family";
+
+    const button = createNodeButton({
+      tagName: "button",
+      role: "family",
+      branchTheme: branchTheme,
+      label: "<span>" + family.label + "</span><span class=\"cv-family-leaf-meta\">" + family.receptor_count + " receptors</span>",
+    });
+    button.classList.add("cv-family-leaf");
+    button.setAttribute("data-family-key", family.key);
+    button.setAttribute("data-family-label", family.label);
+    button.setAttribute("data-family-url", family.url);
+    button.addEventListener("click", function() {
+      openFamily({
+        key: family.key,
+        label: family.label,
+        url: family.url,
+      });
+    });
+
+    row.appendChild(button);
+    return row;
+  }
+
+  function createChemotypeGroup(chemotype, isInteractive, isLast) {
+    const row = document.createElement(isInteractive ? "details" : "div");
+    row.className = "cv-family-chemotype-row" + (isInteractive ? "" : " cv-family-chemotype-row-static") + (isLast ? " cv-family-chemotype-row-last" : "");
+    row.setAttribute("data-modality-theme", chemotype.modality_theme || "");
+
+    const summary = document.createElement(isInteractive ? "summary" : "div");
+    summary.className = "cv-family-chemotype-summary" + (isInteractive ? "" : " cv-family-chemotype-summary-static");
+    summary.appendChild(createNodeButton({
+      tagName: "span",
+      role: "chemotype",
+      branchTheme: chemotype.modality_theme,
+      label: chemotype.label,
+    }));
+
+    const families = document.createElement("div");
+    families.className = "cv-family-chemotype-families";
+    (chemotype.families || []).forEach(function(family) {
+      families.appendChild(buildFamilyButton(family, chemotype.modality_theme));
+    });
+
+    row.appendChild(summary);
+    row.appendChild(families);
+    return row;
+  }
+
+  function renderFamilyColumn() {
+    familyMount.innerHTML = "";
+
+    const controls = document.createElement("div");
+    controls.className = "cv-family-controls";
+
+    const searchBox = document.createElement("div");
+    searchBox.className = "cv-family-search-box";
+    const searchInput = document.createElement("input");
+    searchInput.id = "cvFamilySearch";
+    searchInput.className = "form-control cv-family-search";
+    searchInput.type = "search";
+    searchInput.placeholder = "Search receptor family";
+    searchInput.autocomplete = "off";
+    searchInput.setAttribute("list", "cvFamilySearchList");
+    searchBox.appendChild(searchInput);
+
+    const datalist = document.createElement("datalist");
+    datalist.id = "cvFamilySearchList";
+    (payload.receptorFamilies.entries || []).forEach(function(entry) {
+      const option = document.createElement("option");
+      option.value = entry.label;
+      datalist.appendChild(option);
+    });
+
+    function selectFromSearch(event) {
+      const value = (searchInput.value || "").trim();
+      const entry = (payload.receptorFamilies.entriesByLabel || {})[value] || null;
+      if (!entry || !entry.url) return;
+      if (event) {
+        event.preventDefault();
+      }
+      searchInput.value = "";
+      openFamily(entry);
+    }
+
+    searchInput.addEventListener("change", selectFromSearch);
+    searchInput.addEventListener("search", selectFromSearch);
+    searchInput.addEventListener("keydown", function(event) {
+      if (event.key === "Enter") {
+        selectFromSearch(event);
+      }
+    });
+
+    const browser = document.createElement("div");
+    browser.className = "cv-family-browser";
+    const title = document.createElement("div");
+    title.className = "cv-family-browser-title";
+    title.textContent = "Browse by classes";
+
+    familyTreeShell = document.createElement("div");
+    familyTreeShell.className = "cv-family-tree-shell";
+    const svg = createSvgElement("svg");
+    svg.setAttribute("class", "cv-family-connectors");
+    const connectorLayer = createSvgElement("g");
+    connectorLayer.setAttribute("class", "cv-family-connector-layer");
+    svg.appendChild(connectorLayer);
+    familyTreeShell.appendChild(svg);
+
+    familyTreeContent = document.createElement("div");
+    familyTreeContent.className = "cv-family-tree-content";
+
+    (payload.receptorFamilies.browserNodes || []).forEach(function(classNode) {
+      const classRow = document.createElement("details");
+      classRow.className = "cv-family-class-row";
+
+      const summary = document.createElement("summary");
+      summary.className = "cv-family-class-summary";
+      summary.appendChild(createNodeButton({
+        tagName: "span",
+        role: "class",
+        label: classNode.label,
+      }));
+
+      const body = document.createElement("div");
+      body.className = "cv-family-class-content";
+      const flattenNonClassA = activeBrowserMode === "test" && classNode.class_key !== "A";
+      if (flattenNonClassA) {
+        (classNode.chemotypes || []).forEach(function(chemotype) {
+          (chemotype.families || []).forEach(function(family) {
+            body.appendChild(buildFamilyButton(family, chemotype.modality_theme, "cv-family-family-row"));
+          });
+        });
+      } else {
+        (classNode.chemotypes || []).forEach(function(chemotype, index) {
+          body.appendChild(createChemotypeGroup(
+            chemotype,
+            !!classNode.interactive_chemotypes,
+            index === classNode.chemotypes.length - 1
+          ));
+        });
+      }
+
+      classRow.appendChild(summary);
+      classRow.appendChild(body);
+      familyTreeContent.appendChild(classRow);
+    });
+
+    familyTreeShell.appendChild(familyTreeContent);
+    browser.appendChild(title);
+    browser.appendChild(familyTreeShell);
+
+    controls.appendChild(searchBox);
+    controls.appendChild(datalist);
+    controls.appendChild(browser);
+    familyMount.appendChild(controls);
+  }
+
+  function relRect(element, shellRect) {
+    const rect = element.getBoundingClientRect();
+    return {
+      left: rect.left - shellRect.left,
+      top: rect.top - shellRect.top,
+      width: rect.width,
+      height: rect.height,
+      right: rect.right - shellRect.left,
+      bottom: rect.bottom - shellRect.top,
+    };
+  }
+
+  function drawClassConnectors() {
+    if (!classTreeShell || !classTreeContent) return;
+
+    const shellRect = classTreeShell.getBoundingClientRect();
+    const layer = sizeConnectorLayer(
+      classTreeShell,
+      classTreeContent,
+      ".cv-class-connectors",
+      ".cv-class-connector-layer"
+    );
+    const rootButton = classTreeContent.querySelector(".cv-root-node .cv-node-btn");
+    const branchButtons = Array.prototype.slice.call(
+      classTreeContent.querySelectorAll(".cv-branch-row .cv-node-btn")
+    );
+    if (!rootButton || !branchButtons.length) return;
+
+    const rootRect = relRect(rootButton, shellRect);
+    const branchRects = branchButtons.map(function(button) {
+      return relRect(button, shellRect);
+    });
+    const spineX = branchRects[0].left - 18;
+    const rootY = rootRect.top + (rootRect.height / 2);
+    const firstY = branchRects[0].top + (branchRects[0].height / 2);
+    const lastY = branchRects[branchRects.length - 1].top + (branchRects[branchRects.length - 1].height / 2);
+    const spineTop = Math.min(rootY, firstY);
+    const spineBottom = Math.max(rootY, lastY);
+
+    appendConnectorLine(layer, "cv-connector-line", rootRect.right, rootY, spineX, rootY);
+    appendConnectorLine(layer, "cv-connector-line", spineX, spineTop, spineX, spineBottom);
+    branchRects.forEach(function(rect) {
+      const branchY = rect.top + (rect.height / 2);
+      appendConnectorLine(layer, "cv-connector-line", spineX, branchY, rect.left, branchY);
+    });
+  }
+
+  function drawModalityConnectors() {
+    if (!modalityTreeShell || !modalityTreeContent) return;
+
+    const shellRect = modalityTreeShell.getBoundingClientRect();
+    const layer = sizeConnectorLayer(
+      modalityTreeShell,
+      modalityTreeContent,
+      ".cv-modality-connectors",
+      ".cv-modality-connector-layer"
+    );
+
+    Array.prototype.slice.call(modalityTreeContent.querySelectorAll(".cv-modality-row")).forEach(function(row) {
+      const modalityButton = row.querySelector(".cv-modality-node .cv-node-btn");
+      const chemotypeButtons = Array.prototype.slice.call(row.querySelectorAll(".cv-chemotype-item .cv-node-btn"));
+      if (!modalityButton || !chemotypeButtons.length) return;
+
+      const modalityRect = relRect(modalityButton, shellRect);
+      const chemotypeRects = chemotypeButtons.map(function(button) {
+        return relRect(button, shellRect);
+      });
+      const spineX = chemotypeRects[0].left - 18;
+      const modalityY = modalityRect.top + (modalityRect.height / 2);
+      const firstY = chemotypeRects[0].top + (chemotypeRects[0].height / 2);
+      const lastY = chemotypeRects[chemotypeRects.length - 1].top + (chemotypeRects[chemotypeRects.length - 1].height / 2);
+      const spineTop = Math.min(modalityY, firstY);
+      const spineBottom = Math.max(modalityY, lastY);
+
+      appendConnectorLine(layer, "cv-connector-line", modalityRect.right, modalityY, spineX, modalityY);
+      appendConnectorLine(layer, "cv-connector-line", spineX, spineTop, spineX, spineBottom);
+      chemotypeRects.forEach(function(rect) {
+        const branchY = rect.top + (rect.height / 2);
+        appendConnectorLine(layer, "cv-connector-line", spineX, branchY, rect.left, branchY);
+      });
+    });
+  }
+
+  function drawFamilyConnectors() {
+    if (!familyTreeShell || !familyTreeContent) return;
+
+    const shellRect = familyTreeShell.getBoundingClientRect();
+    const layer = sizeConnectorLayer(
+      familyTreeShell,
+      familyTreeContent,
+      ".cv-family-connectors",
+      ".cv-family-connector-layer"
+    );
+
+    Array.prototype.slice.call(familyTreeContent.children).forEach(function(classRow) {
+      if (!classRow.open) return;
+
+      const classButton = classRow.querySelector(".cv-family-class-summary .cv-node-btn");
+      const classBody = classRow.querySelector(".cv-family-class-content");
+      if (!classButton || !classBody) return;
+
+      const chemRows = Array.prototype.slice.call(classBody.children).filter(function(node) {
+        return node.classList.contains("cv-family-chemotype-row") || node.classList.contains("cv-family-chemotype-row-static");
+      });
+      const classRect = relRect(classButton, shellRect);
+      const directFamilyButtons = Array.prototype.slice.call(classBody.querySelectorAll(":scope > .cv-family-family-row .cv-family-leaf"));
+
+      if (!chemRows.length && directFamilyButtons.length) {
+        const familyRects = directFamilyButtons.map(function(button) {
+          return relRect(button, shellRect);
+        });
+        const familyLastRect = familyRects[familyRects.length - 1];
+        const familyLastY = familyLastRect.top + (familyLastRect.height / 2);
+        const familySpineX = Math.min(
+          classRect.left + (classRect.width * 0.20),
+          familyRects[0].left - 18
+        );
+        appendConnectorLine(layer, "cv-family-connector-line", familySpineX, classRect.bottom, familySpineX, familyLastY);
+        familyRects.forEach(function(rect) {
+          const familyY = rect.top + (rect.height / 2);
+          appendConnectorLine(layer, "cv-family-connector-line", familySpineX, familyY, rect.left, familyY);
+        });
+        return;
+      }
+
+      if (!chemRows.length) return;
+
+      const chemEntries = chemRows.map(function(row) {
+        const chemButton = row.querySelector(".cv-family-chemotype-summary .cv-node-btn");
+        const chemRect = relRect(chemButton, shellRect);
+        return {
+          row: row,
+          rect: chemRect,
+          branchY: chemRect.top + (chemRect.height / 2),
+          leftX: chemRect.left,
+        };
+      });
+
+      const classLastY = chemEntries[chemEntries.length - 1].branchY;
+      const chemSpineX = Math.min(
+        classRect.left + (classRect.width * 0.20),
+        chemEntries[0].leftX - 18
+      );
+      const chemSpineTop = classRect.bottom;
+
+      appendConnectorLine(layer, "cv-family-connector-line", chemSpineX, chemSpineTop, chemSpineX, classLastY);
+
+      chemEntries.forEach(function(entry) {
+        appendConnectorLine(layer, "cv-family-connector-line", chemSpineX, entry.branchY, entry.leftX, entry.branchY);
+
+        const isInteractive = entry.row.tagName === "DETAILS";
+        if (isInteractive && !entry.row.open) return;
+
+        const familyButtons = Array.prototype.slice.call(entry.row.querySelectorAll(".cv-family-chemotype-families .cv-family-leaf"));
+        if (!familyButtons.length) return;
+
+        const familyRects = familyButtons.map(function(button) {
+          return relRect(button, shellRect);
+        });
+        const familyLastRect = familyRects[familyRects.length - 1];
+        const familyLastY = familyLastRect.top + (familyLastRect.height / 2);
+        const familySpineX = Math.min(
+          entry.rect.left + (entry.rect.width * 0.20),
+          familyRects[0].left - 18
+        );
+        const familySpineTop = entry.rect.bottom;
+        appendConnectorLine(layer, "cv-family-connector-line", familySpineX, familySpineTop, familySpineX, familyLastY);
+
+        familyRects.forEach(function(rect) {
+          const familyY = rect.top + (rect.height / 2);
+          appendConnectorLine(layer, "cv-family-connector-line", familySpineX, familyY, rect.left, familyY);
+        });
+      });
+    });
+  }
+
+  function drawStaticConnectors() {
+    drawClassConnectors();
+    drawModalityConnectors();
+  }
+
+  function queueConnectorDraw() {
+    if (connectorDrawFrame !== null) {
+      window.cancelAnimationFrame(connectorDrawFrame);
+    }
+    if (connectorDrawFollowupFrame !== null) {
+      window.cancelAnimationFrame(connectorDrawFollowupFrame);
+    }
+    connectorDrawFrame = window.requestAnimationFrame(function() {
+      drawFamilyConnectors();
+      connectorDrawFollowupFrame = window.requestAnimationFrame(function() {
+        drawFamilyConnectors();
+      });
+    });
+  }
+
+  function syncClassColumnAlignment() {
+    if (!classMount || !familyMount || !classTreeShell) return;
+
+    classMount.classList.add("cv-class-column-centered");
+    classMount.style.setProperty("--cv-class-column-offset", "0px");
+
+    window.requestAnimationFrame(function() {
+      const familyBrowser = familyMount.querySelector(".cv-family-browser");
+      if (!familyBrowser) return;
+
+      const classRect = classTreeShell.getBoundingClientRect();
+      const browserRect = familyBrowser.getBoundingClientRect();
+      const familyMountRect = familyMount.getBoundingClientRect();
+      const shouldAlignTop = classRect.top > browserRect.top;
+      const browserOffset = Math.max(0, browserRect.top - familyMountRect.top);
+
+      classMount.classList.toggle("cv-class-column-centered", !shouldAlignTop);
+      classMount.style.setProperty("--cv-class-column-offset", shouldAlignTop ? (browserOffset + "px") : "0px");
+      drawStaticConnectors();
+    });
+  }
+
+  function lockInitialColumnHeight() {
+    const familyPanel = familyMount ? familyMount.closest(".cv-panel") : null;
+    if (!familyPanel) return;
+    const measuredHeight = familyPanel.offsetHeight;
+    if (!measuredHeight) return;
+    landing.style.setProperty("--cv-column-height", measuredHeight + "px");
+    syncClassColumnAlignment();
+    drawStaticConnectors();
+    queueConnectorDraw();
+  }
+
+  renderClassColumn();
+  renderFamilyColumn();
+  renderModalityColumn();
+  attachFamilyToggleListeners();
+  window.addEventListener("resize", function() {
+    syncClassColumnAlignment();
+    queueConnectorDraw();
+    window.requestAnimationFrame(drawStaticConnectors);
+  });
+  syncClassColumnAlignment();
+  drawStaticConnectors();
+  queueConnectorDraw();
+  try {
+    applyScheme(window.localStorage.getItem(storageKey));
+  } catch (error) {
+    applyScheme("default");
+  }
+  try {
+    applyBrowserMode(window.localStorage.getItem(browserModeStorageKey));
+  } catch (error) {
+    applyBrowserMode("default");
+  }
+  window.requestAnimationFrame(lockInitialColumnHeight);
+})();
+</script>
+{% endblock %}

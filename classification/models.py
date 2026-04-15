@@ -222,7 +222,7 @@ class ClusterCoord(models.Model):
     """
     Persisted 2D coordinates for clustering/embedding plots (e.g. StructureSim).
 
-    One row per (protein, dataset_type, plot_type).
+    One row per (protein, dataset_type, plot_type, group_key).
     """
 
     DATASET_SEQUENCE = 'sequence'
@@ -259,6 +259,7 @@ class ClusterCoord(models.Model):
     )
     dataset_type = models.CharField(max_length=32, choices=DATASET_CHOICES, db_index=True)
     plot_type = models.CharField(max_length=16, choices=PLOT_CHOICES, default=PLOT_TSNE, db_index=True)
+    group_key = models.CharField(max_length=32, default='global', db_index=True)
 
     x = models.FloatField()
     y = models.FloatField()
@@ -267,14 +268,17 @@ class ClusterCoord(models.Model):
         db_table = 'classification_clustercoord'
         constraints = [
             models.UniqueConstraint(
-                fields=['protein', 'dataset_type', 'plot_type'],
-                name='ccoord_uniq_prot_dataset_plot',
+                fields=['protein', 'dataset_type', 'plot_type', 'group_key'],
+                name='ccoord_uniq_prot_ds_plot_grp',
             ),
         ]
         indexes = [
-            models.Index(fields=['dataset_type', 'plot_type'], name='ccoord_ds_plot_idx'),
-            models.Index(fields=['protein', 'dataset_type'], name='ccoord_prot_ds_idx'),
+            models.Index(fields=['dataset_type', 'plot_type', 'group_key'], name='ccoord_ds_plot_grp_idx'),
+            models.Index(fields=['protein', 'dataset_type', 'group_key'], name='ccoord_prot_ds_grp_idx'),
         ]
 
     def __str__(self):
-        return f'{self.protein_id} {self.dataset_type}/{self.plot_type}: ({self.x:.3f}, {self.y:.3f})'
+        return (
+            f'{self.protein_id} {self.dataset_type}/{self.plot_type}/'
+            f'{self.group_key}: ({self.x:.3f}, {self.y:.3f})'
+        )

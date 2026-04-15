@@ -1,7 +1,7 @@
 from build.management.commands.base_build import Command as BaseBuild
 
-from django.core.management.base import CommandError
 from django.core.cache import cache, caches
+from django.core.management.base import CommandError
 from django.db import transaction
 
 import logging
@@ -21,10 +21,22 @@ except Exception:
 class Command(BaseBuild):
     help = (
         "Build persisted 2D coordinates for StructureSim plots and store them in "
-        "classification_clustercoord (sequence + structure active/inactive)."
+        "classification_clustercoord (global + per-class sequence/structure datasets)."
     )
 
     logger = logging.getLogger(__name__)
+
+    GLOBAL_GROUP_KEY = "global"
+    CLASS_SLUG_BY_KEY = {
+        "A": "001",
+        "B1": "002",
+        "B2": "003",
+        "C": "004",
+        "F": "006",
+        "O1": "007",
+        "O2": "008",
+        "T2": "009",
+    }
 
     @staticmethod
     def _format_elapsed(seconds):
@@ -34,31 +46,35 @@ class Command(BaseBuild):
         s = seconds % 60
         return f"{h} hours {m} mins {s} secs"
 
+    @classmethod
+    def _class_group_key(cls, class_key):
+        return f"class:{class_key}"
+
     def add_arguments(self, parser):
         super(Command, self).add_arguments(parser=parser)
         parser.add_argument(
-            '--state',
-            choices=['active', 'inactive', 'both'],
-            default='both',
-            help='Which structure state(s) to build.',
+            "--state",
+            choices=["active", "inactive", "both"],
+            default="both",
+            help="Which structure state(s) to build.",
         )
         parser.add_argument(
-            '--batch-size',
+            "--batch-size",
             type=int,
             default=5000,
-            help='Bulk insert batch size.',
+            help="Bulk insert batch size.",
         )
         parser.add_argument(
-            '--verbose',
-            action='store_true',
+            "--verbose",
+            action="store_true",
             default=False,
-            help='Print progress to stdout.',
+            help="Print progress to stdout.",
         )
         parser.add_argument(
-            '--dry-run',
-            action='store_true',
+            "--dry-run",
+            action="store_true",
             default=False,
-            help='Compute counts but do not write to the database.',
+            help="Compute counts but do not write to the database.",
         )
 
     @staticmethod
@@ -93,37 +109,74 @@ class Command(BaseBuild):
             tsne = TSNE(learning_rate=200.0, **base_kwargs)
         return tsne.fit_transform(D)
 
-    @staticmethod
-    def _delete_dataset(model, *, dataset_type, plot_type):
-        model.objects.filter(dataset_type=dataset_type, plot_type=plot_type).delete()
+    def _persist_coords(
+        self,
+        *,
+        ClusterCoord,
+        proteins,
+        coords,
+        dataset_type,
+        group_key,
+        batch_size,
+        verbose,
+        label,
+        dry_run,
+    ):
+        if dry_run:
+            return len(proteins)
 
-    def _build_similarity_dataset(
+        buffer = []
+        total = 0
+
+        def _flush():
+            nonlocal total
+            if not buffer:
+                return
+            with transaction.atomic():
+                ClusterCoord.objects.bulk_create(buffer, batch_size=batch_size)
+            total += len(buffer)
+            buffer.clear()
+            if verbose:
+                print(f"[{label}] inserted rows: {total}")
+
+        for i, protein in enumerate(proteins):
+            buffer.append(
+                ClusterCoord(
+                    protein_id=protein.id,
+                    dataset_type=dataset_type,
+                    plot_type=ClusterCoord.PLOT_TSNE,
+                    group_key=group_key,
+                    x=float(coords[i, 0]),
+                    y=float(coords[i, 1]),
+                )
+            )
+            if len(buffer) >= batch_size:
+                _flush()
+        _flush()
+        return total
+
+    def _build_similarity_dataset_from_qs(
         self,
         *,
         label,
         dataset_type,
-        similarity_model,
+        qs,
         ClusterCoord,
         Protein,
+        group_key,
         batch_size,
         verbose,
         dry_run,
     ):
-        qs = similarity_model.objects.filter(
-            protein_ref__species_id=1,
-            protein_target__species_id=1,
-        ).values_list('protein_ref_id', 'protein_target_id', 'similarity')
-
         prot_ids = set()
         for ref_id, tgt_id, _sim in qs.iterator():
             prot_ids.add(ref_id)
             prot_ids.add(tgt_id)
 
         proteins = list(
-            Protein.objects
-            .filter(id__in=prot_ids)
-            .order_by('entry_name')
-            .only('id', 'entry_name')
+            Protein.objects.filter(id__in=prot_ids, species_id=1)
+            .order_by("entry_name")
+            .only("id", "entry_name")
         )
         n = len(proteins)
         if verbose:
@@ -131,7 +184,7 @@ class Command(BaseBuild):
         if n == 0:
             return 0
 
-        idx = {p.id: i for i, p in enumerate(proteins)}
+        idx = {protein.id: i for i, protein in enumerate(proteins)}
         D = np.full((n, n), 100.0, dtype=float)
         np.fill_diagonal(D, 0.0)
 
@@ -148,71 +201,120 @@ class Command(BaseBuild):
             D[j, i] = dist
 
         coords_tsne = self._compute_tsne(D)
+        return self._persist_coords(
+            ClusterCoord=ClusterCoord,
+            proteins=proteins,
+            coords=coords_tsne,
+            dataset_type=dataset_type,
+            group_key=group_key,
+            batch_size=batch_size,
+            verbose=verbose,
+            label=label,
+            dry_run=dry_run,
+        )
 
-        if dry_run:
-            return n
-
-        self._delete_dataset(ClusterCoord, dataset_type=dataset_type, plot_type=ClusterCoord.PLOT_TSNE)
-
-        buffer = []
-        total = 0
-
-        def _flush():
-            nonlocal total
-            if not buffer:
-                return
-            with transaction.atomic():
-                ClusterCoord.objects.bulk_create(buffer, batch_size=batch_size)
-            total += len(buffer)
-            buffer.clear()
-            if verbose:
-                print(f"[{label}] inserted rows: {total}")
-
-        for i, p in enumerate(proteins):
-            buffer.append(ClusterCoord(
-                protein_id=p.id,
-                dataset_type=dataset_type,
-                plot_type=ClusterCoord.PLOT_TSNE,
-                x=float(coords_tsne[i, 0]),
-                y=float(coords_tsne[i, 1]),
-            ))
-            if len(buffer) >= batch_size:
-                _flush()
-        _flush()
-        return total
-
-    def _build_sequence(self, *, ClusterCoord, ReceptorSimilarity, Protein, batch_size, verbose, dry_run):
-        return self._build_similarity_dataset(
-            label="sequence",
+    def _build_sequence(
+        self,
+        *,
+        ClusterCoord,
+        ReceptorSimilarity,
+        Protein,
+        ProteinFamily,
+        batch_size,
+        verbose,
+        dry_run,
+    ):
+        counts = {}
+        global_qs = (
+            ReceptorSimilarity.objects.filter(
+                protein_ref__species_id=1,
+                protein_target__species_id=1,
+            ).values_list("protein_ref_id", "protein_target_id", "similarity")
+        )
+        counts[self.GLOBAL_GROUP_KEY] = self._build_similarity_dataset_from_qs(
+            label="sequence/global",
             dataset_type=ClusterCoord.DATASET_SEQUENCE,
-            similarity_model=ReceptorSimilarity,
+            qs=global_qs,
             ClusterCoord=ClusterCoord,
             Protein=Protein,
+            group_key=self.GLOBAL_GROUP_KEY,
             batch_size=batch_size,
             verbose=verbose,
             dry_run=dry_run,
         )
 
-    def _build_structure_state(self, state_slug, *, ClusterCoord, StructureSimilarity, ProteinState, Protein, batch_size, verbose, dry_run):
-        state_obj = ProteinState.objects.only('id').get(slug=state_slug)
+        family_ids = {
+            family.slug: family.id
+            for family in ProteinFamily.objects.filter(slug__in=self.CLASS_SLUG_BY_KEY.values()).only("id", "slug")
+        }
+        for class_key, slug in self.CLASS_SLUG_BY_KEY.items():
+            family_id = family_ids.get(slug)
+            if not family_id:
+                counts[self._class_group_key(class_key)] = 0
+                continue
+            class_qs = (
+                ReceptorSimilarity.objects.filter(
+                    protein_ref__species_id=1,
+                    protein_target__species_id=1,
+                    ref_class_id=family_id,
+                    target_class_id=family_id,
+                ).values_list("protein_ref_id", "protein_target_id", "similarity")
+            )
+            group_key = self._class_group_key(class_key)
+            counts[group_key] = self._build_similarity_dataset_from_qs(
+                label=f"sequence/{class_key}",
+                dataset_type=ClusterCoord.DATASET_SEQUENCE,
+                qs=class_qs,
+                ClusterCoord=ClusterCoord,
+                Protein=Protein,
+                group_key=group_key,
+                batch_size=batch_size,
+                verbose=verbose,
+                dry_run=dry_run,
+            )
+        return counts
 
-        qs = (
-            StructureSimilarity.objects
-            .filter(state_id=state_obj.id, protein_ref__species_id=1, protein_target__species_id=1)
-            .values_list('protein_ref_id', 'protein_target_id', 'distance')
+    def _build_structure_state(
+        self,
+        state_slug,
+        *,
+        ClusterCoord,
+        StructureSimilarity,
+        ProteinState,
+        Protein,
+        batch_size,
+        verbose,
+        dry_run,
+        class_key=None,
+    ):
+        state_obj = ProteinState.objects.only("id").get(slug=state_slug)
+        qs = StructureSimilarity.objects.filter(
+            state_id=state_obj.id,
+            protein_ref__species_id=1,
+            protein_target__species_id=1,
         )
+        if class_key:
+            class_slug = self.CLASS_SLUG_BY_KEY.get(class_key)
+            if not class_slug:
+                return 0
+            qs = qs.filter(
+                protein_ref__family__parent__parent__parent__slug=class_slug,
+                protein_target__family__parent__parent__parent__slug=class_slug,
+            )
+
+        value_qs = qs.values_list("protein_ref_id", "protein_target_id", "distance")
 
         prot_ids = set()
         max_dist = 0.0
         pairs = {}
 
-        for a_id, b_id, d in qs.iterator():
+        for a_id, b_id, distance in value_qs.iterator():
             if a_id == b_id:
                 continue
             prot_ids.add(a_id)
             prot_ids.add(b_id)
             try:
-                dist = float(d)
+                dist = float(distance)
             except Exception:
                 continue
             if math.isnan(dist) or math.isinf(dist):
@@ -221,29 +323,28 @@ class Command(BaseBuild):
                 max_dist = dist
             key = (a_id, b_id) if a_id < b_id else (b_id, a_id)
             prev = pairs.get(key)
-            # If duplicates exist (unexpected), keep the minimum distance
             pairs[key] = dist if (prev is None or dist < prev) else prev
 
         prot_qs = (
-            Protein.objects
-            .filter(id__in=prot_ids)
-            .order_by('entry_name')
-            .only('id', 'entry_name')
+            Protein.objects.filter(id__in=prot_ids, species_id=1)
+            .order_by("entry_name")
+            .only("id", "entry_name")
         )
-        if state_slug == 'inactive':
-            prot_qs = prot_qs.exclude(entry_name='ccr9_human')
+        if state_slug == "inactive":
+            prot_qs = prot_qs.exclude(entry_name="ccr9_human")
 
         proteins = list(prot_qs)
         n = len(proteins)
+        label_suffix = class_key or "global"
         if verbose:
-            print(f"[{state_slug}] proteins: {n} unique pairs: {len(pairs)}")
+            print(f"[{state_slug}/{label_suffix}] proteins: {n} unique pairs: {len(pairs)}")
         if n == 0:
             return 0
 
         if max_dist <= 0:
             max_dist = 1.0
 
-        idx = {p.id: i for i, p in enumerate(proteins)}
+        idx = {protein.id: i for i, protein in enumerate(proteins)}
         D = np.full((n, n), max_dist, dtype=float)
         np.fill_diagonal(D, 0.0)
 
@@ -256,43 +357,23 @@ class Command(BaseBuild):
             D[j, i] = dist
 
         coords_tsne = self._compute_tsne(D)
-
-        if dry_run:
-            return n
-
         dataset_type = (
             ClusterCoord.DATASET_STRUCTURE_ACTIVE
-            if state_slug == 'active'
+            if state_slug == "active"
             else ClusterCoord.DATASET_STRUCTURE_INACTIVE
         )
-        self._delete_dataset(ClusterCoord, dataset_type=dataset_type, plot_type=ClusterCoord.PLOT_TSNE)
-
-        buffer = []
-        total = 0
-
-        def _flush():
-            nonlocal total
-            if not buffer:
-                return
-            with transaction.atomic():
-                ClusterCoord.objects.bulk_create(buffer, batch_size=batch_size)
-            total += len(buffer)
-            buffer.clear()
-            if verbose:
-                print(f"[{state_slug}] inserted rows: {total}")
-
-        for i, p in enumerate(proteins):
-            buffer.append(ClusterCoord(
-                protein_id=p.id,
-                dataset_type=dataset_type,
-                plot_type=ClusterCoord.PLOT_TSNE,
-                x=float(coords_tsne[i, 0]),
-                y=float(coords_tsne[i, 1]),
-            ))
-            if len(buffer) >= batch_size:
-                _flush()
-        _flush()
-        return total
+        group_key = self._class_group_key(class_key) if class_key else self.GLOBAL_GROUP_KEY
+        return self._persist_coords(
+            ClusterCoord=ClusterCoord,
+            proteins=proteins,
+            coords=coords_tsne,
+            dataset_type=dataset_type,
+            group_key=group_key,
+            batch_size=batch_size,
+            verbose=verbose,
+            label=f"{state_slug}/{label_suffix}",
+            dry_run=dry_run,
+        )
 
     def handle(self, *args, **options):
         try:
@@ -300,44 +381,44 @@ class Command(BaseBuild):
         except ImportError as e:
             raise CommandError("Classification models not available. Did you migrate the classification app?") from e
 
-        from protein.models import Protein, ProteinState
+        from protein.models import Protein, ProteinFamily, ProteinState
 
-        state_opt = options['state']
-        batch_size = int(options['batch_size'])
-        verbose = bool(options['verbose'])
-        dry_run = bool(options['dry_run'])
-        test = bool(options.get('test'))
+        state_opt = options["state"]
+        batch_size = int(options["batch_size"])
+        verbose = bool(options["verbose"])
+        dry_run = bool(options["dry_run"])
+        test = bool(options.get("test"))
         if test:
             raise CommandError("This command does not support --test; it writes summary coordinate tables.")
 
         t0 = time.time()
 
-        # Clear all existing coords on each run (all datasets/plots).
         if not dry_run:
             if verbose:
-                print("[clustercoord] clearing classification_clustercoord …")
+                print("[clustercoord] clearing classification_clustercoord ...")
             ClusterCoord.objects.all().delete()
 
-        # Always rebuild sequence datasets on each run (independent of --state)
-        seq_n = self._build_sequence(
+        seq_counts = self._build_sequence(
             ClusterCoord=ClusterCoord,
             ReceptorSimilarity=ReceptorSimilarity,
             Protein=Protein,
+            ProteinFamily=ProteinFamily,
             batch_size=batch_size,
             verbose=verbose,
             dry_run=dry_run,
         )
 
         targets = []
-        if state_opt in ('active', 'both'):
-            targets.append('active')
-        if state_opt in ('inactive', 'both'):
-            targets.append('inactive')
+        if state_opt in ("active", "both"):
+            targets.append("active")
+        if state_opt in ("inactive", "both"):
+            targets.append("inactive")
 
         struct_counts = {}
-        for st in targets:
-            struct_counts[st] = self._build_structure_state(
-                st,
+        for state_slug in targets:
+            state_counts = {}
+            state_counts[self.GLOBAL_GROUP_KEY] = self._build_structure_state(
+                state_slug,
                 ClusterCoord=ClusterCoord,
                 StructureSimilarity=StructureSimilarity,
                 ProteinState=ProteinState,
@@ -346,17 +427,30 @@ class Command(BaseBuild):
                 verbose=verbose,
                 dry_run=dry_run,
             )
+            for class_key in self.CLASS_SLUG_BY_KEY.keys():
+                group_key = self._class_group_key(class_key)
+                state_counts[group_key] = self._build_structure_state(
+                    state_slug,
+                    ClusterCoord=ClusterCoord,
+                    StructureSimilarity=StructureSimilarity,
+                    ProteinState=ProteinState,
+                    Protein=Protein,
+                    batch_size=batch_size,
+                    verbose=verbose,
+                    dry_run=dry_run,
+                    class_key=class_key,
+                )
+            struct_counts[state_slug] = state_counts
 
-        # Clear StructureSim JSON payload cache (view will rebuild quickly from DB)
         if not dry_run:
-            cache_alignment.delete('structuresim:payload:db:v5:clustercoord')
+            cache_alignment.delete("structuresim:payload:db:v5:clustercoord")
 
         t1 = time.time()
         self.logger.info(
-            "Built ClusterCoord: seq=%s active=%s inactive=%s in %s",
-            seq_n,
-            struct_counts.get('active', 0),
-            struct_counts.get('inactive', 0),
+            "Built ClusterCoord: seq(global)=%s active(global)=%s inactive(global)=%s in %s",
+            seq_counts.get(self.GLOBAL_GROUP_KEY, 0),
+            struct_counts.get("active", {}).get(self.GLOBAL_GROUP_KEY, 0),
+            struct_counts.get("inactive", {}).get(self.GLOBAL_GROUP_KEY, 0),
             self._format_elapsed(t1 - t0),
         )
 

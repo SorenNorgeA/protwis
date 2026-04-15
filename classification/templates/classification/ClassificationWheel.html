@@ -6,6 +6,23 @@
 <link rel="stylesheet" href="{% static 'home/css/nvd3-update.css' %}" type="text/css" />
 <link rel="stylesheet" href="{% static 'home/css/select2_4.1.0-rc.0._full.css' %}" type="text/css" />
 <link rel="stylesheet" href="{% static 'home/css/Spectrum_1_8_1.css' %}" type="text/css" />
+{% if embed_mode %}
+<style>
+body > nav.navbar {
+  display: none !important;
+}
+
+body > #content.container {
+  width: 100%;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+body > #content.container > #gpcrdb_alert_placeholder {
+  display: none !important;
+}
+</style>
+{% endif %}
 
 <style>
 /* =========================
@@ -158,17 +175,21 @@
 
 {% block content %}
 <div id="image-container" data-image-url="{% static 'home/images/DataMapper/DataMapper_GPCRome_icon_legend.png' %}" style="display:none"></div>
+{% with selected_wheel|default:'' as wheel_mode %}
 
 <!-- === Tabs === -->
+{% if not wheel_mode %}
 <ul class="nav nav-tabs">
   <li class="active"><a href="#GPCRomewheel_classic_tab" data-toggle="tab">GPCRome wheel</a></li>
   <li><a href="#GPCRomewheel_odorant_tab" data-toggle="tab">Odorant GPCR wheel</a></li>
 </ul>
+{% endif %}
 
 <div class="tab-content">
 
   <!-- === Classic Wheel === -->
-  <div id="GPCRomewheel_classic_tab" class="tab-pane fade in active">
+  {% if not wheel_mode or wheel_mode == "classic" %}
+  <div id="GPCRomewheel_classic_tab" class="{% if wheel_mode == 'classic' %}tab-pane active{% else %}tab-pane fade in active{% endif %}">
     <div class="col-md-12" style="margin-bottom:20px; margin-top:10px;">
       <div style="display:flex; justify-content:center; align-items:center; gap:15px; flex-wrap:nowrap;">
 
@@ -258,9 +279,11 @@
     </div>
     <div id="GPCRome_classic_plot" class="text-center" style="margin-bottom:30px;"></div>
   </div>
+  {% endif %}
 
   <!-- === Odorant Wheel === -->
-  <div id="GPCRomewheel_odorant_tab" class="tab-pane fade">
+  {% if not wheel_mode or wheel_mode == "odorant" %}
+  <div id="GPCRomewheel_odorant_tab" class="{% if wheel_mode == 'odorant' %}tab-pane active{% else %}tab-pane fade{% endif %}">
     <div class="col-md-12" style="margin-bottom:20px; margin-top:10px;">
       <div style="display:flex; justify-content:center; align-items:center; gap:15px; flex-wrap:nowrap;">
 
@@ -350,8 +373,10 @@
     </div>
     <div id="GPCRome_odorant_plot" class="text-center" style="margin-bottom:30px;"></div>
   </div>
+  {% endif %}
 
 </div>
+{% endwith %}
 {% endblock %}
 
 {% block addon_js %}
@@ -372,6 +397,7 @@ const wheelData = {
   classic: JSON.parse('{{ GPCRomeData|escapejs }}'),
   odorant: JSON.parse('{{ GPCRomeOdorantData|escapejs }}')
 };
+const SELECTED_WHEEL = "{{ selected_wheel|default:''|escapejs }}";
 
 const ICON_URL = "{% static 'home/images/DataMapper/DataMapper_GPCRome_icon_legend.png' %}";
 
@@ -379,6 +405,20 @@ const wheelStyling = {
   classic: { DataType:"Text", FontStyle:"Arial", FontsizeGlobal:"11px", FontsizeClass:"20px", showIcon:true, LabelType:"Protein", ShowLegend:true, LegendLayout:{mode:"row", columns:1, sorted:"Vertically"}, IconUrl: ICON_URL, ColorBy: "Class" },
   odorant: { DataType:"Text", FontStyle:"Arial", FontsizeGlobal:"11px", FontsizeClass:"20px", showIcon:true, LabelType:"Protein", ShowLegend:true, LegendLayout:{mode:"row", columns:1, sorted:"Vertically"}, IconUrl: ICON_URL, ColorBy: "Class" }
 };
+
+function notifyEmbeddedParentHeightChanged() {
+  try {
+    if (window.frameElement) {
+      window.frameElement.dispatchEvent(new Event("cv:content-resize"));
+    }
+  } catch (err) {}
+}
+
+function scheduleEmbeddedHeightSync() {
+  window.setTimeout(notifyEmbeddedParentHeightChanged, 0);
+  window.setTimeout(notifyEmbeddedParentHeightChanged, 160);
+  window.setTimeout(notifyEmbeddedParentHeightChanged, 420);
+}
 
 // ==========================
 // === Tree-aligned colors ===
@@ -656,6 +696,13 @@ function sortLegendLabels(labels, colorBy) {
   return arr;
 }
 
+function displayLegendLabel(label, colorBy) {
+  const raw = normKey(label);
+  if (!raw) return raw;
+  if (normKey(colorBy) === "Class" && raw === "Classless") return "Unclassified";
+  return raw;
+}
+
 function applyColoring(type) {
   const schemeSet = (type === "odorant") ? coloringSchemesOdorant : coloringSchemes;
   const colorBy = wheelStyling[type].ColorBy;
@@ -697,6 +744,7 @@ function drawWheel(type) {
   const locationId = (type === "classic") ? "GPCRome_classic_plot" : "GPCRome_odorant_plot";
   d3v4.select(`#${locationId}`).select("svg").remove();
   CustomDrawGPCRomeWheel(wheelData[type], locationId, wheelStyling[type]);
+  scheduleEmbeddedHeightSync();
 }
 
 // Rebuild the text-category legend with custom ordering rules.
@@ -774,7 +822,8 @@ function rebuildWheelLegend(locationId, wheelType) {
     let x = startX, y = startY;
     const maxItemWidth = baseWidth - 100;
     labels.forEach(label => {
-      tempText.text(label);
+      const displayLabel = displayLegendLabel(label, colorBy);
+      tempText.text(displayLabel);
       const labelWidth = tempText.node()?.getComputedTextLength() || 0;
       const fixedWidth = circleRadius * 2 + padding + labelWidth + 20;
       if (x + fixedWidth > baseWidth - 50) {
@@ -795,7 +844,7 @@ function rebuildWheelLegend(locationId, wheelType) {
         .attr("y", cy + 4)
         .style("font-size", fontSize)
         .style("font-family", fontFamily)
-        .text(label);
+        .text(displayLabel);
 
       x += fixedWidth;
     });
@@ -822,7 +871,7 @@ function rebuildWheelLegend(locationId, wheelType) {
     const colWidths = colData.map(col => {
       let maxW = 0;
       col.forEach(label => {
-        tempText.text(label);
+        tempText.text(displayLegendLabel(label, colorBy));
         maxW = Math.max(maxW, tempText.node()?.getComputedTextLength() || 0);
       });
       return maxW + 40;
@@ -833,6 +882,7 @@ function rebuildWheelLegend(locationId, wheelType) {
       let x = colStartX;
       let y = startY;
       col.forEach(label => {
+        const displayLabel = displayLegendLabel(label, colorBy);
         const cy = y;
         legendGroup.append("circle")
           .attr("cx", x)
@@ -846,7 +896,7 @@ function rebuildWheelLegend(locationId, wheelType) {
           .attr("y", cy + 4)
           .style("font-size", fontSize)
           .style("font-family", fontFamily)
-          .text(label);
+          .text(displayLabel);
 
         y += spacingY;
       });
@@ -878,7 +928,7 @@ function rebuildWheelLegend(locationId, wheelType) {
 function classDisplayLabel(code) {
   const k = normKey(code);
   if (!k) return "";
-  if (k === "Classless") return "Classless";
+  if (k === "Classless") return "U";
   if (/^(A|B1|B2|C|F|T2|O1|O2)$/i.test(k)) return k.toUpperCase();
   return k;
 }
@@ -899,8 +949,10 @@ function addClassPills(locationId, wheelType) {
 
   // Adjust this to taste (0..1). Applies to pill fill only (not the text/border).
   const CLASS_PILL_FILL_OPACITY = 0.75;
-  // Nudge for the Classless label/pill (px, +x = right).
-  const CLASSLESS_PILL_DX = 1;
+  // Nudge for the Classless/Unclassified label pill (px, +x = right).
+  // The single-letter "U" badge looks best when pushed farther out,
+  // matching the radial feel of the other one-letter class badges.
+  const CLASSLESS_PILL_DX = -15;
 
   // Class headers are tagged with the highlight class in datamapper's wheel renderer.
   svg.selectAll("text")
@@ -1223,25 +1275,30 @@ function initControls(type) {
 $(function () {
   initActiveCategories();
 
-  // CLASSIC
-  applyColoring("classic");
-  drawWheel("classic");
-  initControls("classic");
-  initCustomizeColorPickers("classic", "classic-color-pickers");
+  if (!SELECTED_WHEEL || SELECTED_WHEEL === "classic") {
+    applyColoring("classic");
+    drawWheel("classic");
+    initControls("classic");
+    initCustomizeColorPickers("classic", "classic-color-pickers");
+  }
 
-  // ODORANT
-  applyColoring("odorant");
-  initControls("odorant");
-  // Build its customize panel now (even if the tab is hidden)
-  initCustomizeColorPickers("odorant", "odorant-color-pickers");
-
-  // When Odorant tab becomes visible, ensure it draws once
-  $('a[href="#GPCRomewheel_odorant_tab"]').on('shown.bs.tab', function () {
+  if (!SELECTED_WHEEL || SELECTED_WHEEL === "odorant") {
     applyColoring("odorant");
-    drawWheel("odorant");
-    // Optional: rebuild to be safe if user changed "Color by" while hidden
+    initControls("odorant");
     initCustomizeColorPickers("odorant", "odorant-color-pickers");
-  });
+  }
+
+  if (!SELECTED_WHEEL) {
+    $('a[href="#GPCRomewheel_odorant_tab"]').on('shown.bs.tab', function () {
+      applyColoring("odorant");
+      drawWheel("odorant");
+      initCustomizeColorPickers("odorant", "odorant-color-pickers");
+    });
+  } else if (SELECTED_WHEEL === "odorant") {
+    drawWheel("odorant");
+  }
+
+  scheduleEmbeddedHeightSync();
 });
 
 

@@ -1,0 +1,241 @@
+{% extends "home/base.html" %}
+{% load static %}
+
+{% block addon_css %}
+<style>
+.cv-family-detail {
+  padding: 22px 0 32px;
+}
+
+.cv-family-detail-header {
+  margin-bottom: 18px;
+}
+
+.cv-family-detail-header h2 {
+  margin-top: 0;
+  margin-bottom: 6px;
+}
+
+.cv-family-card {
+  border: 1px solid #d9e2ef;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(31, 120, 180, 0.08);
+  overflow: hidden;
+}
+
+.cv-family-card-body {
+  padding: 16px;
+}
+
+.cv-family-toolbar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.cv-family-summary {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.cv-family-pill {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #d9e2ef;
+  border-radius: 999px;
+  background: #f8fbff;
+  padding: 6px 12px;
+  color: #40617f;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cv-family-plot {
+  min-height: 620px;
+}
+
+.cv-family-meta {
+  margin-top: 14px;
+  text-align: center;
+  color: #5f6f82;
+}
+
+.cv-family-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: #6f7f90;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid cv-family-detail">
+  <div class="cv-family-detail-header">
+    <h2>{{ page_title }}</h2>
+    <p class="text-muted">{{ page_description }}</p>
+  </div>
+
+  <div class="cv-family-card">
+    <div class="cv-family-card-body">
+      <div class="cv-family-toolbar">
+        <button id="cvFamilyDownloadSvgBtn" type="button" class="btn btn-primary btn-sm">Download SVG</button>
+        <button id="cvFamilyDownloadPngBtn" type="button" class="btn btn-primary btn-sm">Download PNG</button>
+      </div>
+
+      <div class="cv-family-summary" id="cvFamilySummary"></div>
+      <div id="cvFamilyPlot" class="cv-family-plot"></div>
+      <div id="cvFamilyMeta" class="cv-family-meta"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block addon_js %}
+<script src="{% static 'home/js/plotly_v1_58_5.js' %}"></script>
+<script>
+(function() {
+  const familyEntry = JSON.parse('{{ family_entry_json|escapejs }}');
+  const payload = JSON.parse('{{ family_payload_json|escapejs }}');
+  const familyReceptorCount = Number('{{ family_receptor_count|default:"0"|escapejs }}');
+  const plotEl = document.getElementById("cvFamilyPlot");
+  const summaryEl = document.getElementById("cvFamilySummary");
+  const metaEl = document.getElementById("cvFamilyMeta");
+  const downloadBaseName = "{{ page_title|escapejs }}".trim().replace(/\s+/g, "_").replace(/[^A-Za-z0-9_\-]+/g, "") || "receptor_family";
+
+  function renderSummary() {
+    if (!summaryEl || !payload || !payload.meta) return;
+    const items = [];
+    items.push("Receptors: " + String(payload.meta.n_points || 0));
+    if (payload.meta.classes && payload.meta.classes.length) {
+      items.push("Classes: " + payload.meta.classes.join(", "));
+    }
+    if (payload.meta.chemotypes && payload.meta.chemotypes.length) {
+      items.push("Chemotypes: " + payload.meta.chemotypes.join(", "));
+    }
+    if (payload.meta.modality_groups && payload.meta.modality_groups.length) {
+      items.push("Modality: " + payload.meta.modality_groups.join(", "));
+    }
+    summaryEl.innerHTML = items.map(function(item) {
+      return '<span class="cv-family-pill">' + item + '</span>';
+    }).join("");
+  }
+
+  function renderMeta() {
+    if (!metaEl || !payload || !payload.meta) return;
+    metaEl.textContent = payload.meta.note || "";
+  }
+
+  function downloadImage(format) {
+    if (!plotEl || !plotEl.data || typeof Plotly === "undefined") return;
+    Plotly.toImage(plotEl, {
+      format: format,
+      width: 1400,
+      height: 900,
+      scale: format === "png" ? 2 : 1,
+    }).then(function(url) {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = downloadBaseName + "." + format;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+  }
+
+  function renderPlot() {
+    if (!plotEl || typeof Plotly === "undefined") return;
+    if (!payload.points || !payload.points.length) {
+      plotEl.innerHTML = '<div class="cv-family-empty">No receptor-family cluster data is available for this family.</div>';
+      return;
+    }
+
+    const trace = {
+      type: "scatter",
+      mode: "markers+text",
+      x: payload.points.map(function(point) { return point.x; }),
+      y: payload.points.map(function(point) { return point.y; }),
+      text: payload.points.map(function(point) { return point.label; }),
+      textposition: "top center",
+      textfont: { size: 11, color: "#1d2d3d" },
+      marker: {
+        size: 16,
+        color: payload.points.map(function(point) { return point.color; }),
+        line: { width: 1, color: "rgba(0,0,0,0.25)" },
+      },
+      customdata: payload.points.map(function(point) {
+        return [
+          point.display_name,
+          point.class_label,
+          (point.chemotypes || []).join(", "),
+          (point.modality_groups || []).join(", "),
+          point.protein_url,
+        ];
+      }),
+      hovertemplate: [
+        "<b>%{text}</b>",
+        "%{customdata[0]}",
+        "Class: %{customdata[1]}",
+        "Chemotype: %{customdata[2]}",
+        "Modality: %{customdata[3]}",
+        "<extra></extra>"
+      ].join("<br>")
+    };
+
+    const layout = {
+      title: "{{ page_title|escapejs }}",
+      margin: { l: 30, r: 30, t: 56, b: 40 },
+      paper_bgcolor: "#ffffff",
+      plot_bgcolor: "#fbfdff",
+      hovermode: "closest",
+      showlegend: false,
+      xaxis: {
+        title: "t-SNE 1",
+        zeroline: false,
+        showgrid: false,
+      },
+      yaxis: {
+        title: "t-SNE 2",
+        zeroline: false,
+        showgrid: false,
+      },
+    };
+
+    Plotly.newPlot(plotEl, [trace], layout, {
+      displayModeBar: true,
+      responsive: true,
+    }).then(function() {
+      plotEl.on("plotly_click", function(event) {
+        const point = event && event.points && event.points.length ? event.points[0] : null;
+        if (!point || !point.customdata || !point.customdata[4]) return;
+        window.open(point.customdata[4], "_blank", "noopener");
+      });
+    });
+  }
+
+  const svgBtn = document.getElementById("cvFamilyDownloadSvgBtn");
+  if (svgBtn) {
+    svgBtn.addEventListener("click", function() {
+      downloadImage("svg");
+    });
+  }
+
+  const pngBtn = document.getElementById("cvFamilyDownloadPngBtn");
+  if (pngBtn) {
+    pngBtn.addEventListener("click", function() {
+      downloadImage("png");
+    });
+  }
+
+  renderSummary();
+  renderMeta();
+  renderPlot();
+})();
+</script>
+{% endblock %}

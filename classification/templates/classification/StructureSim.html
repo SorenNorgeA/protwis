@@ -2,8 +2,8 @@
 {% load static %}
 
 {% block content %}
-<div class="container-fluid ss-page">
-  <div id="sim-status">Loading…</div>
+<div class="container-fluid ss-page{% if structuresim_embed_mode %} ss-embed-mode{% endif %}">
+  <div id="sim-status" style="display:none;"></div>
 
   <!-- How-to Modal -->
   <div id="ssHowToBackdrop" class="ss-modal-backdrop" aria-hidden="true"></div>
@@ -22,7 +22,9 @@
         <li><strong>Human only</strong>: this view contains <strong>human receptors only</strong>.</li>
         <li><strong>Structure datasets</strong>: include <strong>representative structures only</strong> (active/inactive sets).</li>
         <li><strong>Colour by</strong>: recolours points by Class/Chemotype/Receptor family/Modality/Sense.</li>
-        <li><strong>Shape by</strong>: toggles marker shapes (None/Class). Note: choosing <strong>Colour by = Class</strong> forces <strong>Shape by = None</strong>; any other colour setting forces <strong>Shape by = Class</strong>.</li>
+        {% if not structuresim_scope_class %}
+        <li><strong>Shape by</strong>: toggles marker shapes (None/Class), and the shape legend can be used to hide or isolate classes.</li>
+        {% endif %}
         <li><strong>Click</strong> any point to see details in the left-side panel.</li>
         <li><strong>Legend</strong>: click legend items to exclude/include groups in the plot.</li>
       </ul>
@@ -85,16 +87,18 @@
       </div>
     </div>
 
-    <!-- Shape by -->
-    <div class="dropdown">
-      <button id="ssShapeDropdownBtn" class="btn btn-primary btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
-        Shape by <span class="caret"></span>
-      </button>
-      <div class="dropdown-menu" style="min-width: 180px;">
-        <button type="button" class="btn btn-primary btn-block ss-shapeby-opt" data-key="None">None</button>
-        <button type="button" class="btn btn-outline-primary btn-block ss-shapeby-opt" data-key="Class">Class</button>
+    {% if not structuresim_scope_class %}
+      <!-- Shape by -->
+      <div class="dropdown">
+        <button id="ssShapeDropdownBtn" class="btn btn-primary btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+          Shape by <span class="caret"></span>
+        </button>
+        <div class="dropdown-menu" style="min-width: 180px;">
+          <button type="button" class="btn btn-primary btn-block ss-shapeby-opt" data-key="None">None</button>
+          <button type="button" class="btn btn-outline-primary btn-block ss-shapeby-opt" data-key="Class">Class</button>
+        </div>
       </div>
-    </div>
+    {% endif %}
 
     <!-- Download (Wheel-like) -->
     <div class="dropdown">
@@ -107,31 +111,28 @@
       </div>
     </div>
 
-    <!-- Table on hover (sequence only) -->
-    <button id="ssTableOnHoverBtn" type="button" class="btn btn-outline-primary btn-sm" style="display:none;" title="Show similarity table when hovering over datapoints">
-      Table on hover
-    </button>
-
   </div>
 
-  <div class="ss-plot-grid" aria-label="Plot and legends">
+  <div id="ssLoaderHost" class="ss-loader-host" aria-hidden="true"></div>
+
+  <div class="ss-plot-grid" id="ssPlotGrid" aria-label="Plot and legends" style="display:none;">
     <div class="ss-left-col">
       <div class="ss-search-wrap">
         <select id="ssReceptorSearch" class="form-control" style="width: 100%;">
           <option value="">Search receptor</option>
         </select>
       </div>
+      <div id="ssDetailsPanel" class="ss-static-panel" aria-label="Receptor details"></div>
+      <aside id="ss-legend" class="ss-legend" aria-label="Legend">
+        <div id="ss-legend-body"></div>
+      </aside>
     </div>
 
     <div class="ss-plot-wrap">
       <div id="plot" style="min-height: 540px;"></div>
     </div>
 
-    <aside id="ss-legend" class="ss-legend" aria-label="Legend">
-      <div id="ss-legend-body"></div>
-    </aside>
-
-    <div class="ss-plot-grid-pad" aria-hidden="true"></div>
+    <aside id="ssSimilarPanel" class="ss-right-col ss-static-panel" aria-label="Most similar receptors"></aside>
   </div>
 </div>
 {% endblock %}
@@ -140,7 +141,27 @@
 <link rel="stylesheet" href="{% static 'home/css/NewDrugsBrowser_datatables.min.css' %}" type="text/css"/>
 <link rel="stylesheet" href="{% static 'home/css/select2_4.1.0-rc.0._full.css' %}" type="text/css" />
 <link rel="stylesheet" href="{% static 'home/css/Spectrum_1_8_1.css' %}" type="text/css" />
+<link rel="stylesheet" href="{% static 'home/css/BusyLoad.css' %}" type="text/css" />
 <style>
+.ss-embed-mode {
+  padding-top: 8px;
+}
+
+.ss-loader-host{
+  min-height: 620px;
+  position: relative;
+}
+
+#ssLoaderHost .busy-load-container-item{
+  transform: translateY(-25%);
+}
+
+#ssLoaderHost .ss-loader-text{
+  font-size: 2.5rem !important;
+  font-family: 'Source Code Pro', monospace;
+  letter-spacing: 0.02em;
+}
+
 /* Wheel-like outline button (bootstrap3-compatible) */
 .btn-outline-primary{
   color:#337ab7;
@@ -152,6 +173,12 @@
   color:#fff;
   background-color:#337ab7;
   border-color:#2e6da4;
+}
+.ss-toolbar .btn[disabled],
+.ss-toolbar .btn.disabled{
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: auto;
 }
 
 /* --- Control rows (StructureSim) --- */
@@ -185,7 +212,43 @@
   min-width: 0;
   align-self: start;
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  gap: 14px;
+  align-items: flex-end;
+}
+.ss-right-col{
+  min-width: 0;
+  align-self: start;
+}
+.ss-static-panel{
+  border: 1px solid #e6e6e6;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: none;
+  padding: 12px;
+  box-sizing: border-box;
+}
+#ssDetailsPanel{
+  max-width: 232px;
+  margin-left: auto;
+}
+#ssDetailsPanel .ss-hover-panel,
+#ssDetailsPanel .ss-similar-panel{
+  font-size: 11px;
+}
+#ssDetailsPanel .ss-hover-panel-title{
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+#ssDetailsPanel .ss-hover-panel-kv{
+  margin: 0 0 3px 0;
+  line-height: 1.32;
+}
+.ss-right-col{
+  min-width: 0;
+  align-self: start;
+  min-width: 420px;
+  overflow: hidden;
 }
 .ss-toolbar .btn{
   text-align:center;
@@ -234,7 +297,8 @@
   min-width: 208px;
   max-width: 208px;
   box-sizing: border-box;
-  margin-right: 10px;
+  margin-left: auto;
+  margin-right: 0;
   font-size: 12px;
 }
 .ss-search-wrap .select2-container,
@@ -337,37 +401,35 @@
   padding-right: 0;
 }
 
-/* 30% left (search) | 55% plot | 15% legend | 0% right padding */
+/* left details/legend | plot | right similar table */
 .ss-plot-grid{
   display: grid;
-  grid-template-columns: 30% 55% 15% 0%;
+  grid-template-columns: minmax(220px, 18%) minmax(420px, 42%) minmax(420px, 40%);
   align-items: start;
   column-gap: 14px;
   margin-top: 14px; /* whitespace between toolbar and plot */
 }
-.ss-plot-grid-pad{ min-height: 1px; }
 .ss-hover-panel{
-  position: fixed;
-  z-index: 1;
-  width: auto;
-  min-width: min(208px, calc(100vw - 40px));
-  max-width: min(400px, calc(100vw - 40px));
-  background: rgba(255,255,255,.98);
+  position: relative;
+  z-index: 0;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  background: transparent;
   color: #111;
-  border: 1px solid #cfcfcf;
-  border-radius: 10px;
-  box-shadow: 0 10px 24px rgba(0,0,0,.18);
-  padding: 12px;
-  display: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  display: block;
   box-sizing: border-box;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: visible;
   font-family: 'Source Code Pro', monospace;
   font-size: 12px;
 }
 .ss-hover-panel.is-expanded{
-  width: min(400px, calc(100vw - 40px));
-  max-width: min(400px, calc(100vw - 40px));
+  width: 100%;
+  max-width: none;
 }
 .ss-hover-panel-body{
   display: flex;
@@ -387,6 +449,20 @@
   padding: 10px;
   background: #fff;
   min-width: 0;
+}
+.ss-similar-panel{
+  width: 100%;
+  font-family: 'Source Code Pro', monospace;
+  font-size: 12px;
+  height: 100%;
+}
+.ss-similar-panel .ss-hover-panel-section{
+  min-height: 220px;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 .ss-hover-panel-title{
   font-size: 14px;
@@ -428,7 +504,10 @@
   font-weight: 700;
 }
 .ss-hover-panel-table-wrap{
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-x: auto;
+  overflow-y: auto;
 }
 #ssSimilarTable{
   width: 100%;
@@ -471,15 +550,10 @@
   width: 100%;
 }
 
-/* Legend should fit the 15% column */
 .ss-legend{
   width: 100%;
   flex: initial;
-  align-self: center;
-}
-.ss-legend{
-  width: 320px;
-  flex: 0 0 320px;
+  align-self: flex-end;
   font-family: 'Source Code Pro, monospace';
   font-size: 12px;
 }
@@ -494,6 +568,8 @@
 .ss-legend-grid{
   display:grid;
   gap: 14px;
+  align-items: start;
+  justify-content: end;
 }
 .ss-legend-col-title{
   font-weight: 700;
@@ -597,16 +673,39 @@
 .ss-modal footer{ padding: 10px 16px; border-top:1px solid #e6e6e6; text-align:right; }
 
 </style>
+{% if structuresim_embed_mode %}
+<style>
+body > nav.navbar {
+  display: none !important;
+}
+
+body > #content.container {
+  width: 100%;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+body > #content.container > #gpcrdb_alert_placeholder {
+  display: none !important;
+}
+</style>
+{% endif %}
 {% endblock %}
 
 {% block addon_js %}
 <script src="{% static 'home/js/plotly_v1_58_5.js' %}"></script>
 <script src="{% static 'home/js/spectrum_v1_8_1.js' %}"></script>
 <script src="{% static 'home/js/select2_4.1.0-rc.0_full.js' %}"></script>
+<script src="{% static 'home/js/BusyLoad.js' %}"></script>
 <script>
 (async function () {
+  const isClassScopedVisualization = !!"{{ structuresim_scope_class|escapejs }}";
   const statusEl    = document.getElementById('sim-status');
+  const loaderHostEl = document.getElementById('ssLoaderHost');
+  const plotGridEl = document.getElementById('ssPlotGrid');
   const plotDiv     = document.getElementById('plot');
+  const detailsPanelHost = document.getElementById('ssDetailsPanel');
+  const similarPanelHost = document.getElementById('ssSimilarPanel');
   const legendWrapEl= document.getElementById('ss-legend');
   const legendEl    = document.getElementById('ss-legend-body');
   const downloadPngBtn = document.getElementById('ssDownloadPngBtn');
@@ -614,7 +713,10 @@
   // const downloadBtn = document.getElementById('download-btn');   // NEW (temporarily disabled)
   const hoverPanelEl = document.createElement('div');
   hoverPanelEl.className = 'ss-hover-panel';
-  document.body.appendChild(hoverPanelEl);
+  if (detailsPanelHost) detailsPanelHost.appendChild(hoverPanelEl);
+  const similarPanelEl = document.createElement('div');
+  similarPanelEl.className = 'ss-similar-panel';
+  if (similarPanelHost) similarPanelHost.appendChild(similarPanelEl);
   const plotHoverEl = document.createElement('div');
   plotHoverEl.className = 'ss-plot-hover';
   document.body.appendChild(plotHoverEl);
@@ -681,6 +783,47 @@
   };
 
   const CLASS_ORDER = ['A','B1','B2','C','F','O1','O2','T2'];
+
+  function showBusyLoader() {
+    if (statusEl) {
+      statusEl.style.display = 'none';
+      statusEl.textContent = '';
+    }
+    if (plotGridEl) plotGridEl.style.display = 'none';
+    if (!loaderHostEl) return;
+    loaderHostEl.style.display = 'block';
+    if (window.jQuery && jQuery.fn && jQuery.fn.busyLoad) {
+      jQuery(loaderHostEl).show().busyLoad('show', {
+        spinner: 'accordion',
+        text: 'Loading cluster',
+        fontSize: '2.5rem',
+        textClass: 'ss-loader-text',
+        textPosition: 'top',
+        textMargin: '-6rem',
+        color: 'black',
+        background: 'white'
+      });
+    } else {
+      loaderHostEl.textContent = 'Loading cluster...';
+      loaderHostEl.style.display = 'flex';
+      loaderHostEl.style.alignItems = 'center';
+      loaderHostEl.style.justifyContent = 'center';
+      loaderHostEl.style.color = '#3f5368';
+      loaderHostEl.style.fontFamily = 'Source Code Pro, monospace';
+      loaderHostEl.style.fontSize = '2.5rem';
+    }
+  }
+
+  function hideBusyLoader() {
+    if (loaderHostEl && window.jQuery && jQuery.fn && jQuery.fn.busyLoad) {
+      jQuery(loaderHostEl).busyLoad('hide');
+    }
+    if (loaderHostEl) {
+      loaderHostEl.style.display = 'none';
+      loaderHostEl.textContent = '';
+    }
+    if (plotGridEl) plotGridEl.style.display = 'grid';
+  }
 
   /* ---------- helpers ---------- */
 
@@ -1067,6 +1210,7 @@
     if (p && p.Sense) rows.push('<div class="ss-hover-panel-kv"><b>Sense</b>: ' + escapeHtml(p.Sense) + '</div>');
     return (
       '<div class="ss-hover-panel-section">' +
+        '<div class="ss-hover-panel-title">Receptor details</div>' +
         rows.join('') +
       '</div>'
     );
@@ -1116,56 +1260,54 @@
   }
 
   function updateHoverPanelWidth(isExpanded) {
-    if (!hoverPanelEl) return;
-    const viewportMax = Math.max(220, window.innerWidth - 40);
-    const minWidth = Math.min(208, viewportMax);
-    const maxWidth = Math.min(400, viewportMax);
-
-    if (isExpanded) {
-      hoverPanelEl.style.width = maxWidth + 'px';
-      hoverPanelEl.style.minWidth = maxWidth + 'px';
-      hoverPanelEl.style.maxWidth = maxWidth + 'px';
-      return;
-    }
-
-    let desiredWidth = minWidth;
-    const detailsSection = hoverPanelEl.querySelector('.ss-hover-panel-section');
-    if (detailsSection) {
-      const measureEl = detailsSection.cloneNode(true);
-      measureEl.style.position = 'absolute';
-      measureEl.style.visibility = 'hidden';
-      measureEl.style.width = 'max-content';
-      measureEl.style.maxWidth = maxWidth + 'px';
-      measureEl.style.left = '-99999px';
-      measureEl.style.top = '0';
-      document.body.appendChild(measureEl);
-      desiredWidth = Math.max(minWidth, Math.min(maxWidth, Math.ceil(measureEl.getBoundingClientRect().width) + 24));
-      document.body.removeChild(measureEl);
-    }
-
-    hoverPanelEl.style.width = desiredWidth + 'px';
-    hoverPanelEl.style.minWidth = desiredWidth + 'px';
-    hoverPanelEl.style.maxWidth = desiredWidth + 'px';
+    return;
   }
 
   function positionHoverPanel() {
-    if (!hoverPanelEl || hoverPanelEl.style.display === 'none' || !plotDiv) return;
-    const pad = 14;
-    const gap = 8;
-    const plotWrap = plotDiv.closest('.ss-plot-wrap');
-    const plotRect = (plotWrap || plotDiv).getBoundingClientRect();
-    const searchWrap = document.querySelector('.ss-search-wrap');
-    const searchRect = searchWrap && searchWrap.offsetParent ? searchWrap.getBoundingClientRect() : null;
-    const panelTop = (searchRect && searchRect.height > 0) ? searchRect.bottom + gap : Math.max(pad, plotRect.top);
-    const plotBottom = plotRect.bottom;
-    const viewportBottom = window.innerHeight - pad;
-    const availableHeight = Math.max(0, Math.min(plotBottom, viewportBottom) - panelTop - pad);
-    const maxHeight = Math.max(220, Math.min(Math.floor(plotRect.height), Math.floor(availableHeight)));
-    hoverPanelEl.style.maxHeight = maxHeight + 'px';
-    const rect = hoverPanelEl.getBoundingClientRect();
-    let left = Math.max(pad, plotRect.left - rect.width - 24);
-    hoverPanelEl.style.left = left + 'px';
-    hoverPanelEl.style.top = Math.max(pad, panelTop) + 'px';
+    return;
+  }
+
+  function syncLegendVerticalPlacement() {
+    if (!legendWrapEl || !detailsPanelHost || !plotDiv) return;
+    if (legendWrapEl.style.display === 'none') {
+      legendWrapEl.style.marginTop = '0px';
+      legendWrapEl.style.maxHeight = '';
+      return;
+    }
+    const plotWrap = plotDiv.closest('.ss-plot-wrap') || plotDiv;
+    legendWrapEl.style.marginTop = '0px';
+    legendWrapEl.style.maxHeight = '';
+    const plotRect = plotWrap.getBoundingClientRect();
+    const legendTop = legendWrapEl.getBoundingClientRect().top;
+    const available = Math.max(0, Math.floor(plotRect.bottom - legendTop - 2));
+    const maxLegendHeight = Math.max(40, available);
+    legendWrapEl.style.maxHeight = maxLegendHeight + 'px';
+    const listEls = legendWrapEl.querySelectorAll('.ss-legend-list');
+    listEls.forEach((el) => {
+      el.style.maxHeight = Math.max(40, maxLegendHeight - 4) + 'px';
+    });
+    legendWrapEl.style.marginTop = '0px';
+  }
+
+  function syncSimilarPanelPlacement() {
+    if (!similarPanelHost || !similarPanelEl || !plotDiv) return;
+    const plotWrap = plotDiv.closest('.ss-plot-wrap') || plotDiv;
+    const plotRect = plotWrap.getBoundingClientRect();
+    const plotHeight = Math.max(220, Math.floor(plotRect.height - 2));
+    similarPanelHost.style.height = plotHeight + 'px';
+    similarPanelHost.style.maxHeight = plotHeight + 'px';
+
+    const sectionEl = similarPanelEl.querySelector('.ss-hover-panel-section');
+    if (!sectionEl) return;
+    sectionEl.style.height = plotHeight + 'px';
+    sectionEl.style.maxHeight = plotHeight + 'px';
+    sectionEl.style.overflow = 'hidden';
+
+    const tableWrapEl = similarPanelEl.querySelector('.ss-hover-panel-table-wrap');
+    if (!tableWrapEl) return;
+    tableWrapEl.style.maxHeight = '';
+    tableWrapEl.style.height = 'auto';
+    tableWrapEl.style.overflowY = 'auto';
   }
 
   let similarTableDT = null;
@@ -1285,14 +1427,27 @@
     hoverPanelEl.className = 'ss-hover-panel';
     hoverPanelEl.innerHTML = (
       '<div class="ss-hover-panel-body">' +
-        '<div class="ss-hover-panel-empty">' +
-          'Hover datapoints to view details. Click datapoints to view the most similar receptors.' +
+        '<div class="ss-hover-panel-section">' +
+          '<div class="ss-hover-panel-title">Receptor details</div>' +
+          '<div class="ss-hover-panel-empty">' +
+            'Hover datapoints to view receptor details. Click datapoints to freeze the selection.' +
+          '</div>' +
         '</div>' +
       '</div>'
     );
-    hoverPanelEl.style.display = 'block';
-    updateHoverPanelWidth(false);
-    positionHoverPanel();
+    if (similarPanelEl) {
+      similarPanelEl.innerHTML =
+        '<div class="ss-hover-panel-section">' +
+          '<div class="ss-hover-panel-title">Most similar receptors</div>' +
+          '<div class="ss-hover-panel-kv ss-hover-panel-note">' +
+            (supportsNeighborHover(currentDataset)
+              ? 'Hover or click a datapoint to populate the similarity table.'
+              : 'Similarity tables are available for the primary sequence dataset.') +
+          '</div>' +
+        '</div>';
+    }
+    requestAnimationFrame(syncSimilarPanelPlacement);
+    requestAnimationFrame(syncLegendVerticalPlacement);
   }
 
   function renderSidePanelSelection(point, neighborRows) {
@@ -1301,14 +1456,13 @@
     const showTable = supportsNeighborHover(currentDataset) && (!!selectedPointData || showTableOnHover);
     destroySimilarTable();
     hoverPanelEl.className = 'ss-hover-panel' + (showTable ? ' is-expanded' : '');
-    hoverPanelEl.innerHTML =
-      '<div class="ss-hover-panel-body">' +
-      buildPointDetailsHtml(point) +
-      (showTable
+    hoverPanelEl.innerHTML = '<div class="ss-hover-panel-body">' + buildPointDetailsHtml(point) + '</div>';
+
+    if (similarPanelEl) {
+      similarPanelEl.innerHTML = showTable
         ? (
             '<div class="ss-hover-panel-section">' +
               '<div class="ss-hover-panel-title">Most similar receptors</div>' +
-              '<div class="ss-hover-panel-kv ss-hover-panel-note">Top 10 receptors plus ties at the cutoff are shown below.</div>' +
               '<div class="ss-hover-panel-table-wrap">' +
                 '<table id="ssSimilarTable" class="display compact hover nowrap stripe" style="width:100%">' +
                   '<thead><tr>' +
@@ -1325,25 +1479,25 @@
           )
         : (
             '<div class="ss-hover-panel-section">' +
-              '<div class="ss-hover-panel-title">Details</div>' +
+              '<div class="ss-hover-panel-title">Most similar receptors</div>' +
               '<div class="ss-hover-panel-kv ss-hover-panel-note">' +
                 (supportsNeighborHover(currentDataset)
-                  ? 'Click this datapoint to freeze the selection and view the most similar receptors.'
-                  : 'Structure datasets show receptor details here. Similarity tables are available for the primary sequence dataset.') +
+                  ? 'Most similar receptors are shown automatically for the sequence dataset.'
+                  : 'Similarity tables are available for the primary sequence dataset.') +
               '</div>' +
             '</div>'
-          )) +
-      '</div>';
-    hoverPanelEl.style.display = 'block';
-    updateHoverPanelWidth(showTable);
-    positionHoverPanel();
+          );
+    }
 
     if (showTable) {
       requestAnimationFrame(() => {
         renderSimilarTable(rows);
-        positionHoverPanel();
+        syncSimilarPanelPlacement();
+        syncLegendVerticalPlacement();
       });
     }
+    requestAnimationFrame(syncSimilarPanelPlacement);
+    requestAnimationFrame(syncLegendVerticalPlacement);
   }
 
   function buildTraces(points, colorKey, shapeKey) {
@@ -1452,12 +1606,12 @@
   let currentDataset = 'sequence';
   let plotType = 'tsne';
   let colorKey = 'Class';
-  let shapeKey = 'None';
+  let shapeKey = 'Class';
   let frozenPointId = null;
   let frozenNeighborIds = new Set();
   let selectedPointData = null;
   let suppressPlotBackgroundClickUntil = 0;
-  let showTableOnHover = false;
+  let showTableOnHover = true;
 
   const FROZEN_SELECTED_COLOR = '#2ca02c';
   const FROZEN_NEIGHBOR_COLOR = '#d62728';
@@ -1479,6 +1633,30 @@
     if (ds === 'inactive') return 'Inactive structures';
     if (ds === 'active')   return 'Active structures';
     return '';
+  }
+
+  function datasetPointCount(ds) {
+    return Array.isArray(datasets[ds]) ? datasets[ds].length : 0;
+  }
+
+  function datasetIsAvailable(ds) {
+    return datasetPointCount(ds) >= 3;
+  }
+
+  function datasetUnavailableReason(ds) {
+    if (datasetIsAvailable(ds)) return '';
+    if (ds === 'inactive' || ds === 'active') {
+      return 'Not enough datapoints for this structure subset. At least 3 receptors are required.';
+    }
+    return 'Not enough datapoints. At least 3 receptors are required.';
+  }
+
+  function firstAvailableDataset() {
+    const preferredOrder = ['sequence', 'inactive', 'active'];
+    for (const ds of preferredOrder) {
+      if (datasetIsAvailable(ds)) return ds;
+    }
+    return 'sequence';
   }
 
   function supportsNeighborHover(ds) {
@@ -1640,28 +1818,32 @@
   function syncDatasetButtons() {
     document.querySelectorAll('.ss-dataset-opt').forEach(b => {
       const k = b.getAttribute('data-dataset') || 'sequence';
+      const available = datasetIsAvailable(k);
       const isOn = (k === currentDataset);
-      b.classList.toggle('btn-primary', isOn);
-      b.classList.toggle('btn-outline-primary', !isOn);
+      b.disabled = !available;
+      b.classList.toggle('btn-primary', available && isOn);
+      b.classList.toggle('btn-outline-primary', !isOn || !available);
+      if (!available) {
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-outline-primary');
+      }
+      const reason = datasetUnavailableReason(k);
+      if (reason) b.setAttribute('title', reason);
+      else b.removeAttribute('title');
     });
   }
 
   function setCurrentDataset(ds) {
+    if (!datasetIsAvailable(ds)) {
+      ds = firstAvailableDataset();
+    }
     currentDataset = ds;
     syncDatasetButtons();
-    syncTableOnHoverButton();
     if (datasetDropBtn) datasetDropBtn.childNodes[0].nodeValue = 'Source: ' + datasetButtonLabel(ds) + ' ';
   }
 
   function syncTableOnHoverButton() {
-    const btn = document.getElementById('ssTableOnHoverBtn');
-    if (!btn) return;
-    const isSequence = currentDataset === 'sequence';
-    btn.style.display = isSequence ? '' : 'none';
-    if (isSequence) {
-      btn.classList.toggle('btn-primary', showTableOnHover);
-      btn.classList.toggle('btn-outline-primary', !showTableOnHover);
-    }
+    return;
   }
 
   // Custom legend visibility state (per dataset + colorKey).
@@ -1922,6 +2104,7 @@
   function renderLegend(traces) {
     if (!legendEl) return;
     const frozenActive = hasFrozenSelection();
+    const hideColorLegend = isClassScopedVisualization && colorKey === 'Class';
 
     // Legend width can be tuned per Color by key
     const baseW = 320;
@@ -1952,24 +2135,34 @@
 
     const cats = Array.from(catTo.keys()).sort((a, b) => String(a).localeCompare(String(b)));
 
+    if (hideColorLegend) {
+      legendEl.innerHTML = '';
+      if (legendWrapEl) legendWrapEl.style.display = 'none';
+      requestAnimationFrame(syncLegendVerticalPlacement);
+      return;
+    }
+    if (legendWrapEl) legendWrapEl.style.display = '';
+
     const grid = document.createElement('div');
     grid.className = 'ss-legend-grid';
-    const showShapesCol = (shapeKey === 'Class');
-    // Always keep a two-column layout to avoid the left legend expanding/shrinking.
-    grid.style.gridTemplateColumns = leftW + 'px ' + shapeColW + 'px';
+    const showShapesCol = !isClassScopedVisualization && (shapeKey === 'Class');
+    grid.style.gridTemplateColumns = showShapesCol
+      ? (shapeColW + 'px ' + leftW + 'px')
+      : (leftW + 'px');
 
-    // Left: colors
-    const left = document.createElement('div');
-    const leftList = document.createElement('div');
-    leftList.className = 'ss-legend-list';
+    // Right-aligned color legend should sit closest to the plot.
+    const colorCol = document.createElement('div');
+    colorCol.style.justifySelf = 'end';
+    const colorList = document.createElement('div');
+    colorList.className = 'ss-legend-list';
     if (frozenActive) {
-      leftList.classList.add('ss-legend-list--disabled');
+      colorList.classList.add('ss-legend-list--disabled');
 
       const frozenNote = document.createElement('div');
       frozenNote.className = 'ss-legend-note';
       frozenNote.style.marginTop = '0';
       frozenNote.textContent = 'Color legend disabled while frozen.';
-      leftList.appendChild(frozenNote);
+      colorList.appendChild(frozenNote);
     } else {
       cats.forEach(cat => {
         const rec = catTo.get(cat);
@@ -2019,26 +2212,26 @@
           }
         );
 
-        leftList.appendChild(item);
+        colorList.appendChild(item);
       });
     }
-    left.appendChild(leftList);
+    colorCol.appendChild(colorList);
 
-    grid.appendChild(left);
-    // Right: shapes column (placeholder when hidden)
-    const right = document.createElement('div');
+    // Left: shape legend
+    const shapeCol = document.createElement('div');
+    shapeCol.style.justifySelf = 'end';
     // When Color by != Class, keep the shape legend centered vertically (not top-aligned)
     // so switching "Color by" doesn't visually drag the shape legend to the top.
-    right.style.alignSelf = isClassSyncMode() ? 'stretch' : 'center';
-    const rightList = document.createElement('div');
-    rightList.className = 'ss-legend-list';
-    right.appendChild(rightList);
+    shapeCol.style.alignSelf = isClassSyncMode() ? 'stretch' : 'center';
+    const shapeList = document.createElement('div');
+    shapeList.className = 'ss-legend-list';
+    shapeCol.appendChild(shapeList);
 
     let shapeHolder = null;
     let usedClasses = null;
     if (showShapesCol) {
-      rightList.classList.add('ss-legend-list--shapes');
-      // Right: shapes (Class) – only show classes present in current dataset
+      shapeList.classList.add('ss-legend-list--shapes');
+      // Shape legend (Class) – only show classes present in current dataset
       const pts = datasets[currentDataset] || [];
       usedClasses = Array.from(new Set(pts.map(p => normClassCodeFromString(p.Class || ''))))
         .filter(Boolean)
@@ -2049,14 +2242,15 @@
       shapeHolder.style.width = '100%';
       // Temporary height; we will sync to the left box after mount.
       shapeHolder.style.height = Math.max(40, (usedClasses.length * 24) + 4) + 'px';
-      rightList.appendChild(shapeHolder);
+      shapeList.appendChild(shapeHolder);
     } else {
       // Keep space, but hide content so left column doesn't expand.
-      right.classList.add('ss-legend-placeholder');
-      rightList.appendChild(document.createElement('div'));
+      shapeCol.classList.add('ss-legend-placeholder');
+      shapeList.appendChild(document.createElement('div'));
     }
 
-    grid.appendChild(right);
+    if (showShapesCol) grid.appendChild(shapeCol);
+    grid.appendChild(colorCol);
 
     legendEl.innerHTML = '';
     legendEl.appendChild(grid);
@@ -2067,15 +2261,18 @@
         // Give Plotly a bit of extra vertical room so it doesn't render its internal legend scrollbar.
         // In Class sync mode, match the class color legend height exactly.
         const shapeBoxH = (isClassSyncMode() && !frozenActive)
-          ? Math.round(leftList.getBoundingClientRect().height)
+          ? Math.round(colorList.getBoundingClientRect().height)
           : (computeLegendBoxHeight(usedClasses.length) + 14);
-        syncShapeLegendBoxToFixedHeight(rightList, shapeHolder, shapeBoxH);
+        syncShapeLegendBoxToFixedHeight(shapeList, shapeHolder, shapeBoxH);
         shapeLegendPlotDivForExport = shapeHolder;
         renderPlotlyClassLegend(shapeHolder, usedClasses);
+        syncLegendVerticalPlacement();
       });
     } else {
       shapeLegendPlotDivForExport = null;
+      requestAnimationFrame(syncLegendVerticalPlacement);
     }
+    requestAnimationFrame(syncSimilarPanelPlacement);
   }
 
   function bindPlotInteractions() {
@@ -2169,10 +2366,16 @@
     syncLiveRangeCache();
     const pts = datasets[currentDataset] || [];
     if (!pts.length) {
-      statusEl.textContent = 'No data for ' + currentDataset;
+      if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.textContent = 'No data for ' + currentDataset;
+      }
       return;
     }
-    statusEl.textContent = '';
+    if (statusEl) {
+      statusEl.style.display = 'none';
+      statusEl.textContent = '';
+    }
 
     const traces = buildTraces(pts, colorKey, shapeKey);
     const layout = {
@@ -2269,8 +2472,8 @@
     try {
       const grid = wrap.querySelector('.ss-legend-grid');
       if (grid && grid.children && grid.children.length >= 2) {
-        // Remove the right-hand column (shape legend)
-        grid.removeChild(grid.children[1]);
+        // Remove the left-hand column (shape legend) and keep the color legend nearest the plot.
+        grid.removeChild(grid.children[0]);
         grid.style.gridTemplateColumns = widthPx + 'px';
       }
     } catch (e) {}
@@ -2884,6 +3087,7 @@
   document.querySelectorAll('.ss-dataset-opt').forEach(btn => {
     btn.addEventListener('click', () => {
       const ds = btn.getAttribute('data-dataset');
+      if (!datasetIsAvailable(ds)) return;
       if (!ds || ds === currentDataset) return;
       clearFrozenSelection();
       setCurrentDataset(ds);
@@ -2906,25 +3110,6 @@
       btn.classList.add('btn-primary');
       colorKey = btn.getAttribute('data-key') || 'Class';
       if (colorDropBtn) colorDropBtn.childNodes[0].nodeValue = 'Color by: ' + colorKey + ' ';
-
-      // Keep shape-by in sync with colour-by:
-      // - Colour by Class  -> Shape by None
-      // - Any other colour -> Shape by Class
-      const desiredShapeKey = (colorKey === 'Class') ? 'None' : 'Class';
-      if (shapeKey !== desiredShapeKey) {
-        shapeKey = desiredShapeKey;
-        document.querySelectorAll('.ss-shapeby-opt').forEach(b => {
-          const k = b.getAttribute('data-key') || 'None';
-          if (k === desiredShapeKey) {
-            b.classList.remove('btn-outline-primary');
-            b.classList.add('btn-primary');
-          } else {
-            b.classList.remove('btn-primary');
-            b.classList.add('btn-outline-primary');
-          }
-        });
-        if (shapeDropBtn) shapeDropBtn.childNodes[0].nodeValue = 'Shape by: ' + shapeKey + ' ';
-      }
       updateCustomizeHeader();
       buildColorPickerUI();
       render();
@@ -2963,19 +3148,6 @@
   buildColorPickerUI();
 
   syncDatasetButtons();
-  syncTableOnHoverButton();
-
-  const tableOnHoverBtn = document.getElementById('ssTableOnHoverBtn');
-  if (tableOnHoverBtn) {
-    tableOnHoverBtn.addEventListener('click', () => {
-      if (currentDataset !== 'sequence') return;
-      showTableOnHover = !showTableOnHover;
-      syncTableOnHoverButton();
-      if (!selectedPointData) {
-        renderSidePanelPlaceholder();
-      }
-    });
-  }
 
   if (resetColorsBtn) {
     resetColorsBtn.addEventListener('click', () => {
@@ -2988,6 +3160,8 @@
 
   window.addEventListener('resize', () => {
     positionHoverPanel();
+    syncLegendVerticalPlacement();
+    syncSimilarPanelPlacement();
     try { Plotly.Plots.resize(plotDiv); } catch (e) {}
   });
 
@@ -2996,7 +3170,7 @@
 
   async function loadData() {
     try {
-      statusEl.textContent = 'Loading StructureSim embeddings…';
+      showBusyLoader();
       const res = await fetch(EMBED_URL, { headers: { 'Accept': 'application/json' }});
       if (!res.ok) {
         let detail = '';
@@ -3043,18 +3217,31 @@
       rebuildGlobalReceptorFamilyColors();
 
       datasets = datasetsByPlot.tsne || emptyDatasets();
+      setCurrentDataset(firstAvailableDataset());
 
       // New embedding => reset fixed axis ranges
       render._rangeCache = {};
 
-      statusEl.textContent = '';
+      hideBusyLoader();
+      if (statusEl) {
+        statusEl.style.display = 'none';
+        statusEl.textContent = '';
+      }
       buildColorPickerUI();
       renderSidePanelPlaceholder();
       render();
       initReceptorSearch();
     } catch (e) {
       console.error('Load error:', e);
-      statusEl.textContent = 'Failed to load data: ' + (e && e.message ? e.message : String(e));
+      if (loaderHostEl && window.jQuery && jQuery.fn && jQuery.fn.busyLoad) {
+        jQuery(loaderHostEl).busyLoad('hide');
+      }
+      if (loaderHostEl) loaderHostEl.style.display = 'none';
+      if (plotGridEl) plotGridEl.style.display = 'none';
+      if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.textContent = 'Failed to load data: ' + (e && e.message ? e.message : String(e));
+      }
     }
   }
 
