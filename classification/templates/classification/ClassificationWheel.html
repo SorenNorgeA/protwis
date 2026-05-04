@@ -204,20 +204,7 @@ body > #content.container > #gpcrdb_alert_placeholder {
         </div>
 
         <!-- Graphical legend -->
-        <div class="dropdown">
-          <button class="btn btn-primary dropdown-toggle" type="button" data-toggle="dropdown">Graphical legend</button>
-          <div class="dropdown-menu dropdown-menu-side dropdown-menu-align-legend text-center" style="min-width:200px;">
-            <div style="padding: 10px 0;">
-              <label>Top-left:</label>
-              <button id="classic-toggleIcon" class="btn btn-success" style="min-width:60px;">Shown</button>
-            </div>
-            <hr>
-            <div style="padding: 10px 0;">
-              <label>Bottom:</label>
-              <button id="classic-toggleLegend" class="btn btn-success" style="min-width:60px;">Shown</button>
-            </div>
-          </div>
-        </div>
+        <button id="classic-toggleIcon" class="btn btn-primary" type="button">Graphical legend</button>
 
         <!-- Legend layout -->
         <div class="dropdown">
@@ -298,20 +285,7 @@ body > #content.container > #gpcrdb_alert_placeholder {
         </div>
 
         <!-- Graphical legend -->
-        <div class="dropdown">
-          <button class="btn btn-primary dropdown-toggle" type="button" data-toggle="dropdown">Graphical legend</button>
-          <div class="dropdown-menu dropdown-menu-side dropdown-menu-align-legend text-center" style="min-width:200px;">
-            <div style="padding: 10px 0;">
-              <label>Top-left:</label>
-              <button id="odorant-toggleIcon" class="btn btn-success" style="min-width:60px;">Shown</button>
-            </div>
-            <hr>
-            <div style="padding: 10px 0;">
-              <label>Bottom:</label>
-              <button id="odorant-toggleLegend" class="btn btn-success" style="min-width:60px;">Shown</button>
-            </div>
-          </div>
-        </div>
+        <button id="odorant-toggleIcon" class="btn btn-primary" type="button">Graphical legend</button>
 
         <!-- Legend layout -->
         <div class="dropdown">
@@ -747,11 +721,16 @@ function drawWheel(type) {
   scheduleEmbeddedHeightSync();
 }
 
+function shouldShowBottomLegend(wheelType) {
+  const st = wheelStyling[wheelType] || {};
+  return st.ShowLegend !== false && st.ColorBy !== "Class";
+}
+
 // Rebuild the text-category legend with custom ordering rules.
 // (The datamapper renderer builds a legend too, but it sorts alphabetically; we replace it.)
 function rebuildWheelLegend(locationId, wheelType) {
   const st = wheelStyling[wheelType] || {};
-  if (!st.ShowLegend) return;
+  if (!shouldShowBottomLegend(wheelType)) return;
 
   const colorBy = st.ColorBy;
   const schemeSet = (wheelType === "odorant") ? coloringSchemesOdorant : coloringSchemes;
@@ -768,11 +747,13 @@ function rebuildWheelLegend(locationId, wheelType) {
 
   // Match the original wheel sizing logic from datamapper.js:
   // - Base plot is 1000x1000
-  // - Legend is drawn starting at y = baseHeight + 40
+  // - Legend is drawn just below the wheel with a compact gap
   const baseWidth = parseFloat(svg.attr("width")) || 1000;
   const baseHeight = 1000;
   const startX = 50;
-  const startY = baseHeight + 40;
+  const legendTopGap = 22;
+  const legendBottomGap = 18;
+  const startY = baseHeight + legendTopGap;
 
   // Collect the actually-used categories from the (already colored) wheelData.
   const used = new Set();
@@ -913,7 +894,7 @@ function rebuildWheelLegend(locationId, wheelType) {
     legendGroup.attr("transform", `translate(${centerOffsetX}, 0)`);
 
     // Expand SVG height/viewBox so the legend sits below the plot (same idea as datamapper).
-    const addBottomHeight = (legendBBox.y + legendBBox.height) - baseHeight + 40;
+    const addBottomHeight = (legendBBox.y + legendBBox.height) - baseHeight + legendBottomGap;
     const newHeight = baseHeight + Math.max(0, addBottomHeight);
     const vbPad = 10;
     svg
@@ -943,12 +924,18 @@ function classStrokeColor(type, classCode) {
   return (coloringSchemes["Class"] || {})[k] || "#999";
 }
 
+function classPillFillColor(type, classCode) {
+  return wheelStyling[type].ColorBy === "Class" ? classStrokeColor(type, classCode) : "#ffffff";
+}
+
+function classPillFillOpacity(type) {
+  return wheelStyling[type].ColorBy === "Class" ? 0.75 : 1;
+}
+
 function addClassPills(locationId, wheelType) {
   const svg = d3v4.select("#" + locationId + "_svg");
   if (svg.empty()) return;
 
-  // Adjust this to taste (0..1). Applies to pill fill only (not the text/border).
-  const CLASS_PILL_FILL_OPACITY = 0.75;
   // Nudge for the Classless/Unclassified label pill (px, +x = right).
   // The single-letter "U" badge looks best when pushed farther out,
   // matching the radial feel of the other one-letter class badges.
@@ -969,7 +956,8 @@ function addClassPills(locationId, wheelType) {
         // Replace header text (and special-case Classless).
         txt.text(classDisplayLabel(d));
 
-        const fill = classStrokeColor(wheelType, d);
+        const fill = classPillFillColor(wheelType, d);
+        const fillOpacity = classPillFillOpacity(wheelType);
 
         // Text styling (keep black text; no outline)
         txt.style("fill", "#000");
@@ -989,7 +977,7 @@ function addClassPills(locationId, wheelType) {
           .attr("rx", 9)
           .attr("ry", 9)
           .style("fill", fill)
-          .style("fill-opacity", CLASS_PILL_FILL_OPACITY)
+          .style("fill-opacity", fillOpacity)
           .style("stroke", "#000")
           .style("stroke-width", "0.75px");
 
@@ -1006,10 +994,14 @@ function addClassPills(locationId, wheelType) {
 }
 
 function CustomDrawGPCRomeWheel(Data, locationId, GPCRome_styling) {
-  // Use the existing renderer, then extend/patch the output.
-  DrawGPCRomeWheel(Data, locationId, GPCRome_styling);
-
   const wheelType = (locationId.indexOf("odorant") !== -1) ? "odorant" : "classic";
+  const effectiveStyling = Object.assign({}, GPCRome_styling, {
+    ShowLegend: shouldShowBottomLegend(wheelType)
+  });
+
+  // Use the existing renderer, then extend/patch the output.
+  DrawGPCRomeWheel(Data, locationId, effectiveStyling);
+
   addClassPills(locationId, wheelType);
   rebuildWheelLegend(locationId, wheelType);
 }
@@ -1241,18 +1233,9 @@ function initControls(type) {
   // Icon button
   document.getElementById(`${type}-toggleIcon`).addEventListener('click', function() {
     const st = wheelStyling[type]; st.showIcon = !st.showIcon;
-    this.textContent = st.showIcon ? 'Shown' : 'Hidden';
-    this.classList.toggle('btn-success', st.showIcon);
+    this.textContent = 'Graphical legend';
+    this.classList.toggle('btn-primary', st.showIcon);
     this.classList.toggle('btn-danger', !st.showIcon);
-    drawWheel(type);
-  });
-
-  // legend button
-  document.getElementById(`${type}-toggleLegend`).addEventListener('click', function() {
-    const st = wheelStyling[type]; st.ShowLegend = !st.ShowLegend;
-    this.textContent = st.ShowLegend ? 'Shown' : 'Hidden';
-    this.classList.toggle('btn-success', st.ShowLegend);
-    this.classList.toggle('btn-danger', !st.ShowLegend);
     drawWheel(type);
   });
 

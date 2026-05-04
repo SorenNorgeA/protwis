@@ -1,1037 +1,361 @@
 {% extends "home/base.html" %}
 {% load static %}
 
-{% block addon_css %}
-<style>
-.sftree-embed-mode {
-  padding-top: 8px;
-}
-
-.sftree-page {
-  padding: 10px 14px 20px;
-}
-
-.sftree-shell {
-  max-width: 1160px;
-  margin: 0 auto;
-}
-
-.sftree-header {
-  margin-bottom: 10px;
-  text-align: center;
-}
-
-.sftree-title {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 600;
-  color: #30485d;
-}
-
-.sftree-intro {
-  max-width: 860px;
-  margin: 8px auto 0;
-  color: #5c7084;
-  line-height: 1.6;
-  font-size: 14px;
-}
-
-.sftree-card {
-  border: 1px solid #dbe6f2;
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 10px 24px rgba(31, 120, 180, 0.08);
-  padding: 14px 16px 18px;
-}
-
-.sftree-meta {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-
-.sftree-chip {
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: #f3f7fb;
-  border: 1px solid #d8e3ef;
-  color: #4d6478;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-
-.sftree-controls {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin: 2px 0 12px;
-}
-
-.sftree-toggle {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid #d8e3ef;
-  border-radius: 999px;
-  background: #f7fbff;
-  padding: 3px;
-  gap: 4px;
-}
-
-.sftree-toggle-btn {
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: #4d6478;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 7px 12px;
-  line-height: 1;
-}
-
-.sftree-toggle-btn.is-active {
-  background: #2d6ea3;
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(45, 110, 163, 0.22);
-}
-
-.sftree-plot-wrap {
-  position: relative;
-  min-height: 780px;
-}
-
-.sftree-empty {
-  min-height: 420px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  color: #62778a;
-  font-size: 16px;
-}
-
-.sftree-status {
-  margin-top: 12px;
-  text-align: center;
-  color: #607385;
-  font-size: 13px;
-}
-
-.sftree-status.is-error {
-  color: #9f3a38;
-}
-
-.sftree-debug {
-  margin-top: 16px;
-  border-top: 1px solid #e2eaf3;
-  padding-top: 14px;
-}
-
-.sftree-debug summary {
-  cursor: pointer;
-  color: #425a70;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
-
-.sftree-debug-note {
-  margin: 10px 0 12px;
-  color: #607385;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.sftree-debug-grid {
-  display: grid;
-  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.4fr);
-  gap: 14px;
-}
-
-.sftree-debug-card {
-  border: 1px solid #dce6f0;
-  border-radius: 10px;
-  background: #fbfdff;
-  padding: 10px 12px;
-}
-
-.sftree-debug-card-title {
-  margin: 0 0 8px;
-  color: #425a70;
-  font-size: 13px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.sftree-debug-table-wrap {
-  overflow: auto;
-}
-
-.sftree-debug-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-  color: #2f4559;
-}
-
-.sftree-debug-table th,
-.sftree-debug-table td {
-  padding: 6px 8px;
-  border: 1px solid #dbe6f0;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.sftree-debug-table th:first-child,
-.sftree-debug-table td:first-child {
-  text-align: left;
-  font-weight: 700;
-  background: #f4f8fc;
-  position: sticky;
-  left: 0;
-  z-index: 1;
-}
-
-.sftree-debug-table thead th {
-  background: #eef4fa;
-  font-weight: 700;
-}
-
-.sftree-svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-.sftree-link {
-  fill: none;
-  stroke: #111;
-  stroke-width: 2px;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.sftree-ring {
-  fill: none;
-  stroke: #d9e2ec;
-  stroke-width: 1px;
-  stroke-dasharray: 4 6;
-}
-
-.sftree-ring-label {
-  fill: #7b8fa2;
-  font-size: 11px;
-  font-family: "Source Sans Pro", Arial, sans-serif;
-}
-
-.sftree-leaf-dot {
-  stroke: rgba(0, 0, 0, 0.18);
-  stroke-width: 1.5px;
-}
-
-.sftree-leaf-label {
-  fill: #213547;
-  font-size: 14px;
-  font-weight: 600;
-  font-family: "Source Sans Pro", Arial, sans-serif;
-}
-
-.sftree-center-dot {
-  fill: #111;
-}
-
-@media (max-width: 991px) {
-  .sftree-page {
-    padding-left: 8px;
-    padding-right: 8px;
-  }
-
-  .sftree-card {
-    padding-left: 10px;
-    padding-right: 10px;
-  }
-
-  .sftree-plot-wrap {
-    min-height: 680px;
-  }
-
-  .sftree-debug-grid {
-    grid-template-columns: 1fr;
-  }
-}
-</style>
-{% if tree_embed_mode %}
-<style>
-body > nav.navbar {
-  display: none !important;
-}
-
-body > #content.container {
-  width: 100%;
-  padding-left: 0;
-  padding-right: 0;
-}
-
-body > #content.container > #gpcrdb_alert_placeholder {
-  display: none !important;
-}
-</style>
-{% endif %}
-{% endblock %}
-
 {% block content %}
-<div class="sftree-page{% if tree_embed_mode %} sftree-embed-mode{% endif %}">
-  <div class="sftree-shell">
-    <div class="sftree-header">
-      <h1 class="sftree-title">{{ tree_page_title }}</h1>
-      <p class="sftree-intro">{{ tree_intro }}</p>
-    </div>
+<div class="tab-content clearfix">
+  <div class="tab-pane active" id="single-crystal-group-tab">
+    <div class="row">
+      <div class="col-md-12 tab-content">
+        <div class="tab-pane active" id="single-group-tree-tab">
+          <div class="sftree-page sftree-pending" id="sftree-page">
+            <div class="tree-shell">
+              <div class="sftree-plot-wrap">
+                <span class="zoombutton-container hidden">
+                  <span class="pull-right glyphicon glyphicon-resize-full btn-zoomsize" data-toggle="tooltip" data-placement="bottom" title="Fit" onClick="resizeTree()"></span>
+                  <span class="pull-right glyphicon glyphicon-plus btn-zoomin" data-toggle="tooltip" data-placement="bottom" title="Zoom-in" onClick="zoomInTree()"></span>
+                  <span class="pull-right glyphicon glyphicon-minus btn-zoomout" data-toggle="tooltip" data-placement="bottom" title="Zoom-out" onClick="zoomOutTree()"></span>
+                </span>
+                <div class="tree-container" id="tree-container">
+                  <svg id="clustering-tree"></svg>
+                </div>
+              </div>
 
-    <div class="sftree-card">
-      <div class="sftree-meta">
-        <div class="sftree-chip">Variant: {{ tree_variant|upper }}</div>
-        <div class="sftree-chip">Layout: Circular phylogram</div>
-        <div class="sftree-chip">Branches: black | tips: class colored</div>
-      </div>
-      <div class="sftree-controls">
-        <div id="superfamilyTreeModeChip" class="sftree-chip">View: Midpoint-rooted</div>
-        <div class="sftree-toggle" role="group" aria-label="Tree view mode">
-          <button id="superfamilyTreeRootedBtn" type="button" class="sftree-toggle-btn is-active">Rooted</button>
-          <button id="superfamilyTreeUnrootedBtn" type="button" class="sftree-toggle-btn">Unrooted</button>
+              <div class="sftree-side">
+                <div class="sftree-side-title"></div>
+                <div id="sftree-hover" class="sftree-hover">
+                  <p class="sftree-hover-empty">Hover a class pill to inspect its distances and similarities to the other GPCR classes.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="hidden">
+              <div id="submit-group" class="hidden"></div>
+              <div id="output-group0" class="hidden">
+                <textarea name="input-targets-0" id="input-targets-0" readonly></textarea>
+              </div>
+              <div id="output-group1" class="hidden">
+                <textarea name="input-targets-1" id="input-targets-1" readonly></textarea>
+              </div>
+              <div class="btn-group tree-toggles hidden">
+                <ul class="dropdown-menu names" role="menu"></ul>
+              </div>
+              <div class="btn-group tree-toggles hidden">
+                <ul class="dropdown-menu treetypes" role="menu"></ul>
+              </div>
+              <div class="btn-group tree-toggles hidden">
+                <ul class="dropdown-menu dataouter" role="menu"></ul>
+              </div>
+              <div class="btn-group tree-toggles hidden">
+                <ul class="dropdown-menu datainner" role="menu"></ul>
+              </div>
+              <div class="legend_box hidden">
+                <div class="outer_legend"></div>
+                <div class="inner_legend"></div>
+              </div>
+              <div id="single-crystal-group-pdbs-modal-table"></div>
+            </div>
+          </div>
         </div>
       </div>
-      <div id="superfamilyTreePlot" class="sftree-plot-wrap plot-container">
-        <div class="sftree-empty">Loading circular phylogram…</div>
-      </div>
-      <div id="superfamilyTreeStatus" class="sftree-status"></div>
-      <details id="superfamilyTreeDebug" class="sftree-debug" open>
-        <summary>Current calculations</summary>
-        <div id="superfamilyTreeDebugContent" class="sftree-debug-note">Loading pairwise distance diagnostics…</div>
-      </details>
     </div>
   </div>
 </div>
 {% endblock %}
 
 {% block addon_js %}
-<script>
-(function() {
-  const TREE_DATA_URL = "{{ tree_data_url|escapejs }}";
-  const TREE_VARIANT = "{{ tree_variant|escapejs }}";
-  const DISPLAY_PATH_EXPONENT = 1;
-  const VIEW_MODE_ROOTED = "rooted";
-  const VIEW_MODE_UNROOTED = "unrooted";
-  const SVG_NS = "http://www.w3.org/2000/svg";
-  const plotEl = document.getElementById("superfamilyTreePlot");
-  const statusEl = document.getElementById("superfamilyTreeStatus");
-  const debugContentEl = document.getElementById("superfamilyTreeDebugContent");
-  const modeChipEl = document.getElementById("superfamilyTreeModeChip");
-  const rootedBtnEl = document.getElementById("superfamilyTreeRootedBtn");
-  const unrootedBtnEl = document.getElementById("superfamilyTreeUnrootedBtn");
-  let currentPayload = null;
-  let currentViewMode = VIEW_MODE_ROOTED;
-
-  function notifyEmbeddedParentHeightChanged() {
-    try {
-      if (window.frameElement) {
-        window.frameElement.dispatchEvent(new Event("cv:content-resize"));
-      }
-    } catch (err) {}
-  }
-
-  function scheduleEmbeddedHeightSync() {
-    window.setTimeout(notifyEmbeddedParentHeightChanged, 0);
-    window.setTimeout(notifyEmbeddedParentHeightChanged, 160);
-    window.setTimeout(notifyEmbeddedParentHeightChanged, 420);
-  }
-
-  function notifyEmbeddedParentContentReady() {
-    try {
-      if (window.frameElement) {
-        window.frameElement.dispatchEvent(new Event("cv:content-ready"));
-      }
-    } catch (err) {}
-  }
-
-  function notifyEmbeddedParentContentFailed() {
-    try {
-      if (window.frameElement) {
-        window.frameElement.dispatchEvent(new Event("cv:content-error"));
-      }
-    } catch (err) {}
-  }
-
-  function createSvgElement(tagName) {
-    return document.createElementNS(SVG_NS, tagName);
-  }
-
-  function appendSvgElement(parent, tagName, attrs) {
-    const element = createSvgElement(tagName);
-    Object.keys(attrs || {}).forEach(function(key) {
-      element.setAttribute(key, attrs[key]);
-    });
-    parent.appendChild(element);
-    return element;
-  }
-
-  function parseNewick(source) {
-    const ancestors = [];
-    let tree = {};
-    const tokens = String(source || "").split(/\s*(;|\(|\)|,|:)\s*/).filter(Boolean);
-    for (let i = 0; i < tokens.length; i += 1) {
-      const token = tokens[i];
-      switch (token) {
-        case "(": {
-          const subtree = {};
-          if (!tree.children) tree.children = [];
-          tree.children.push(subtree);
-          ancestors.push(tree);
-          tree = subtree;
-          break;
-        }
-        case ",": {
-          const sibling = {};
-          const parent = ancestors[ancestors.length - 1];
-          if (!parent.children) parent.children = [];
-          parent.children.push(sibling);
-          tree = sibling;
-          break;
-        }
-        case ")":
-          tree = ancestors.pop() || tree;
-          break;
-        case ":":
-          break;
-        case ";":
-          break;
-        default: {
-          const previous = tokens[i - 1];
-          if (previous === ":") {
-            tree.length = Number(token) || 0;
-          } else if (previous === "(" || previous === "," || previous === ")") {
-            tree.name = token;
-          }
-        }
-      }
-    }
-    while (tree && tree.children && tree.children.length === 1 && (!tree.name || tree.name === "0")) {
-      tree = tree.children[0];
-    }
-    return tree;
-  }
-
-  function pointAt(angle, radius) {
-    const adjusted = angle - (Math.PI / 2);
-    return {
-      x: Math.cos(adjusted) * radius,
-      y: Math.sin(adjusted) * radius,
-    };
-  }
-
-  function formatClassLabel(classRow) {
-    if (!classRow) return "";
-    const rawName = String(classRow.name || "").replace(/^Class\s+/i, "");
-    const compactName = rawName
-      .replace(/^\s*([A-Z0-9]+)\s*/, "")
-      .trim()
-      .replace(/^\((.*)\)$/, "$1");
-    const prettyName = compactName
-      ? compactName.charAt(0).toUpperCase() + compactName.slice(1)
-      : "";
-    return classRow.symbol + (prettyName ? "  " + prettyName : "");
-  }
-
-  function scaleDisplayPath(pathLength) {
-    const safeLength = Math.max(0, Number(pathLength || 0));
-    return safeLength > 0 ? Math.pow(safeLength, DISPLAY_PATH_EXPONENT) : 0;
-  }
-
-  function decorateTree(node, parent) {
-    if (!node) return null;
-    node.parent = parent || null;
-    node.children = Array.isArray(node.children) ? node.children.filter(Boolean) : [];
-    node.branchLength = Math.max(0, Number(node.length || 0));
-    node.pathLength = (parent ? parent.pathLength : 0) + node.branchLength;
-    node.displayPathLength = scaleDisplayPath(node.pathLength);
-    node.displayBranchLength = Math.max(
-      0,
-      node.displayPathLength - (parent ? parent.displayPathLength : 0)
-    );
-    node.children.forEach(function(child) {
-      decorateTree(child, node);
-    });
-    return node;
-  }
-
-  function collectLeaves(node, acc) {
-    if (!node) return acc;
-    if (!node.children || !node.children.length) {
-      acc.push(node);
-      return acc;
-    }
-    node.children.forEach(function(child) {
-      collectLeaves(child, acc);
-    });
-    return acc;
-  }
-
-  function collectLinks(node, acc) {
-    if (!node || !node.children) return acc;
-    node.children.forEach(function(child) {
-      acc.push({ source: node, target: child });
-      collectLinks(child, acc);
-    });
-    return acc;
-  }
-
-  function assignInternalAngles(node) {
-    if (!node || !node.children || !node.children.length) return;
-    node.children.forEach(assignInternalAngles);
-    let x = 0;
-    let y = 0;
-    node.children.forEach(function(child) {
-      x += Math.cos(child.angle);
-      y += Math.sin(child.angle);
-    });
-    node.angle = Math.atan2(y, x);
-  }
-
-  function linearScale(domainMin, domainMax, rangeMin, rangeMax) {
-    const safeDomainMax = domainMax <= domainMin ? domainMin + 1 : domainMax;
-    const domainSpan = safeDomainMax - domainMin;
-    const rangeSpan = rangeMax - rangeMin;
-    return function(value) {
-      const ratio = (value - domainMin) / domainSpan;
-      return rangeMin + (ratio * rangeSpan);
-    };
-  }
-
-  function buildTicks(maxDistance) {
-    if (!isFinite(maxDistance) || maxDistance <= 0) return [];
-    const ticks = [];
-    for (let i = 1; i <= 4; i += 1) {
-      ticks.push((maxDistance * i) / 4);
-    }
-    return ticks;
-  }
-
-  function formatTick(value) {
-    if (!isFinite(value)) return "";
-    return value >= 10 ? String(Math.round(value)) : value.toFixed(1);
-  }
-
-  function escapeHtml(value) {
-    return String(value == null ? "" : value)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  }
-
-  function computeReferenceDistances(payload, variant, preferredSymbol) {
-    const classes = payload.classes || [];
-    const matrix = (variant && variant.matrix) || [];
-    const distancesBySymbol = {};
-    let referenceIndex = classes.findIndex(function(classRow) {
-      return String(classRow.symbol || "") === preferredSymbol;
-    });
-    if (referenceIndex < 0) {
-      referenceIndex = 0;
-    }
-    const referenceSymbol = String((classes[referenceIndex] || {}).symbol || preferredSymbol || "");
-    let maxDistance = 0;
-
-    classes.forEach(function(classRow, index) {
-      const symbol = String(classRow.symbol || "");
-      let distance = 0;
-      if (index !== referenceIndex) {
-        const refCell = ((matrix[referenceIndex] || [])[index]) || {};
-        const altCell = ((matrix[index] || [])[referenceIndex]) || {};
-        const rawDistance = Number(refCell.distance);
-        const fallbackDistance = Number(altCell.distance);
-        distance = isFinite(rawDistance)
-          ? rawDistance
-          : (isFinite(fallbackDistance) ? fallbackDistance : 0);
-      }
-      distancesBySymbol[symbol] = distance;
-      if (distance > maxDistance) {
-        maxDistance = distance;
-      }
-    });
-
-    return {
-      referenceSymbol: referenceSymbol,
-      distancesBySymbol: distancesBySymbol,
-      maxDistance: maxDistance,
-    };
-  }
-
-  function countLeaves(node) {
-    if (!node) return 0;
-    if (!node.children || !node.children.length) {
-      node.leafCount = 1;
-      return 1;
-    }
-    let total = 0;
-    node.children.forEach(function(child) {
-      total += countLeaves(child);
-    });
-    node.leafCount = total;
-    return total;
-  }
-
-  function assignAngularSpans(node, startAngle, endAngle) {
-    node.startAngle = startAngle;
-    node.endAngle = endAngle;
-    if (!node.children || !node.children.length) {
-      node.angle = (startAngle + endAngle) / 2;
-      return;
-    }
-    let cursor = startAngle;
-    const span = endAngle - startAngle;
-    node.children.forEach(function(child) {
-      const fraction = (child.leafCount || 1) / (node.leafCount || 1);
-      const childStart = cursor;
-      const childEnd = cursor + (span * fraction);
-      assignAngularSpans(child, childStart, childEnd);
-      cursor = childEnd;
-    });
-    let x = 0;
-    let y = 0;
-    node.children.forEach(function(child) {
-      x += Math.cos(child.angle);
-      y += Math.sin(child.angle);
-    });
-    node.angle = Math.atan2(y, x);
-  }
-
-  function assignRadialNodeRadii(node, leafRadiusByName, branchScale, minRadius) {
-    if (!node.children || !node.children.length) {
-      node.radius = leafRadiusByName[String(node.name || "")] || minRadius;
-      return node.radius;
-    }
-    let nextRadius = Infinity;
-    node.children.forEach(function(child) {
-      assignRadialNodeRadii(child, leafRadiusByName, branchScale, minRadius);
-      const childRadius = Number(child.radius || minRadius);
-      const branchStep = Math.max(8, Number(child.branchLength || 0) * branchScale);
-      nextRadius = Math.min(nextRadius, childRadius - branchStep);
-    });
-    node.radius = Math.max(minRadius, isFinite(nextRadius) ? nextRadius : minRadius);
-    return node.radius;
-  }
-
-  function shiftNodeRadii(node, delta, minRadius) {
-    node.radius = Math.max(minRadius, Number(node.radius || 0) - delta);
-    node.children.forEach(function(child) {
-      shiftNodeRadii(child, delta, minRadius);
-    });
-  }
-
-  function branchPath(link) {
-    const source = link.source;
-    const target = link.target;
-    const startRadius = Number(source.radius || 0);
-    const endRadius = Number(target.radius || 0);
-    let angleDelta = target.angle - source.angle;
-    while (angleDelta <= -Math.PI) angleDelta += Math.PI * 2;
-    while (angleDelta > Math.PI) angleDelta -= Math.PI * 2;
-
-    const startPoint = pointAt(source.angle, startRadius);
-    const arcEndPoint = pointAt(source.angle + angleDelta, startRadius);
-    const endPoint = pointAt(target.angle, endRadius);
-
-    if (startRadius < 1 || Math.abs(angleDelta) < 0.0001) {
-      return "M" + startPoint.x + "," + startPoint.y +
-        "L" + endPoint.x + "," + endPoint.y;
-    }
-
-    return "M" + startPoint.x + "," + startPoint.y +
-      "A" + startRadius + "," + startRadius + " 0 0 " + (angleDelta >= 0 ? 1 : 0) +
-      " " + arcEndPoint.x + "," + arcEndPoint.y +
-      "L" + endPoint.x + "," + endPoint.y;
-  }
-
-  function updateToggleUi() {
-    const rootedActive = currentViewMode === VIEW_MODE_ROOTED;
-    if (rootedBtnEl) rootedBtnEl.classList.toggle("is-active", rootedActive);
-    if (unrootedBtnEl) unrootedBtnEl.classList.toggle("is-active", !rootedActive);
-    if (modeChipEl) {
-      modeChipEl.textContent = rootedActive ? "View: Midpoint-rooted" : "View: Unrooted topology";
-    }
-  }
-
-  function setViewMode(nextMode) {
-    currentViewMode = nextMode === VIEW_MODE_UNROOTED ? VIEW_MODE_UNROOTED : VIEW_MODE_ROOTED;
-    updateToggleUi();
-    if (currentPayload) {
-      renderTree(currentPayload);
-    }
-  }
-
-  function getTreeModeInfo(tree) {
-    if (currentViewMode === VIEW_MODE_UNROOTED) {
-      return {
-        mode: VIEW_MODE_UNROOTED,
-        rootSource: tree.phylogram_unrooted || tree.phylogram || null,
-        newickSource: tree.phylogram_unrooted_newick || tree.phylogram_newick || tree.newick,
-        statusText: "Circular unrooted comparison using the original neighbor-joining topology. All tips are equalized onto the outer ring, so the center is only a display scaffold and not a biological ancestor.",
-        methodLabel: "unrooted neighbor-joining topology",
-        rootingLabel: "no inferred root in the display",
-      };
-    }
-    return {
-      mode: VIEW_MODE_ROOTED,
-      rootSource: tree.phylogram_rooted || tree.phylogram || null,
-      newickSource: tree.phylogram_rooted_newick || tree.phylogram_newick || tree.newick,
-      statusText: "Circular phylogram using midpoint-rooted neighbor-joining branch lengths, with cumulative display scaling to shorten the outer tips and open up the interior.",
-      methodLabel: tree.tree_method === "neighbor_joining_midpoint" ? "midpoint-rooted neighbor-joining" : "distance tree",
-      rootingLabel: tree.rooting_method === "midpoint" ? "midpoint rooting" : "the supplied root",
-    };
-  }
-
-  function annotateTopologyHeight(node) {
-    if (!node.children || !node.children.length) {
-      node.topologyHeight = 0;
-      return 0;
-    }
-    let maxChildHeight = 0;
-    node.children.forEach(function(child) {
-      maxChildHeight = Math.max(maxChildHeight, annotateTopologyHeight(child));
-    });
-    node.topologyHeight = maxChildHeight + 1;
-    return node.topologyHeight;
-  }
-
-  function assignDisplayGeometry(root, leaves, mode, outerRadius) {
-    if (mode === VIEW_MODE_UNROOTED) {
-      annotateTopologyHeight(root);
-      const maxTopologyHeight = Math.max(1, Number(root.topologyHeight || 0));
-      const topologyScale = linearScale(0, maxTopologyHeight, 14, outerRadius);
-      (function assignTopologyRadii(node) {
-        node.displayPathLength = maxTopologyHeight - Number(node.topologyHeight || 0);
-        node.displayBranchLength = node.parent
-          ? Math.max(0, node.displayPathLength - Number(node.parent.displayPathLength || 0))
-          : 0;
-        node.radius = topologyScale(node.displayPathLength);
-        node.children.forEach(assignTopologyRadii);
-      })(root);
-      return {
-        maxDisplayDistance: maxTopologyHeight,
-        ringFormatter: function(value) { return String(Math.round(value)); },
-      };
-    }
-
-    let maxDistance = 0;
-    leaves.forEach(function(leaf) {
-      if (leaf.pathLength > maxDistance) {
-        maxDistance = leaf.pathLength;
-      }
-    });
-    if (!isFinite(maxDistance) || maxDistance <= 0) {
-      maxDistance = 1;
-    }
-    let maxDisplayDistance = 0;
-    leaves.forEach(function(leaf) {
-      leaf.displayPathLength = scaleDisplayPath(leaf.pathLength);
-      if (leaf.displayPathLength > maxDisplayDistance) {
-        maxDisplayDistance = leaf.displayPathLength;
-      }
-    });
-    if (!isFinite(maxDisplayDistance) || maxDisplayDistance <= 0) {
-      maxDisplayDistance = maxDistance;
-    }
-    const radiusScale = linearScale(0, maxDisplayDistance, 14, outerRadius);
-    (function assignRootedRadii(node) {
-      node.displayPathLength = scaleDisplayPath(node.pathLength);
-      node.displayBranchLength = Math.max(
-        0,
-        node.displayPathLength - (node.parent ? node.parent.displayPathLength : 0)
-      );
-      node.radius = radiusScale(node.displayPathLength);
-      node.children.forEach(assignRootedRadii);
-    })(root);
-    return {
-      maxDisplayDistance: maxDisplayDistance,
-      ringFormatter: formatTick,
-    };
-  }
-
-  function renderDiagnostics(payload, variant, leaves, treeInfo) {
-    if (!debugContentEl) return;
-    const classes = payload.classes || [];
-    const matrix = (variant && variant.matrix) || [];
-    const leafBySymbol = {};
-    leaves.forEach(function(leaf) {
-      leafBySymbol[String(leaf.name || "")] = leaf;
-    });
-
-    const distanceRows = classes.map(function(classRow) {
-      const symbol = String(classRow.symbol || "");
-      const leaf = leafBySymbol[symbol] || {};
-      if (treeInfo.mode === VIEW_MODE_UNROOTED) {
-        return (
-          "<tr>" +
-            "<td>" + escapeHtml(symbol) + "</td>" +
-            "<td>" + escapeHtml(formatTick(leaf.branchLength || 0)) + "</td>" +
-            "<td>" + escapeHtml(formatTick(leaf.displayPathLength || 0)) + "</td>" +
-            "<td>" + escapeHtml(formatTick(leaf.radius || 0)) + "</td>" +
-          "</tr>"
-        );
-      }
-      return (
-        "<tr>" +
-          "<td>" + escapeHtml(symbol) + "</td>" +
-          "<td>" + escapeHtml(formatTick(leaf.pathLength || 0)) + "</td>" +
-          "<td>" + escapeHtml(formatTick(leaf.branchLength || 0)) + "</td>" +
-          "<td>" + escapeHtml(formatTick(leaf.displayPathLength || 0)) + "</td>" +
-          "<td>" + escapeHtml(formatTick(leaf.radius || 0)) + "</td>" +
-        "</tr>"
-      );
-    }).join("");
-
-    const headerCells = classes.map(function(classRow) {
-      return "<th>" + escapeHtml(classRow.symbol || "") + "</th>";
-    }).join("");
-
-    const matrixRows = classes.map(function(classRow, rowIndex) {
-      const cells = classes.map(function(_, colIndex) {
-        if (rowIndex === colIndex) {
-          return "<td>&mdash;</td>";
-        }
-        const direct = ((matrix[rowIndex] || [])[colIndex]) || {};
-        const fallback = ((matrix[colIndex] || [])[rowIndex]) || {};
-        const rawDistance = Number(direct.distance);
-        const altDistance = Number(fallback.distance);
-        const distance = isFinite(rawDistance)
-          ? rawDistance
-          : (isFinite(altDistance) ? altDistance : null);
-        return "<td>" + escapeHtml(distance === null ? "–" : formatTick(distance)) + "</td>";
-      }).join("");
-      return "<tr><td>" + escapeHtml(classRow.symbol || "") + "</td>" + cells + "</tr>";
-    }).join("");
-
-    const modeNote = treeInfo.mode === VIEW_MODE_UNROOTED
-      ? 'This panel shows the original neighbor-joining topology in an <strong>unrooted comparison view</strong>. All tips are pushed to the same outer ring, so the center is not a class and should not be read as an ancestor or as Class C.'
-      : 'This panel shows the <strong>midpoint-rooted</strong> branch-length view. Class C is still a leaf taxon, so it remains on the outside like the other classes; the center represents the inferred root, not any specific class.';
-    const summaryNote = treeInfo.mode === VIEW_MODE_UNROOTED
-      ? 'The circular radii are topology-first in this mode, using equalized tip radii and discrete branching levels so you can compare grouping without reading the center as a root.'
-      : 'The circular radii use a display-only cumulative scaling of <strong>path^' +
-        escapeHtml(String(treeInfo.displayExponent)) + '</strong> so outer terminal branches compress more than the inner structure.';
-    const primaryCardTitle = treeInfo.mode === VIEW_MODE_UNROOTED
-      ? 'Unrooted Topology View'
-      : 'Midpoint-Rooted Branch Lengths';
-    const primaryHeader = treeInfo.mode === VIEW_MODE_UNROOTED
-      ? '<thead><tr><th>Class</th><th>Tip branch length</th><th>Radial level</th><th>Tip radius</th></tr></thead>'
-      : '<thead><tr><th>Class</th><th>Root-to-tip length</th><th>Last branch length</th><th>Display path</th><th>Tip radius</th></tr></thead>';
-
-    debugContentEl.innerHTML =
-      '<div class="sftree-debug-note">' +
-        'This plot now uses a <strong>' + escapeHtml(treeInfo.methodLabel) +
-        '</strong> tree built directly from the full ' + escapeHtml(String(variant.label || TREE_VARIANT.toUpperCase())) +
-        ' pairwise distance matrix. The tree is displayed with <strong>' + escapeHtml(treeInfo.rootingLabel) +
-        '</strong>. ' + modeNote + ' ' + summaryNote +
-      '</div>' +
-      '<div class="sftree-debug-grid">' +
-        '<div class="sftree-debug-card">' +
-          '<h3 class="sftree-debug-card-title">' + primaryCardTitle + '</h3>' +
-          '<div class="sftree-debug-table-wrap">' +
-            '<table class="sftree-debug-table">' +
-              primaryHeader +
-              '<tbody>' + distanceRows + '</tbody>' +
-            '</table>' +
-          '</div>' +
-        '</div>' +
-        '<div class="sftree-debug-card">' +
-          '<h3 class="sftree-debug-card-title">Pairwise Distance Matrix</h3>' +
-          '<div class="sftree-debug-table-wrap">' +
-            '<table class="sftree-debug-table">' +
-              '<thead><tr><th>Class</th>' + headerCells + '</tr></thead>' +
-              '<tbody>' + matrixRows + '</tbody>' +
-            '</table>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
-  }
-
-  function renderTree(payload) {
-    const variants = (payload && payload.variants) || {};
-    const variant = variants[TREE_VARIANT] || variants.max || {};
-    const tree = variant.tree || {};
-    const modeInfo = getTreeModeInfo(tree);
-    const classes = payload.classes || [];
-    const classBySymbol = {};
-    classes.forEach(function(classRow) {
-      classBySymbol[String(classRow.symbol || "")] = classRow;
-    });
-
-    plotEl.innerHTML = "";
-    statusEl.classList.remove("is-error");
-
-    if (!(modeInfo.rootSource || modeInfo.newickSource)) {
-      plotEl.innerHTML = '<div class="sftree-empty">No tree data is available for this view.</div>';
-      statusEl.textContent = "";
-      scheduleEmbeddedHeightSync();
-      notifyEmbeddedParentContentReady();
-      return;
-    }
-
-    const rootSource = modeInfo.rootSource
-      ? JSON.parse(JSON.stringify(modeInfo.rootSource))
-      : parseNewick(modeInfo.newickSource);
-    const root = decorateTree(rootSource, null);
-    const leaves = collectLeaves(root, []);
-    const links = collectLinks(root, []);
-    if (!leaves.length) {
-      throw new Error("Tree payload did not contain any leaves.");
-    }
-
-    const wrapWidth = Math.max(plotEl.clientWidth || 0, 760);
-    const labelPad = wrapWidth < 900 ? 204 : 270;
-    const plotHeight = wrapWidth < 900 ? 760 : 920;
-    const innerWidth = wrapWidth;
-    const innerHeight = plotHeight;
-    const outerRadius = Math.max(180, Math.min(innerWidth, innerHeight) / 2 - labelPad);
-    countLeaves(root);
-    assignAngularSpans(root, 0, Math.PI * 2);
-    const geometryInfo = assignDisplayGeometry(root, leaves, modeInfo.mode, outerRadius);
-    const radiusScale = linearScale(0, geometryInfo.maxDisplayDistance, 14, outerRadius);
-
-    const svg = appendSvgElement(plotEl, "svg", {
-      "class": "sftree-svg",
-      "viewBox": "0 0 " + innerWidth + " " + innerHeight,
-    });
-    const g = appendSvgElement(svg, "g", {
-      "transform": "translate(" + (innerWidth / 2) + "," + (innerHeight / 2) + ")",
-    });
-
-    buildTicks(geometryInfo.maxDisplayDistance).forEach(function(value) {
-      appendSvgElement(g, "circle", {
-        "class": "sftree-ring",
-        "r": radiusScale(value),
-      });
-      const label = appendSvgElement(g, "text", {
-        "class": "sftree-ring-label",
-        "x": 0,
-        "y": -radiusScale(value) - 6,
-        "text-anchor": "middle",
-      });
-      label.textContent = geometryInfo.ringFormatter(value);
-    });
-
-    links.forEach(function(link) {
-      appendSvgElement(g, "path", {
-        "class": "sftree-link",
-        "d": branchPath(link),
-      });
-    });
-
-    appendSvgElement(g, "circle", {
-      "class": "sftree-center-dot",
-      "r": 3.5,
-    });
-
-    leaves.forEach(function(node) {
-      const classRow = classBySymbol[String(node.name || "")];
-      const point = pointAt(node.angle, node.radius);
-      const directionX = point.x || 0;
-      const directionY = point.y || 0;
-      const magnitude = Math.sqrt((directionX * directionX) + (directionY * directionY)) || 1;
-      const unitX = directionX / magnitude;
-      const unitY = directionY / magnitude;
-      const labelX = point.x + (unitX * 18);
-      const labelY = point.y + (unitY * 18);
-      const anchor = unitX < -0.12 ? "end" : (unitX > 0.12 ? "start" : "middle");
-      const baseline = unitY > 0.2 ? "hanging" : (unitY < -0.2 ? "auto" : "middle");
-      const group = appendSvgElement(g, "g", {});
-      appendSvgElement(group, "circle", {
-        "class": "sftree-leaf-dot",
-        "cx": point.x,
-        "cy": point.y,
-        "r": 8,
-        "fill": (classRow && classRow.color) || "#708090",
-      });
-      const text = appendSvgElement(group, "text", {
-        "class": "sftree-leaf-label",
-        "x": labelX,
-        "y": labelY,
-        "dominant-baseline": baseline,
-        "text-anchor": anchor,
-      });
-      text.textContent = formatClassLabel(classRow || { symbol: String(node.name || ""), name: "" });
-      const title = appendSvgElement(group, "title", {});
-      title.textContent = (classRow ? String(classRow.name || classRow.symbol || "") : String(node.name || "")) +
-        (modeInfo.mode === VIEW_MODE_UNROOTED
-          ? " | radial level " + formatTick(node.displayPathLength || 0)
-          : " | root-to-tip " + formatTick(node.pathLength || 0) +
-            " | display path " + formatTick(node.displayPathLength || 0));
-    });
-
-    renderDiagnostics(payload, variant, leaves, {
-      mode: modeInfo.mode,
-      methodLabel: modeInfo.methodLabel,
-      rootingLabel: modeInfo.rootingLabel,
-      displayExponent: DISPLAY_PATH_EXPONENT,
-    });
-
-    statusEl.textContent = modeInfo.statusText;
-
-    scheduleEmbeddedHeightSync();
-    notifyEmbeddedParentContentReady();
-  }
-
-  async function loadTree() {
-    try {
-      const response = await fetch(TREE_DATA_URL, { headers: { "Accept": "application/json" } });
-      if (!response.ok) {
-        throw new Error("HTTP " + response.status);
-      }
-      currentPayload = await response.json();
-      renderTree(currentPayload);
-    } catch (err) {
-      plotEl.innerHTML = '<div class="sftree-empty">The circular tree failed to load.</div>';
-      statusEl.classList.add("is-error");
-      statusEl.textContent = String(err && err.message ? err.message : err);
-      if (debugContentEl) {
-        debugContentEl.textContent = "Diagnostics unavailable because the tree failed to render.";
-      }
-      scheduleEmbeddedHeightSync();
-      notifyEmbeddedParentContentFailed();
-    }
-  }
-
-  if (rootedBtnEl) {
-    rootedBtnEl.addEventListener("click", function() {
-      setViewMode(VIEW_MODE_ROOTED);
-    });
-  }
-
-  if (unrootedBtnEl) {
-    unrootedBtnEl.addEventListener("click", function() {
-      setViewMode(VIEW_MODE_UNROOTED);
-    });
-  }
-
-  let resizeTimer = null;
-  window.addEventListener("resize", function() {
-    window.clearTimeout(resizeTimer);
-    resizeTimer = window.setTimeout(function() {
-      if (currentPayload) {
-        renderTree(currentPayload);
-      } else {
-        scheduleEmbeddedHeightSync();
-      }
-    }, 120);
-  });
-
-  updateToggleUi();
-  loadTree();
-})();
+<script type="text/javascript">
+  var data = JSON.parse('{{ data_json|escapejs }}');
 </script>
+
+<script type="text/javascript" src="{% static 'home/js/snap.svg-min.js' %}"></script>
+<script type="text/javascript" src="{% static 'home/js/typeahead.bundle.min.js' %}"></script>
+<script type="text/javascript" src="{% static 'home/js/d3.v3.min.js' %}"></script>
+<script src="{% static 'home/js/d3-color.v1.min.js' %}"></script>
+<script src="{% static 'home/js/d3-interpolate.v1.min.js' %}"></script>
+<script src="{% static 'home/js/d3-scale-chromatic.v1.min.js' %}"></script>
+<script src="{% static 'home/js/d3-selection-multi.v1.min.js' %}"></script>
+<script src="{% static 'home/js/phylo_library.js' %}"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.3/underscore-min.js" charset="utf-8"></script>
+<script src="{% static 'home/js/saveSvgAsPng.js' %}"></script>
+<script>
+  window.classificationPhyloTreeBaseSrc = "{% static 'home/js/phylotree.js' %}";
+  window.classificationPhyloTreeShowInternalNodes = false;
+  window.classificationPhyloTreePanelTitle = "";
+  window.classificationPhyloTreeRadialFitScale = 0.9;
+</script>
+<script src="{% static 'home/js/classification_phylotree.js' %}"></script>
+{% endblock %}
+
+{% block addon_css %}
+<meta name="csrf-token" content="{{ csrf_token }}">
+<style type="text/css">
+  .navbar.navbar-inverse.navbar-static-top,
+  #ref_widget_div,
+  #joinus_widget_div {
+    display: none !important;
+  }
+
+  body {
+    padding-top: 0 !important;
+  }
+
+  #content.container {
+    width: 100%;
+    padding-top: 0;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  #content.container > .tab-content.clearfix {
+    margin-top: 0;
+  }
+
+  .sftree-page {
+    padding: 8px 12px 18px;
+  }
+
+  .tree-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 14px;
+    align-items: stretch;
+    min-height: 520px;
+  }
+
+  .sftree-page.sftree-pending .tree-shell {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .sftree-plot-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .sftree-side {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border: 1px solid #e3ebf5;
+    border-radius: 10px;
+    background: #fbfdff;
+    padding: 12px 14px;
+  }
+
+  .sftree-side-title {
+    margin: 0 0 12px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: #516577;
+    text-align: center;
+  }
+
+  .sftree-hover {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+  }
+
+  .sftree-hover-empty {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    color: #607385;
+    line-height: 1.6;
+    text-align: center;
+  }
+
+  .sftree-hover-header {
+    margin-bottom: 10px;
+    border: 1px solid #dfe7f1;
+    border-radius: 10px;
+    background: #fff;
+    padding: 10px 12px;
+    text-align: center;
+  }
+
+  .sftree-hover-header-symbol {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1;
+    color: #1f3347;
+  }
+
+  .sftree-hover-header-name {
+    font-size: 13px;
+    line-height: 1.4;
+    color: #607385;
+  }
+
+  .sftree-hover-header-name strong {
+    display: block;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1;
+    color: #1f3347;
+    margin-bottom: 6px;
+  }
+
+  .sftree-secondary {
+    display: block;
+    color: #607385;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  .sftree-hover-list {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .sftree-hover-row {
+    flex: 1 1 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(76px, 0.55fr) minmax(84px, 0.6fr);
+    gap: 10px;
+    border: 1px solid #dfe7f1;
+    border-radius: 10px;
+    background: #fff;
+    padding: 9px 11px;
+    min-height: 62px;
+    align-items: stretch;
+  }
+
+  .sftree-hover-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 0;
+    height: 100%;
+    text-align: center;
+  }
+
+  .sftree-hover-swatch {
+    width: 13px;
+    height: 13px;
+    border-radius: 999px;
+    border: 1px solid rgba(0, 0, 0, 0.18);
+    flex: 0 0 auto;
+  }
+
+  .sftree-hover-text {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+    color: #1f3347;
+    text-align: center;
+  }
+
+  .sftree-hover-metrics {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    text-align: center;
+    padding: 6px 8px;
+  }
+
+  .sftree-hover-metrics.is-similarity {
+    border-left: 1px solid #ebf0f5;
+  }
+
+  .sftree-hover-metric-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #6d8194;
+    margin-bottom: 2px;
+  }
+
+  .sftree-hover-distance {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+    color: #1f5b96;
+  }
+
+  .sftree-hover-similarity {
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1;
+    color: #3c5977;
+  }
+
+  #submit-group,
+  #output-group0,
+  #output-group1,
+  .tree-toggles,
+  .zoombutton-container,
+  .legend_box,
+  #single-crystal-group-pdbs-modal-table {
+    display: none !important;
+  }
+
+  #tree-container {
+    width: 100%;
+    max-width: 760px;
+    min-width: 420px;
+    min-height: 440px;
+    margin: 0 auto;
+  }
+
+  #clustering-tree {
+    width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+  }
+
+  #clustering-tree path.branch {
+    fill: none;
+  }
+
+  #clustering-tree g.internal-node circle {
+    display: none;
+  }
+
+  #clustering-tree .classification-pill {
+    cursor: pointer;
+  }
+
+  #clustering-tree .classification-pill.is-active rect {
+    stroke: #0f5f98;
+    stroke-width: 4px;
+  }
+
+  @media (max-width: 1199px) {
+    .tree-shell {
+      grid-template-columns: 1fr;
+    }
+
+    .sftree-side,
+    .sftree-plot-wrap {
+      min-height: 0;
+    }
+  }
+
+  @media (max-width: 991px) {
+    #tree-container {
+      width: 100%;
+      max-width: none;
+      min-width: 0;
+      min-height: 420px;
+    }
+  }
+</style>
 {% endblock %}

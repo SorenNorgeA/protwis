@@ -128,12 +128,38 @@
     <div class="row" style="margin-top: 20px; margin-bottom: 16px;">
       <div class="col-md-12">
         <div class="tree-toolbar">
-          <div class="tree-toolbar-group--center">
-            <div class="tree-controls-label">Layout</div>
-            <div id="tree_layout_group" class="btn-group" role="group" aria-label="Layout">
-              <button type="button" class="btn btn-primary btn-sm active" data-layout="Tree - Circular">Circular</button>
-              <button type="button" class="btn btn-default btn-sm" data-layout="Tree - Organic">Organic</button>
-              <button type="button" class="btn btn-default btn-sm" data-layout="Tree - Straight">Straight</button>
+          <div>
+            <div class="tree-controls-label">&nbsp;</div>
+            <div id="tree_layout_group" class="dropdown">
+              <button id="treeLayoutDropdownBtn" class="btn btn-primary btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+                Layout: Circular <span class="caret"></span>
+              </button>
+              <div class="dropdown-menu">
+                <button type="button" class="btn btn-primary btn-block active" data-layout="Tree - Circular" data-layout-label="Circular">Circular</button>
+                <button type="button" class="btn btn-outline-primary btn-block" data-layout="Tree - Organic" data-layout-label="Curved ladder">Curved ladder</button>
+                <button type="button" class="btn btn-outline-primary btn-block" data-layout="Tree - Straight" data-layout-label="Ladder">Ladder</button>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="tree-controls-label">&nbsp;</div>
+            <button id="treeLeafColorToggle" type="button" class="btn btn-danger btn-sm" aria-pressed="false">
+              Leaf color
+            </button>
+          </div>
+
+          <div>
+            <div class="tree-controls-label">&nbsp;</div>
+            <div id="tree_leaf_label_group" class="dropdown">
+              <button id="treeLeafLabelDropdownBtn" class="btn btn-primary btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+                Receptor names: Protein <span class="caret"></span>
+              </button>
+              <div class="dropdown-menu">
+                <button type="button" class="btn btn-primary btn-block active" data-label-type="Protein">Protein</button>
+                <button type="button" class="btn btn-outline-primary btn-block" data-label-type="Gene">Gene</button>
+                <button type="button" class="btn btn-outline-primary btn-block" data-label-type="UniProt">UniProt</button>
+              </div>
             </div>
           </div>
 
@@ -489,7 +515,9 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
     var contentWidth = diameter + extraPadding;
     var contentHeight = diameter + extraPadding;
     var centerX = contentWidth / 2;
-    var centerY = contentHeight / 2;
+    var topSafetyPad = TREE_UI.leafLabelType === "Protein" ? 10 : 0;
+    var centerY = (contentHeight / 2) + topSafetyPad;
+    contentHeight += topSafetyPad;
 
     // Calculate scale factor to make tree fill the viewBox
     var scaleFactor = contentWidth / diameter;
@@ -549,7 +577,7 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
         .attr("transform", function (d) { if (d.name === '') { return "rotate(" + (d.x) + ")translate(" + d.y + ")"; } else { return "rotate(" + (d.x - 90) + ")translate(" + d.y + ")"; } })
 
     node.filter(function (d) { return (d.depth === options.depth) })
-        .attr("id", function (d) { if (d.name === '') { return "innerNode" } else { return 'X' + d.name.toUpperCase() } });
+        .attr("id", function (d) { if (d.name === '') { return "innerNode" } else { return 'X' + String(d._leafKey || d.name).toUpperCase() } });
 
     node.append("text")
         .attr("dy", ".31em")
@@ -586,8 +614,7 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
         })
         .text(function (d) {
             if (d.depth === options.depth) {
-                // Leaves are UniProt; keep uppercase for consistency
-                return d.name.toUpperCase();
+                return TREE_UI.leafLabelType === "UniProt" ? d.name.toUpperCase() : d.name;
             } else if (options.label_free.includes(d.depth)) {
                 return "";
             } else if (d.depth > 0) {
@@ -597,10 +624,11 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
             }
         })
         .each(function (d) {
-            // Internal labels may contain <sub>/<i> etc (e.g. GABA<sub>B</sub>)
-            if (d.depth > 0 && d.depth !== options.depth && d.name && String(d.name).includes("<")) {
+            // Leaves and some internal labels may contain entities/tags (e.g. &kappa;, GABA<sub>B</sub>).
+            if (d.depth > 0 && d.name && (d.depth === options.depth || /[<&]/.test(String(d.name)))) {
                 this.innerHTML = custom_formatTextWithHTML(d.name);
             }
+            custom_adjust_leaf_label_baseline(this, d, options);
         })
         .call(custom_wrap, options.branch_trunc)
         .style("font-size", function (d) {
@@ -693,6 +721,54 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
 
     // Center badge removed (no middle label/pill).
 
+    function applyCircularBoundingBoxPadding() {
+        var pad = (options.circularBBoxPadding !== undefined) ? Number(options.circularBBoxPadding) : 14;
+        var bb;
+        var renderedLeft;
+        var renderedRight;
+        var renderedTop;
+        var renderedBottom;
+        var addLeft;
+        var addRight;
+        var addTop;
+        var addBottom;
+        if (!isFinite(pad) || pad < 0 || !svg_g.node()) {
+            return;
+        }
+        try {
+            bb = svg_g.node().getBBox();
+        } catch (err) {
+            return;
+        }
+        if (!bb || !isFinite(bb.x) || !isFinite(bb.y) || !isFinite(bb.width) || !isFinite(bb.height)) {
+            return;
+        }
+
+        renderedLeft = centerX + (bb.x * scaleFactor);
+        renderedRight = centerX + ((bb.x + bb.width) * scaleFactor);
+        renderedTop = centerY + (bb.y * scaleFactor);
+        renderedBottom = centerY + ((bb.y + bb.height) * scaleFactor);
+
+        addLeft = Math.max(0, pad - renderedLeft);
+        addRight = Math.max(0, renderedRight + pad - contentWidth);
+        addTop = Math.max(0, pad - renderedTop);
+        addBottom = Math.max(0, renderedBottom + pad - contentHeight);
+
+        if (!(addLeft || addRight || addTop || addBottom)) {
+            return;
+        }
+
+        contentWidth += addLeft + addRight;
+        contentHeight += addTop + addBottom;
+        centerX += addLeft;
+        centerY += addTop;
+        svg.attr("width", contentWidth)
+            .attr("height", contentHeight);
+        svg_g.attr("transform", "translate(" + centerX + "," + centerY + ") scale(" + scaleFactor + ")");
+    }
+
+    applyCircularBoundingBoxPadding();
+
     function custom_string_pixlen(text, depth, options) {
         var canvas = document.createElement('canvas');
         var ctx = canvas.getContext("2d");
@@ -734,6 +810,13 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
 // Global helper functions for all drawing functions
 function custom_getBB(selection) {
     selection.each(function (d) { d.bbox = this.getBBox(); });
+}
+
+function custom_adjust_leaf_label_baseline(textNode, datum, options) {
+    if (!textNode || !datum || datum.depth !== options.depth) return;
+    const label = String(datum.name || "");
+    if (!/[a-z]/.test(label) || /<\s*sub\b/i.test(label)) return;
+    d3.select(textNode).attr("dy", ".16em");
 }
 
 function custom_wrap(text, width) {
@@ -901,7 +984,7 @@ function custom_draw_dendrogram_curved(data, options, stacked_meta, centerLabel)
         .attr("transform", function (d) { return "translate(" + d.y + "," + d.x + ")"; });
 
     node.filter(function (d) { return (d.depth === options.depth) })
-        .attr("id", function (d) { if (d.name === '') { return "innerNode" } else { return 'X' + d.name.toUpperCase() } });
+        .attr("id", function (d) { if (d.name === '') { return "innerNode" } else { return 'X' + String(d._leafKey || d.name).toUpperCase() } });
 
     node.append("text")
         .attr("dy", ".31em")
@@ -925,7 +1008,7 @@ function custom_draw_dendrogram_curved(data, options, stacked_meta, centerLabel)
         })
         .text(function (d) {
             if (d.depth === options.depth) {
-                return d.name.toUpperCase();
+                return TREE_UI.leafLabelType === "UniProt" ? d.name.toUpperCase() : d.name;
             } else if (options.label_free && options.label_free.includes(d.depth)) {
                 return "";
             } else if (d.depth > 0) {
@@ -935,9 +1018,10 @@ function custom_draw_dendrogram_curved(data, options, stacked_meta, centerLabel)
             }
         })
         .each(function (d) {
-            if (d.depth > 0 && d.depth !== options.depth && d.name && String(d.name).includes("<")) {
+            if (d.depth > 0 && d.name && (d.depth === options.depth || /[<&]/.test(String(d.name)))) {
                 this.innerHTML = custom_formatTextWithHTML(d.name);
             }
+            custom_adjust_leaf_label_baseline(this, d, options);
         })
         .call(custom_wrap, options.branch_trunc)
         .style("font-size", function (d) {
@@ -1279,7 +1363,7 @@ function custom_draw_dendrogram_straight(data, options, stacked_meta, centerLabe
         .attr("transform", function (d) { return "translate(" + d.y + "," + d.x + ")"; });
 
     node.filter(function (d) { return (d.depth === options.depth) })
-        .attr("id", function (d) { if (d.name === '') { return "innerNode" } else { return 'X' + d.name.toUpperCase() } });
+        .attr("id", function (d) { if (d.name === '') { return "innerNode" } else { return 'X' + String(d._leafKey || d.name).toUpperCase() } });
 
     node.append("text")
         .attr("dy", ".31em")
@@ -1321,7 +1405,7 @@ function custom_draw_dendrogram_straight(data, options, stacked_meta, centerLabe
         })
         .text(function (d) {
             if (d.depth === options.depth) {
-                return d.name.toUpperCase();
+                return TREE_UI.leafLabelType === "UniProt" ? d.name.toUpperCase() : d.name;
             } else if (options.label_free && options.label_free.includes(d.depth)) {
                 return "";
             } else if (d.depth > 0) {
@@ -1331,9 +1415,10 @@ function custom_draw_dendrogram_straight(data, options, stacked_meta, centerLabe
             }
         })
         .each(function (d) {
-            if (d.depth > 0 && d.depth !== options.depth && d.name && String(d.name).includes("<")) {
+            if (d.depth > 0 && d.name && (d.depth === options.depth || /[<&]/.test(String(d.name)))) {
                 this.innerHTML = custom_formatTextWithHTML(d.name);
             }
+            custom_adjust_leaf_label_baseline(this, d, options);
         })
         .call(custom_wrap, options.branch_trunc)
         .style("font-size", function (d) {
@@ -1443,14 +1528,22 @@ function custom_draw_dendrogram_straight(data, options, stacked_meta, centerLabe
         .attr('preserveAspectRatio', 'xMidYMin meet');
 }
 
-// Format text with HTML (handles subscripts, italics, etc.)
+function custom_decodeHtmlEntities(text) {
+    return String(text || '').replace(/&[A-Za-z0-9#]+;/g, function(entity) {
+        const el = document.createElement('textarea');
+        el.innerHTML = entity;
+        return el.value || entity;
+    });
+}
+
+// Format text with HTML (handles subscripts, italics, entities like &kappa;, etc.)
 function custom_formatTextWithHTML(text) {
     // Apply all the replacements step by step
-    return text
+    return custom_decodeHtmlEntities(text)
         .replace(" receptor", '')
         .replace("-adrenoceptor", '')
         .replace(" receptor-", '-')
-        .replace("<sub>", '</tspan><tspan baseline-shift="sub">')
+        .replace("<sub>", '</tspan><tspan baseline-shift="-0.25em" font-size="70%">')
         .replace("</sub>", '</tspan><tspan>')
         .replace("<i>", '</tspan><tspan font-style="italic">')
         .replace("</i>", '</tspan><tspan>')
@@ -1504,6 +1597,8 @@ function custom_changeLeavesLabels(location, value, dict, styling_dict) {
 // ========================
 const tree_sets_raw = '{{ tree_sets|escapejs }}';
 const tree_sets = JSON.parse(tree_sets_raw);
+const tree_leaf_label_lookup_raw = '{{ tree_leaf_label_lookup|default:"{}"|escapejs }}';
+const tree_leaf_label_lookup = JSON.parse(tree_leaf_label_lookup_raw);
 const TREE_INITIAL_TYPE = '{{ tree_initial_type|default:"Class"|escapejs }}';
 const TREE_INITIAL_SELECTION = '{{ tree_initial_selection|default:""|escapejs }}';
 const TREE_LOCKED_TYPE = '{{ tree_locked_type|default:""|escapejs }}';
@@ -1660,6 +1755,8 @@ let TREE_UI = {
     type: "Class",
     selectionKey: "A",
     layout: "Tree - Circular",
+    leafPills: false,
+    leafLabelType: "Protein",
 };
 
 function getTypeOptions(type) {
@@ -1697,6 +1794,8 @@ function setActiveType(type) {
 function setActiveLayout(layout) {
     TREE_UI.layout = layout;
     const group = document.getElementById("tree_layout_group");
+    const dropdownButton = document.getElementById("treeLayoutDropdownBtn");
+    let activeLabel = "Circular";
     if (group) {
         Array.prototype.slice.call(group.querySelectorAll("button[data-layout]")).forEach(function (btn) {
             const v = btn.getAttribute("data-layout");
@@ -1704,14 +1803,77 @@ function setActiveLayout(layout) {
                 btn.classList.add("active");
                 btn.classList.add("btn-primary");
                 btn.classList.remove("btn-default");
+                btn.classList.remove("btn-outline-primary");
+                activeLabel = btn.getAttribute("data-layout-label") || btn.textContent.trim() || activeLabel;
             } else {
                 btn.classList.remove("active");
                 btn.classList.remove("btn-primary");
-                btn.classList.add("btn-default");
+                btn.classList.remove("btn-default");
+                btn.classList.add("btn-outline-primary");
             }
         });
     }
+    if (dropdownButton) {
+        dropdownButton.innerHTML = "Layout: " + activeLabel + ' <span class="caret"></span>';
+    }
     scheduleRender();
+}
+
+function syncLeafColorToggle() {
+    const btn = document.getElementById("treeLeafColorToggle");
+    if (!btn) return;
+    const enabled = !!TREE_UI.leafPills;
+    btn.classList.toggle("btn-primary", enabled);
+    btn.classList.toggle("btn-danger", !enabled);
+    btn.setAttribute("aria-pressed", enabled ? "true" : "false");
+}
+
+function setLeafPills(enabled) {
+    TREE_UI.leafPills = !!enabled;
+    syncLeafColorToggle();
+    scheduleRender();
+}
+
+function syncLeafLabelDropdown() {
+    const group = document.getElementById("tree_leaf_label_group");
+    const dropdownButton = document.getElementById("treeLeafLabelDropdownBtn");
+    const activeType = TREE_UI.leafLabelType || "UniProt";
+    if (group) {
+        Array.prototype.slice.call(group.querySelectorAll("button[data-label-type]")).forEach(function (btn) {
+            const isActive = btn.getAttribute("data-label-type") === activeType;
+            btn.classList.toggle("active", isActive);
+            btn.classList.toggle("btn-primary", isActive);
+            btn.classList.toggle("btn-outline-primary", !isActive);
+        });
+    }
+    if (dropdownButton) {
+        dropdownButton.innerHTML = "Receptor names: " + activeType + ' <span class="caret"></span>';
+    }
+}
+
+function setLeafLabelType(labelType) {
+    TREE_UI.leafLabelType = labelType || "UniProt";
+    syncLeafLabelDropdown();
+    scheduleRender();
+}
+
+function applyLeafLabels(root, labelType) {
+    const selectedType = labelType || "UniProt";
+    function walk(node) {
+        if (!node) return;
+        const children = node.children || [];
+        if (!children.length) {
+            const originalName = String(node.name || "").trim();
+            const key = originalName.toUpperCase();
+            const labels = tree_leaf_label_lookup[key] || {};
+            node._leafKey = key || originalName;
+            node.name = labels[selectedType] || originalName;
+            return;
+        }
+        children.forEach(walk);
+    }
+    walk(root);
+    return root;
 }
 
 function populateSelectionDropdown(type) {
@@ -1996,6 +2158,7 @@ function renderCurrent() {
     const collapsed = collapse_singletons(tree_data, meta.collapseLabels || []);
     tree_data = custom_update_tree_data(collapsed.data);
     tree_data = applyTreeColors(tree_data, collapsed.stacked, tree_options);
+    tree_data = applyLeafLabels(tree_data, TREE_UI.leafLabelType);
 
     const maxDepth = custom_get_max_depth(tree_data, 0);
     tree_options.depth = maxDepth;
@@ -2021,7 +2184,7 @@ function renderCurrent() {
     // Modality and class-colored plots should have colored internal pills too.
     tree_options.labelBoxStrokeColorMode = (tree_options.colorMode === "chemotype") ? "chemotype" : "class";
 
-    tree_options.leafPills = true;
+    tree_options.leafPills = !!TREE_UI.leafPills;
     tree_options.leafBoxPadX = 4;
     tree_options.leafBoxPadY = 0;
     tree_options.leafBoxDy = 0;
@@ -2263,6 +2426,26 @@ $(function () {
             const layout = btn.getAttribute("data-layout");
             if (!layout || layout === TREE_UI.layout) return;
             setActiveLayout(layout);
+        });
+    }
+
+    const leafColorToggle = document.getElementById("treeLeafColorToggle");
+    if (leafColorToggle) {
+        syncLeafColorToggle();
+        leafColorToggle.addEventListener("click", function () {
+            setLeafPills(!TREE_UI.leafPills);
+        });
+    }
+
+    const leafLabelGroup = document.getElementById("tree_leaf_label_group");
+    if (leafLabelGroup) {
+        syncLeafLabelDropdown();
+        leafLabelGroup.addEventListener("click", function (e) {
+            const btn = e.target && e.target.closest ? e.target.closest("button[data-label-type]") : null;
+            if (!btn) return;
+            const labelType = btn.getAttribute("data-label-type");
+            if (!labelType || labelType === TREE_UI.leafLabelType) return;
+            setLeafLabelType(labelType);
         });
     }
 

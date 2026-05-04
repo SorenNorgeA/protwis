@@ -1,3 +1,4 @@
+from django.contrib.postgres.fields import JSONField
 from django.db import models, connection
 
 
@@ -282,3 +283,52 @@ class ClusterCoord(models.Model):
             f'{self.protein_id} {self.dataset_type}/{self.plot_type}/'
             f'{self.group_key}: ({self.x:.3f}, {self.y:.3f})'
         )
+
+
+class TreeNetwork(models.Model):
+    """
+    Persisted render-ready family tree payloads.
+
+    One row per receptor-family visualization group, including synthetic orphan
+    splits such as Class A orphans.
+    """
+
+    group_key = models.CharField(max_length=64, unique=True)
+    family = models.ForeignKey(
+        'protein.ProteinFamily',
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name='+',
+        db_index=True,
+    )
+    class_family = models.ForeignKey(
+        'protein.ProteinFamily',
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name='+',
+        db_index=True,
+    )
+    display_name = models.CharField(max_length=200)
+    protein_count = models.PositiveSmallIntegerField(default=0)
+    tree_method = models.CharField(max_length=64, default='neighbor_joining')
+    segment_source = models.CharField(max_length=64, default='generic_conserved')
+    bootstrap = models.PositiveSmallIntegerField(default=0)
+    branch_mode = models.CharField(max_length=32, default='regular')
+    tree_newick = models.TextField(blank=True, default='')
+    payload = JSONField(default=dict)
+    build_version = models.CharField(max_length=32, default='v1')
+    source_hash = models.CharField(max_length=40, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'classification_treenetwork'
+        indexes = [
+            models.Index(fields=['class_family', 'group_key'], name='ctn_class_group_idx'),
+            models.Index(fields=['family', 'group_key'], name='ctn_family_group_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.group_key}: {self.display_name} ({self.protein_count})'

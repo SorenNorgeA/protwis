@@ -8,7 +8,12 @@ from django.utils.text import slugify
 from django.views import View
 from django.views.generic import TemplateView
 
-from classification.models import ClusterCoord, ReceptorSimilarity, StructureSimilarity
+from classification.family_tree import (
+    SUPERFAMILY_TREE_GROUP_KEY,
+    SUPERFAMILY_TREE_VARIANT,
+    build_superfamily_tree_payload,
+)
+from classification.models import ClusterCoord, ReceptorSimilarity, StructureSimilarity, TreeNetwork
 from common.models import WebLink
 from mapper.views import DataMapperHome
 from protein.models import Gene, Protein, ProteinFamily, ProteinFamilyClassification, ProteinState
@@ -37,6 +42,7 @@ except Exception:
 class ClassificationVisualizationMixin:
     GLOBAL_GROUP_KEY = "global"
     CLASS_GROUP_PREFIX = "class:"
+    BROWSER_CLASS_ORDER = ["A", "B1", "B2", "C", "F", "T2", "O1", "O2", "U"]
     MODALITY_GROUP_LABELS = [
         "Orphan receptors",
         "Polypeptide receptors",
@@ -46,6 +52,14 @@ class ClassificationVisualizationMixin:
     POLYPEPTIDE_MODALITY_KEYS = {"peptide receptors", "protein receptors", "polypeptide receptors"}
     ORPHAN_MODALITY_GROUP_LABEL = "Orphan receptors"
     ORPHAN_SEARCH_SPLIT_LABELS = {"orphan receptors", "orphans receptors"}
+    UNCLASSIFIED_BROWSER_LABEL = "Unclassified / Other GPCRs"
+    UNCLASSIFIED_CLASS_NAME_CANDIDATES = ("Unclassified", "Classless", "Other GPCRs", "Unclassified / Other GPCRs")
+    CLASS_KEY_ALIASES = {
+        "UNCLASSIFIED": "U",
+        "CLASSLESS": "U",
+        "OTHERGPCRS": "U",
+        "UNCLASSIFIEDOTHERGPCRS": "U",
+    }
     CLASS_VISUALIZATION_CONFIG = OrderedDict([
         ("A", {"label": "Class A", "title": "Class A (Rhodopsin)", "slug": "001"}),
         ("B1", {"label": "Class B1", "title": "Class B1 (Secretin)", "slug": "002"}),
@@ -53,15 +67,19 @@ class ClassificationVisualizationMixin:
         ("C", {"label": "Class C", "title": "Class C (Glutamate)", "slug": "004"}),
         ("F", {"label": "Class F", "title": "Class F (Frizzled)", "slug": "006"}),
         ("T2", {"label": "Class T2", "title": "Class T2 (Taste 2)", "slug": "009"}),
-        ("O1", {"label": "Class O1", "title": "Class O1 (Fish-like)", "slug": "007"}),
-        ("O2", {"label": "Class O2", "title": "Class O2 (Tetrapod specific)", "slug": "008"}),
+        ("O1", {"label": "Class O1", "title": "Class O1 (Fish-like olfactory receptors)", "slug": "007"}),
+        ("O2", {"label": "Class O2", "title": "Class O2 (Tetrapod-specific olfactory receptors)", "slug": "008"}),
+        ("U", {"label": "Unclassified", "title": "Unclassified", "slug": "010"}),
     ])
-    TREE_DISABLED_CLASS_KEYS = {"O1", "O2"}
+    TREE_DISABLED_CLASS_KEYS = {"O1", "O2", "U"}
 
     @classmethod
     def normalize_visualization_class_key(cls, raw_value):
         value = str(raw_value or "").strip().upper()
-        return value if value in cls.CLASS_VISUALIZATION_CONFIG else None
+        if value in cls.CLASS_VISUALIZATION_CONFIG:
+            return value
+        compact_value = re.sub(r"[^A-Z0-9]", "", value)
+        return cls.CLASS_KEY_ALIASES.get(compact_value)
 
     @classmethod
     def get_visualization_class_config(cls, class_key):
@@ -82,6 +100,13 @@ class ClassificationVisualizationMixin:
     def class_group_key(cls, class_key):
         return f"{cls.CLASS_GROUP_PREFIX}{class_key}"
 
+    @classmethod
+    def class_key_from_group_key(cls, group_key):
+        value = str(group_key or "").strip()
+        if not value.startswith(cls.CLASS_GROUP_PREFIX):
+            return None
+        return cls.normalize_visualization_class_key(value[len(cls.CLASS_GROUP_PREFIX):])
+
     @staticmethod
     def _classification_df():
         return Classification_tree()._load_df()
@@ -99,7 +124,17 @@ class ClassificationVisualizationMixin:
         mapping = {}
         legacy_title_aliases = {
             "Class O1 (fish-like)": "O1",
+            "Class O1 (fish-like odorant)": "O1",
+            "Class O1 (fish-like olfactory receptor)": "O1",
+            "Class O1 (fish-like olfactory receptors)": "O1",
             "Class O2 (tetrapod specific)": "O2",
+            "Class O2 (tetrapod specific odorant)": "O2",
+            "Class O2 (tetrapod-specific olfactory receptor)": "O2",
+            "Class O2 (tetrapod-specific olfactory receptors)": "O2",
+            "Unclassified": "U",
+            "Classless": "U",
+            "Other GPCRs": "U",
+            "Unclassified / Other GPCRs": "U",
         }
         for key, cfg in cls.CLASS_VISUALIZATION_CONFIG.items():
             title = cfg["title"]
@@ -110,12 +145,42 @@ class ClassificationVisualizationMixin:
             mapping[alias.lower()] = key
         return mapping
 
+    @staticmethod
+    def _natural_sort_key(value):
+        chunks = re.split(r"(\d+)", str(value or "").strip().lower())
+        key = []
+        for chunk in chunks:
+            if chunk == "":
+                continue
+            if chunk.isdigit():
+                key.append((0, int(chunk)))
+            else:
+                key.append((1, chunk))
+        return tuple(key)
+
+    @classmethod
+    def _browser_class_key(cls, class_label, class_key=None):
+        if class_key:
+            return class_key
+        label = str(class_label or "").strip()
+        if not label:
+            return None
+        return "U"
+
+    @classmethod
+    def _browser_class_label(cls, browser_class_key):
+        if browser_class_key == "U":
+            return cls.UNCLASSIFIED_BROWSER_LABEL
+        config = cls.get_visualization_class_config(browser_class_key)
+        if config:
+            return config["title"]
+        return str(browser_class_key or "").strip()
+
     def _build_receptor_family_catalog(self):
         df = self._classification_df()
         clean = Classification_tree._clean_cell
         split = Classification_tree._split_uniprot_cell
         class_title_to_key = self._class_title_to_key_map()
-        class_order = {cfg["title"]: idx for idx, cfg in enumerate(self.list_visualization_classes())}
 
         normalized_rows = []
         orphan_family_classes = defaultdict(OrderedDict)
@@ -147,6 +212,7 @@ class ClassificationVisualizationMixin:
             modality_group = row["modality_group"]
             receptors = row["receptors"]
             class_key = class_title_to_key.get(class_label) or class_title_to_key.get(str(class_label).lower())
+            browser_class_key = self._browser_class_key(class_label, class_key)
             class_config = self.get_visualization_class_config(class_key) if class_key else None
             split_orphan_by_class = (
                 modality_group == self.ORPHAN_MODALITY_GROUP_LABEL
@@ -183,8 +249,13 @@ class ClassificationVisualizationMixin:
             for receptor in receptors:
                 entry["receptors"][receptor] = True
 
-            class_bucket = hierarchy.setdefault(class_label, OrderedDict())
-            chemotype_bucket = class_bucket.setdefault(chemotype, {
+            if not browser_class_key:
+                continue
+            class_bucket = hierarchy.setdefault(browser_class_key, {
+                "label": self._browser_class_label(browser_class_key),
+                "chemotypes": OrderedDict(),
+            })
+            chemotype_bucket = class_bucket["chemotypes"].setdefault(chemotype, {
                 "modality_group": modality_group,
                 "families": OrderedDict(),
             })
@@ -198,8 +269,8 @@ class ClassificationVisualizationMixin:
         for family_storage_key in sorted(
             family_rows.keys(),
             key=lambda value: (
-                str(family_rows[value]["name"]).lower(),
-                str(family_rows[value].get("split_class_label") or "").lower(),
+                self._natural_sort_key(family_rows[value]["name"]),
+                self._natural_sort_key(family_rows[value].get("split_class_label") or ""),
             ),
         ):
             raw = family_rows[family_storage_key]
@@ -220,6 +291,8 @@ class ClassificationVisualizationMixin:
                 lookup_key = class_title_to_key.get(label) or class_title_to_key.get(str(label).lower())
                 if lookup_key:
                     class_keys.append(lookup_key)
+                else:
+                    class_keys.append("U")
             entry = {
                 "key": family_key,
                 "name": raw["name"],
@@ -242,17 +315,18 @@ class ClassificationVisualizationMixin:
             family_by_storage_key[family_storage_key] = entry
 
         browser_nodes = []
-        for class_label in sorted(hierarchy.keys(), key=lambda value: class_order.get(value, 999)):
-            class_key = class_title_to_key.get(class_label) or class_title_to_key.get(str(class_label).lower())
-            class_bucket = hierarchy[class_label]
+        browser_order = {key: idx for idx, key in enumerate(self.BROWSER_CLASS_ORDER)}
+        for browser_class_key in sorted(hierarchy.keys(), key=lambda value: browser_order.get(value, 999)):
+            class_bucket = hierarchy[browser_class_key]
             grouped_chemotypes = []
+            aggregated_families = OrderedDict()
 
-            for chemotype in sorted(class_bucket.keys(), key=lambda value: str(value).lower()):
+            for chemotype in sorted(class_bucket["chemotypes"].keys(), key=self._natural_sort_key):
                 families = []
-                chemotype_node = class_bucket[chemotype]
+                chemotype_node = class_bucket["chemotypes"][chemotype]
                 modality_group = chemotype_node.get("modality_group") or "Small molecule receptors"
                 modality_theme = slugify(modality_group)
-                for family_name in sorted(chemotype_node["families"].keys(), key=lambda value: str(value).lower()):
+                for family_name in sorted(chemotype_node["families"].keys(), key=self._natural_sort_key):
                     family_storage_key = chemotype_node["families"].get(family_name)
                     family_entry = family_by_storage_key.get(family_storage_key)
                     if not family_entry:
@@ -264,6 +338,7 @@ class ClassificationVisualizationMixin:
                         "receptor_count": family_entry["receptor_count"],
                     }
                     families.append(family_node)
+                    aggregated_families[family_node["key"]] = family_node
                 if families:
                     grouped_chemotypes.append({
                         "label": chemotype,
@@ -274,10 +349,14 @@ class ClassificationVisualizationMixin:
 
             if grouped_chemotypes:
                 browser_nodes.append({
-                    "label": class_label,
-                    "class_key": class_key,
-                    "interactive_chemotypes": class_key == "A",
+                    "label": class_bucket["label"],
+                    "class_key": browser_class_key,
+                    "interactive_chemotypes": browser_class_key == "A",
                     "chemotypes": grouped_chemotypes,
+                    "families": sorted(
+                        aggregated_families.values(),
+                        key=lambda family: self._natural_sort_key(family.get("label") or "")
+                    ),
                 })
 
         return {
@@ -294,10 +373,26 @@ class ClassificationVisualizationMixin:
         label = str(class_label or "").strip()
         if not label:
             return []
-        candidates = [label]
-        if label.lower() == "unclassified":
-            candidates.append("Other GPCRs")
-        return candidates
+        if label.lower() in {"unclassified", "classless", "other gpcrs", "unclassified / other gpcrs"}:
+            return list(self.UNCLASSIFIED_CLASS_NAME_CANDIDATES)
+        return [label]
+
+    def _visualization_class_family_q(self, class_key, family_path_prefix):
+        config = self.get_visualization_class_config(class_key)
+        if not config:
+            return Q()
+
+        prefix = str(family_path_prefix or "")
+        q_obj = Q(**{prefix + "slug": config["slug"]})
+        for candidate in self._visualization_class_name_candidates(config["title"]):
+            q_obj |= Q(**{prefix + "name__iexact": candidate})
+        return q_obj
+
+    def _visualization_class_protein_q(self, class_key):
+        return self._visualization_class_family_q(class_key, "family__parent__parent__parent__")
+
+    def _visualization_class_clustercoord_q(self, class_key):
+        return self._visualization_class_family_q(class_key, "protein__family__parent__parent__parent__")
 
     def _visualization_receptor_label_q(self, receptor_labels):
         q_obj = Q()
@@ -307,6 +402,15 @@ class ClassificationVisualizationMixin:
                 continue
             q_obj |= Q(accession__iexact=clean_label)
             q_obj |= Q(entry_name__istartswith="{}_".format(clean_label))
+        return q_obj
+
+    def _visualization_family_queryset_class_q(self, class_slug_prefix=None, class_label=None):
+        q_obj = Q()
+        if class_slug_prefix:
+            q_obj |= Q(family_slug__startswith=class_slug_prefix)
+        if class_label:
+            for candidate in self._visualization_class_name_candidates(class_label):
+                q_obj |= Q(family__parent__parent__parent__name__iexact=candidate)
         return q_obj
 
     def _get_visualization_family_queryset(self, family_name, class_slug_prefix=None, class_label=None, exact_family_name_only=False):
@@ -323,6 +427,13 @@ class ClassificationVisualizationMixin:
             )
             .exclude(accession=None)
             .select_related("family__parent__parent__parent")
+            .prefetch_related(
+                Prefetch(
+                    "genes",
+                    queryset=Gene.objects.only("name", "position").order_by("position"),
+                    to_attr="primary_genes_self",
+                )
+            )
             .order_by("entry_name")
             .distinct()
         )
@@ -336,15 +447,71 @@ class ClassificationVisualizationMixin:
                 Q(family__parent__name__iexact=family_name)
                 | Q(family__name__iexact=family_name)
             )
-        if class_slug_prefix:
-            qs = qs.filter(family_slug__startswith=class_slug_prefix)
-        elif class_label:
-            class_name_q = Q()
-            for candidate in self._visualization_class_name_candidates(class_label):
-                class_name_q |= Q(family__parent__parent__parent__name__iexact=candidate)
-            if class_name_q:
-                qs = qs.filter(class_name_q)
+        class_scope_q = self._visualization_family_queryset_class_q(
+            class_slug_prefix=class_slug_prefix,
+            class_label=class_label,
+        )
+        if class_scope_q:
+            qs = qs.filter(class_scope_q)
         return qs
+
+    def get_visualization_family_proteins(self, family_entry):
+        family_name = family_entry["name"]
+        receptor_labels = [
+            str(label).strip().upper()
+            for label in family_entry.get("receptor_labels", [])
+            if str(label).strip()
+        ]
+        split_by_class = bool(family_entry.get("split_by_class"))
+        class_slug_prefix = family_entry.get("class_slug_prefix")
+        if split_by_class:
+            if receptor_labels:
+                receptor_q = self._visualization_receptor_label_q(receptor_labels)
+                qs = (
+                    Protein.objects
+                    .annotate(
+                        family_slug=F("family__slug"),
+                    )
+                    .filter(
+                        parent_id__isnull=True,
+                        species__common_name__iexact="Human",
+                    )
+                    .exclude(accession=None)
+                    .filter(receptor_q)
+                    .select_related("family__parent__parent__parent")
+                    .prefetch_related(
+                        Prefetch(
+                            "genes",
+                            queryset=Gene.objects.only("name", "position").order_by("position"),
+                            to_attr="primary_genes_self",
+                        )
+                    )
+                    .order_by("entry_name")
+                    .distinct()
+                )
+                class_scope_q = self._visualization_family_queryset_class_q(
+                    class_slug_prefix=class_slug_prefix,
+                    class_label=family_entry.get("split_class_label"),
+                )
+                if class_scope_q:
+                    qs = qs.filter(class_scope_q)
+            else:
+                qs = self._get_visualization_family_queryset(
+                    family_name=family_name,
+                    class_slug_prefix=class_slug_prefix,
+                    class_label=family_entry.get("split_class_label"),
+                    exact_family_name_only=True,
+                )
+        else:
+            qs = self._get_visualization_family_queryset(
+                family_name=family_name,
+                class_slug_prefix=class_slug_prefix,
+                class_label=family_entry.get("split_class_label"),
+                exact_family_name_only=False,
+            )
+            if receptor_labels:
+                qs = qs.filter(self._visualization_receptor_label_q(receptor_labels))
+        return list(qs)
 
     def get_requested_visualization_scope(self, request=None, raise_404=False):
         request = request or self.request
@@ -371,6 +538,184 @@ class ClassificationVisualizationMixin:
             "config": config,
         }
 
+    @staticmethod
+    def normalize_tree_selection_type(raw_value):
+        value = str(raw_value or "").strip()
+        if value.lower() == "modality":
+            return "Modality"
+        if value.lower() == "chemotype":
+            return "Chemotype"
+        return ""
+
+    @staticmethod
+    def _format_similarity_display(value):
+        if value is None:
+            return ""
+        try:
+            rounded = round(float(value), 1)
+        except Exception:
+            return ""
+        if rounded == int(rounded):
+            return str(int(rounded))
+        return "{:.1f}".format(rounded)
+
+    def resolve_tree_visualization_selection(self, tree_type, selection):
+        normalized_type = self.normalize_tree_selection_type(tree_type)
+        raw_selection = str(selection or "").strip()
+        if not normalized_type or not raw_selection:
+            raise ValueError("Unknown classification tree selection")
+
+        df = self._classification_df()
+        clean = Classification_tree._clean_cell
+        split = Classification_tree._split_uniprot_cell
+        requested_key = raw_selection.lower()
+        class_title_to_key = self._class_title_to_key_map()
+
+        rows = []
+        normalized_selection = raw_selection
+        for _, row in df.iterrows():
+            if normalized_type == "Modality":
+                raw_modality = clean(row.get("Modality")) or ""
+                grouped_modality = self._group_modality_label(raw_modality)
+                if (
+                    grouped_modality.lower() != requested_key
+                    and raw_modality.lower() != requested_key
+                ):
+                    continue
+                normalized_selection = grouped_modality
+            else:
+                chemotype = clean(row.get("Chemotype")) or ""
+                if chemotype.lower() != requested_key:
+                    continue
+                normalized_selection = chemotype
+            rows.append(row)
+
+        if not rows:
+            raise ValueError("Unknown classification tree selection")
+
+        class_keys = OrderedDict()
+        receptor_labels = OrderedDict()
+        entry_names = OrderedDict()
+        for row in rows:
+            class_label = clean(row.get("Class")) or ""
+            class_key = class_title_to_key.get(class_label) or class_title_to_key.get(class_label.lower())
+            if class_key:
+                class_keys[class_key] = True
+            for receptor in split(row.get("GPCRs (UniProt)")):
+                label = str(receptor or "").strip().upper()
+                if not label:
+                    continue
+                receptor_labels[label] = True
+                entry_names["{}_human".format(label.lower())] = True
+
+        return {
+            "type": normalized_type,
+            "selection": normalized_selection,
+            "class_keys": list(class_keys.keys()),
+            "receptor_labels": list(receptor_labels.keys()),
+            "entry_names": list(entry_names.keys()),
+            "receptor_count": len(receptor_labels),
+        }
+
+    def build_tree_selection_matrix_payload(self, selection_info):
+        entry_names = list((selection_info or {}).get("entry_names") or [])
+        if not entry_names:
+            return {"entities": [], "matrix": [], "meta": {"n_points": 0}}
+
+        proteins = list(
+            Protein.objects
+            .filter(entry_name__in=entry_names)
+            .only("id", "entry_name", "name", "accession")
+            .prefetch_related(
+                Prefetch(
+                    "genes",
+                    queryset=Gene.objects.only("name", "position").order_by("position"),
+                    to_attr="primary_genes_self",
+                )
+            )
+            .order_by("entry_name")
+        )
+        if not proteins:
+            return {"entities": [], "matrix": [], "meta": {"n_points": 0}}
+
+        protein_ids = [protein.id for protein in proteins]
+        pair_identity = {}
+        pair_similarity = {}
+        pair_qs = (
+            ReceptorSimilarity.objects
+            .filter(protein_ref_id__in=protein_ids, protein_target_id__in=protein_ids)
+            .values("protein_ref_id", "protein_target_id", "identity", "similarity")
+        )
+        for rec in pair_qs.iterator():
+            try:
+                a = int(rec["protein_ref_id"])
+                b = int(rec["protein_target_id"])
+            except Exception:
+                continue
+            if a == b:
+                continue
+            key = (a, b) if a < b else (b, a)
+            try:
+                identity = float(rec["identity"])
+            except Exception:
+                identity = None
+            try:
+                similarity = float(rec["similarity"])
+            except Exception:
+                similarity = None
+            if identity is not None:
+                previous = pair_identity.get(key)
+                if previous is None or identity > previous:
+                    pair_identity[key] = identity
+            if similarity is not None:
+                previous = pair_similarity.get(key)
+                if previous is None or similarity > previous:
+                    pair_similarity[key] = similarity
+
+        entities = []
+        for protein in proteins:
+            primary_genes = getattr(protein, "primary_genes_self", None) or []
+            gene_label = primary_genes[0].name if primary_genes else (
+                str(protein.entry_name or "").split("_", 1)[0].upper()
+            )
+            entities.append({
+                "symbol": protein.entry_name,
+                "name": protein.short(),
+                "short_label": protein.entry_short(),
+                "gene_label": gene_label,
+            })
+
+        matrix = []
+        for i, protein in enumerate(proteins):
+            row = []
+            for j, other_protein in enumerate(proteins):
+                if i == j:
+                    identity = 100.0
+                    similarity = 100.0
+                else:
+                    key = (min(protein.id, other_protein.id), max(protein.id, other_protein.id))
+                    identity = pair_identity.get(key)
+                    similarity = pair_similarity.get(key)
+                row.append({
+                    "source": protein.entry_name,
+                    "target": other_protein.entry_name,
+                    "identity": float(identity) if identity is not None else None,
+                    "identity_display": self._format_similarity_display(identity),
+                    "similarity": float(similarity) if similarity is not None else None,
+                    "similarity_display": self._format_similarity_display(similarity),
+                })
+            matrix.append(row)
+
+        return {
+            "entities": entities,
+            "matrix": matrix,
+            "meta": {
+                "n_points": len(entities),
+                "selection": (selection_info or {}).get("selection", ""),
+                "type": (selection_info or {}).get("type", ""),
+            },
+        }
+
 
 class ClassificationVisualizationsLanding(ClassificationVisualizationMixin, TemplateView):
     template_name = "classification/ClassificationVisualizations.html"
@@ -394,11 +739,10 @@ class ClassificationVisualizationsLanding(ClassificationVisualizationMixin, Temp
 
     def _tree_only_url(self, tree_type, selection):
         return "{}?{}".format(
-            reverse("classification-tree"),
+            reverse("classification-visualizations-tree"),
             urlencode({
                 "type": tree_type,
                 "selection": selection,
-                "locked": "1",
             }),
         )
 
@@ -531,6 +875,65 @@ class ClassificationVisualizationDetail(ClassificationVisualizationMixin, Templa
             ctx["tree_url"] = "{}?{}".format(reverse("classification-tree"), tree_query)
         else:
             ctx["tree_url"] = ""
+            ctx["tree_note"] = (
+                "Due to the unclassified nature of these receptors, a classification tree is unavailable."
+            )
+        return ctx
+
+
+class ClassificationTreeVisualizationDetail(ClassificationVisualizationMixin, TemplateView):
+    template_name = "classification/ClassificationTreeVisualizationDetail.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        raw_type = self.request.GET.get("type")
+        raw_selection = self.request.GET.get("selection")
+        try:
+            selection_info = self.resolve_tree_visualization_selection(raw_type, raw_selection)
+        except ValueError as e:
+            raise Http404(str(e))
+
+        tree_query = urlencode({
+            "type": selection_info["type"],
+            "selection": selection_info["selection"],
+            "locked": "1",
+            "embed": "1",
+        })
+        class_keys = selection_info["class_keys"]
+        has_cluster = len(class_keys) == 1 and selection_info["receptor_count"] >= 2
+        cluster_url = ""
+        if has_cluster:
+            cluster_query = urlencode({
+                "class": class_keys[0],
+                "filter_type": selection_info["type"],
+                "filter_selection": selection_info["selection"],
+                "embed": "1",
+            })
+            cluster_url = "{}?{}".format(reverse("classification-structuresim"), cluster_query)
+
+        cluster_note = ""
+        if not has_cluster:
+            if len(class_keys) > 1:
+                cluster_note = (
+                    "Cluster is unavailable because this selection spans multiple GPCR classes."
+                )
+            elif selection_info["receptor_count"] < 2:
+                cluster_note = (
+                    "Cluster is unavailable because this selection has fewer than two receptors."
+                )
+            else:
+                cluster_note = (
+                    "Cluster is unavailable because this selection could not be mapped to a single GPCR class."
+                )
+
+        ctx["page_title"] = selection_info["selection"]
+        ctx["tree_type"] = selection_info["type"]
+        ctx["tree_selection"] = selection_info["selection"]
+        ctx["tree_url"] = "{}?{}".format(reverse("classification-tree"), tree_query)
+        ctx["has_cluster"] = has_cluster
+        ctx["cluster_url"] = cluster_url
+        ctx["cluster_note"] = cluster_note
+        ctx["matrix_payload_json"] = json.dumps(self.build_tree_selection_matrix_payload(selection_info))
         return ctx
 
 
@@ -542,21 +945,26 @@ class SuperfamilyCircularTree(TemplateView):
         variant = str(self.request.GET.get("variant") or "").strip().lower() or "max"
         if variant not in ClassSimilarityDataMixin.SUMMARY_VARIANTS:
             variant = "max"
-        data_query = urlencode({
-            "embed": "1",
-            "format": "json",
-            "variant": variant,
-        })
-        ctx["tree_data_url"] = "{}?{}".format(
-            reverse("classification-newclassclustertree"),
-            data_query,
-        )
+        persisted_row = None
+        if variant == SUPERFAMILY_TREE_VARIANT:
+            persisted_row = (
+                TreeNetwork.objects
+                .filter(group_key=SUPERFAMILY_TREE_GROUP_KEY)
+                .only("payload")
+                .first()
+            )
+        if persisted_row and persisted_row.payload:
+            tree_payload = persisted_row.payload
+        else:
+            payload = ClassSimilarityDataMixin()._build_class_cluster_tree_payload()
+            tree_payload = build_superfamily_tree_payload(payload, variant_key=variant)
+        ctx["data_json"] = json.dumps(tree_payload)
         ctx["tree_variant"] = variant
         ctx["tree_embed_mode"] = str(self.request.GET.get("embed") or "").strip().lower() in {"1", "true", "yes"}
         ctx["tree_page_title"] = str(self.request.GET.get("title") or "").strip() or "GPCR superfamily tree"
         ctx["tree_intro"] = (
             str(self.request.GET.get("intro") or "").strip()
-            or "Circular phylogram of GPCR classes using the maximum sequence similarity summary and average-linkage clustering."
+            or "Phylogenetic-tree renderer applied to the GPCR superfamily using classification sequence-similarity distances."
         )
         return ctx
 
@@ -567,9 +975,6 @@ class GPCRSuperfamilyVisualizationDetail(TemplateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["page_title"] = "GPCR superfamily"
-        ctx["page_description"] = (
-            "Tree-first superfamily preview with the wheel, cluster, and matrix tabs staged as lightweight placeholders."
-        )
         ctx["wheel_classic_url"] = "{}?{}".format(
             reverse("classification-wheel"),
             urlencode({"embed": "1", "wheel": "classic"}),
@@ -595,38 +1000,6 @@ class GPCRSuperfamilyVisualizationDetail(TemplateView):
         ctx["matrix_url"] = "{}?{}".format(
             reverse("classification-crossclass"),
             urlencode({"embed": "1"}),
-        )
-        ctx["tree_url"] = "{}?{}".format(
-            reverse("classification-superfamily-tree"),
-            urlencode({
-                "embed": "1",
-                "variant": "max",
-                "title": "GPCR superfamily tree",
-                "intro": (
-                    "Circular phylogram of GPCR classes using the maximum sequence similarity "
-                    "summary that also drives the superfamily cluster view."
-                ),
-            }),
-        )
-        ctx["wheel_placeholder_title"] = "Wheel wrapper parked"
-        ctx["wheel_placeholder_body"] = (
-            "The classic GPCRome wheel is paused for now so the superfamily page can focus on the tree implementation "
-            "without building the wheel in the background."
-        )
-        ctx["odorant_wheel_placeholder_title"] = "Odorant wheel wrapper parked"
-        ctx["odorant_wheel_placeholder_body"] = (
-            "The odorant wheel is also paused during the tree setup pass. "
-            "It can be re-enabled once the tree behavior is locked in."
-        )
-        ctx["cluster_placeholder_title"] = "Cluster wrapper parked"
-        ctx["cluster_placeholder_body"] = (
-            "The cluster tab is paused for now while the superfamily page focuses on the circular tree implementation. "
-            "It can be re-enabled once the tree behavior is locked in."
-        )
-        ctx["matrix_placeholder_title"] = "Matrix wrapper parked"
-        ctx["matrix_placeholder_body"] = (
-            "The matrix tab is paused during the tree-first pass so only the circular phylogram "
-            "loads on entry. It can be brought back once the tree layout is in place."
         )
         return ctx
 
@@ -997,6 +1370,7 @@ class Classification_tree(TemplateView):
 
         # Find the columns we need
         col_uni = pick('GPCRs (UniProt)', 'GPCRs\n(UniProt)', 'GPCRs (UniProt)')
+        col_gene = pick('GPCRs (Gene name)', 'GPCRs\n(Gene name)', 'GPCRs (Gene name)')
         col_class = pick('Class')
         col_chemotype = pick('Chemotype')
         col_family = pick('Receptor family')
@@ -1006,6 +1380,8 @@ class Classification_tree(TemplateView):
         normalized_cols = {}
         if col_uni:
             normalized_cols['GPCRs (UniProt)'] = df[col_uni]
+        if col_gene:
+            normalized_cols['GPCRs (Gene name)'] = df[col_gene]
         if col_class:
             normalized_cols['Class'] = df[col_class]
         if col_chemotype:
@@ -1018,7 +1394,7 @@ class Classification_tree(TemplateView):
         df_normalized = pd.DataFrame(normalized_cols)
 
         # Ensure all required columns exist (fill with empty if missing)
-        required_cols = ['GPCRs (UniProt)', 'Class', 'Chemotype', 'Receptor family', 'Modality']
+        required_cols = ['GPCRs (UniProt)', 'GPCRs (Gene name)', 'Class', 'Chemotype', 'Receptor family', 'Modality']
         for col in required_cols:
             if col not in df_normalized.columns:
                 df_normalized[col] = None
@@ -1044,6 +1420,71 @@ class Classification_tree(TemplateView):
         if not s:
             return []
         return [x.strip() for x in re.split(r'[,;]\s*', s) if x.strip()]
+
+    @staticmethod
+    def _split_gene_cell(val):
+        s = Classification_tree._clean_cell(val)
+        if not s:
+            return []
+        return [x.strip() for x in re.split(r'[,;]\s*', s) if x.strip()]
+
+    def _build_leaf_label_lookup(self, df):
+        lookup = {}
+        if df is None or "GPCRs (UniProt)" not in df.columns:
+            return lookup
+
+        for _, row in df.iterrows():
+            uniprots = self._split_uniprot_cell(row.get("GPCRs (UniProt)"))
+            if not uniprots:
+                continue
+            genes = self._split_gene_cell(row.get("GPCRs (Gene name)"))
+            for idx, uid in enumerate(uniprots):
+                key = str(uid or "").strip().upper()
+                if not key:
+                    continue
+                gene = ""
+                if len(genes) == len(uniprots):
+                    gene = genes[idx]
+                elif len(genes) == 1:
+                    gene = genes[0]
+                entry = lookup.setdefault(key, {"UniProt": key, "Gene": "", "Protein": ""})
+                if gene and not entry["Gene"]:
+                    entry["Gene"] = gene
+
+        entry_names = ["{}_human".format(key.lower()) for key in lookup.keys()]
+        proteins = (
+            Protein.objects
+            .filter(entry_name__in=entry_names)
+            .only("entry_name", "name")
+            .prefetch_related(
+                Prefetch(
+                    "genes",
+                    queryset=Gene.objects.only("name", "position").order_by("position"),
+                    to_attr="primary_genes_self",
+                )
+            )
+        )
+        for protein in proteins:
+            key = str(protein.entry_name or "").split("_", 1)[0].upper()
+            if key not in lookup:
+                continue
+            protein_label = ""
+            try:
+                protein_label = protein.short()
+            except Exception:
+                protein_label = getattr(protein, "name", "") or ""
+            if protein_label and not lookup[key]["Protein"]:
+                lookup[key]["Protein"] = protein_label
+            if not lookup[key]["Gene"]:
+                genes = getattr(protein, "primary_genes_self", None) or []
+                if genes:
+                    lookup[key]["Gene"] = genes[0].name
+
+        for key, entry in lookup.items():
+            entry["Protein"] = entry.get("Protein") or key
+            entry["Gene"] = entry.get("Gene") or key
+            entry["UniProt"] = entry.get("UniProt") or key
+        return lookup
 
     @staticmethod
     def _build_nested(df):
@@ -1274,6 +1715,7 @@ class Classification_tree(TemplateView):
             "Modality": {"options": [], "plots": {}},
             "Chemotype": {"options": [], "plots": {}},
         }
+        leaf_label_lookup = self._build_leaf_label_lookup(df)
 
         for class_key, config in class_configs.items():
             class_data = {}
@@ -1438,6 +1880,7 @@ class Classification_tree(TemplateView):
         # Pass data to template as JSON
         ctx["classes_data"] = json.dumps(classes_data)  # legacy (test template / backwards compat)
         ctx["tree_sets"] = json.dumps(tree_sets)
+        ctx["tree_leaf_label_lookup"] = json.dumps(leaf_label_lookup)
         requested_type = str(self.request.GET.get("type") or "Class").strip()
         if requested_type not in tree_sets:
             requested_type = "Class"
@@ -1876,6 +2319,7 @@ class ClassSimilarityDataMixin:
         "Class O1 (fish-like)",
         "Class O2 (tetrapod specific)",
         "Class T2 (Taste 2)",
+        "Unclassified",
     ]
 
     # Map display names -> top-level family slug codes
@@ -1888,6 +2332,7 @@ class ClassSimilarityDataMixin:
         "Class O1 (fish-like)": "007",
         "Class O2 (tetrapod specific)": "008",
         "Class T2 (Taste 2)": "009",
+        "Unclassified": "010",
     }
 
     CLASS_SYMBOL_BY_NAME = {
@@ -1899,6 +2344,7 @@ class ClassSimilarityDataMixin:
         "Class O1 (fish-like)": "O1",
         "Class O2 (tetrapod specific)": "O2",
         "Class T2 (Taste 2)": "T2",
+        "Unclassified": "U",
     }
 
     CLASS_COLOR_BY_SYMBOL = {
@@ -1910,6 +2356,7 @@ class ClassSimilarityDataMixin:
         "O1": "#17becf",
         "O2": "#bc80bd",
         "T2": "#F7B6D2",
+        "U": "#9e9e9e",
     }
 
     SUMMARY_VARIANTS = OrderedDict([
@@ -1918,8 +2365,11 @@ class ClassSimilarityDataMixin:
         ("top5_mean", "Top-5 mean similarity"),
         ("top10_mean", "Top-10 mean similarity"),
     ])
-    CLASS_CLUSTER_PAYLOAD_CACHE_KEY = "classclustertree:payload:v4"
+    CLASS_CLUSTER_PAYLOAD_CACHE_KEY = "classclustertree:payload:v7"
     CLASS_CLUSTER_PAYLOAD_CACHE_TIMEOUT = 60 * 60 * 24
+    CLASS_CLUSTER_PAYLOAD_VERSION = 3
+    CLASS_CLUSTER_DATASET_KEY = "superfamily"
+    CLASS_CLUSTER_SELECTION_KEY = "global"
 
     def _resolve_family_ids(self, slug_codes):
         qs = ProteinFamily.objects.filter(slug__in=slug_codes).only('id', 'slug', 'name')
@@ -1946,6 +2396,20 @@ class ClassSimilarityDataMixin:
             subset = values[:min(10, len(values))]
             return float(sum(subset) / len(subset))
         return float(values[0])
+
+    @staticmethod
+    def _format_similarity_display(similarity):
+        if similarity is None:
+            return "n/a"
+        try:
+            rounded = round(float(similarity), 1)
+        except Exception:
+            return "n/a"
+        if not math.isfinite(rounded):
+            return "n/a"
+        if float(int(rounded)) == float(rounded):
+            return "{}%".format(int(rounded))
+        return "{:.1f}%".format(rounded)
 
     def _build_class_only_similarity_data(self):
         code_to_famid = self._resolve_family_ids(list(self.CLASS_CODE_BY_NAME.values()))
@@ -2022,6 +2486,7 @@ class ClassSimilarityDataMixin:
                         "source": class_row["symbol"],
                         "target": other_row["symbol"],
                         "similarity": float(similarity) if similarity is not None else None,
+                        "similarity_display": self._format_similarity_display(similarity),
                         "distance": distance,
                     })
                 matrix_rows.append(row_values)
@@ -2087,6 +2552,76 @@ class ClassSimilarityDataMixin:
                 "points": self._build_projection_points(classes, self._compute_tsne_coords(distance_matrix)),
             }),
         ])
+
+    def _build_class_tip_annotations(self, classes):
+        annotations = OrderedDict()
+        for class_row in classes:
+            symbol = str(class_row.get("symbol") or "").strip()
+            if not symbol:
+                continue
+            annotations[symbol] = {
+                "symbol": symbol,
+                "label": str(class_row.get("name") or symbol),
+                "color": str(class_row.get("color") or "#808080"),
+                "slug": str(class_row.get("slug") or ""),
+                "family_id": int(class_row.get("family_id") or 0),
+            }
+        return annotations
+
+    def _build_class_tree_storage_meta(self):
+        return {
+            "payload_version": self.CLASS_CLUSTER_PAYLOAD_VERSION,
+            "dataset_key": self.CLASS_CLUSTER_DATASET_KEY,
+            "selection_key": self.CLASS_CLUSTER_SELECTION_KEY,
+            "entity_type": "gpcr_class",
+            "source_model": ReceptorSimilarity._meta.db_table,
+            "tree_method": "neighbor_joining_midpoint",
+            "rooting_method": "midpoint",
+            "distance_metric": "100_minus_similarity",
+        }
+
+    def _build_class_tree_render_payload(self, variant_key, variant_label, matrix_rows, tip_annotations,
+                                         rooted_tree=None, rooted_newick="", unrooted_tree=None,
+                                         unrooted_newick="", meta=None):
+        rooted_tree = rooted_tree or {"name": "", "length": 0.0, "children": []}
+        unrooted_tree = unrooted_tree or {"name": "", "length": 0.0, "children": []}
+        render_meta = dict(self._build_class_tree_storage_meta())
+        render_meta.update({
+            "variant_key": str(variant_key or ""),
+            "variant_label": str(variant_label or ""),
+        })
+        if meta:
+            render_meta.update(meta)
+        return {
+            "renderer": "classification_superfamily_phylo",
+            "default_view_mode": "rooted",
+            "trees": {
+                "rooted": str(rooted_newick or ""),
+                "unrooted": str(unrooted_newick or ""),
+            },
+            "tree_objects": {
+                "rooted": rooted_tree,
+                "unrooted": unrooted_tree,
+            },
+            "annotations": tip_annotations,
+            "matrix": matrix_rows,
+            "meta": render_meta,
+        }
+
+    def _build_class_tree_variant_payload(self, variant_key, variant_label, scatter_methods, matrix_rows,
+                                          variant_meta, tip_annotations, tree_payload, render_payload):
+        return {
+            "key": variant_key,
+            "label": variant_label,
+            "matrix": matrix_rows,
+            "scatter": {
+                "default_method": "tsne",
+                "methods": scatter_methods,
+            },
+            "tree": tree_payload,
+            "render_payload": render_payload,
+            "meta": variant_meta,
+        }
 
     def _linkage_to_newick(self, node, newick, parentdist, leaf_names):
         """Convert scipy linkage tree to Newick format (like contactnetwork getNewick)."""
@@ -2385,6 +2920,7 @@ class ClassSimilarityDataMixin:
         class_data = self._build_class_only_similarity_data()
         classes = class_data["classes"]
         n_classes = len(classes)
+        tip_annotations = self._build_class_tip_annotations(classes)
         variants = OrderedDict()
 
         if n_classes < 2:
@@ -2402,38 +2938,48 @@ class ClassSimilarityDataMixin:
                 ("tsne", {"label": "t-SNE", "points": points}),
             ])
             for variant_key, variant_data in class_data["variants"].items():
-                variants[variant_key] = {
-                    "key": variant_key,
-                    "label": variant_data["label"],
-                    "scatter": {
-                        "default_method": "tsne",
-                        "methods": base_scatter,
-                    },
-                    "tree": {
-                        "segments": [],
-                        "leaf_positions": [],
-                        "newick": "",
-                        "phylogram": {"name": "", "length": 0.0, "children": []},
-                        "phylogram_newick": "",
-                        "phylogram_rooted": {"name": "", "length": 0.0, "children": []},
-                        "phylogram_rooted_newick": "",
-                        "phylogram_unrooted": {"name": "", "length": 0.0, "children": []},
-                        "phylogram_unrooted_newick": "",
-                        "max_distance": 0.0,
-                        "linkage_method": "average",
-                        "tree_method": "neighbor_joining_midpoint",
-                        "rooting_method": "midpoint",
-                    },
-                    "matrix": variant_data["matrix"],
-                    "meta": {
-                        "n_classes": n_classes,
-                        "missing_pairs": variant_data["missing_pairs"],
-                        "fill_distance": variant_data["fill_distance"],
-                        "summary_label": variant_data["label"],
-                    },
+                variant_meta = {
+                    "n_classes": n_classes,
+                    "missing_pairs": variant_data["missing_pairs"],
+                    "fill_distance": variant_data["fill_distance"],
+                    "summary_label": variant_data["label"],
                 }
+                empty_tree = {
+                    "segments": [],
+                    "leaf_positions": [],
+                    "newick": "",
+                    "phylogram": {"name": "", "length": 0.0, "children": []},
+                    "phylogram_newick": "",
+                    "phylogram_rooted": {"name": "", "length": 0.0, "children": []},
+                    "phylogram_rooted_newick": "",
+                    "phylogram_unrooted": {"name": "", "length": 0.0, "children": []},
+                    "phylogram_unrooted_newick": "",
+                    "max_distance": 0.0,
+                    "linkage_method": "average",
+                    "tree_method": "neighbor_joining_midpoint",
+                    "rooting_method": "midpoint",
+                }
+                render_payload = self._build_class_tree_render_payload(
+                    variant_key,
+                    variant_data["label"],
+                    variant_data["matrix"],
+                    tip_annotations,
+                    meta=variant_meta,
+                )
+                variants[variant_key] = self._build_class_tree_variant_payload(
+                    variant_key,
+                    variant_data["label"],
+                    base_scatter,
+                    variant_data["matrix"],
+                    variant_meta,
+                    tip_annotations,
+                    empty_tree,
+                    render_payload,
+                )
             payload = {
+                "dataset": self._build_class_tree_storage_meta(),
                 "classes": classes,
+                "tip_annotations": tip_annotations,
                 "default_variant": class_data["default_variant"],
                 "variants": variants,
             }
@@ -2479,40 +3025,54 @@ class ClassSimilarityDataMixin:
             phylogram_tree = self._midpoint_root_tree(raw_phylogram_tree)
             phylogram_newick = "{};".format(self._tree_dict_to_newick(phylogram_tree, include_length=True))
             raw_phylogram_newick = "{};".format(self._tree_dict_to_newick(raw_phylogram_tree, include_length=True))
-
-            variants[variant_key] = {
-                "key": variant_key,
-                "label": variant_data["label"],
-                "scatter": {
-                    "default_method": "tsne",
-                    "methods": scatter_methods,
-                },
-                "tree": {
-                    "segments": segments,
-                    "leaf_positions": leaf_positions,
-                    "newick": tree_newick,
-                    "phylogram": phylogram_tree,
-                    "phylogram_newick": phylogram_newick,
-                    "phylogram_rooted": phylogram_tree,
-                    "phylogram_rooted_newick": phylogram_newick,
-                    "phylogram_unrooted": raw_phylogram_tree,
-                    "phylogram_unrooted_newick": raw_phylogram_newick,
-                    "max_distance": float(np.max(dendro.get("dcoord", [0.0])) if dendro.get("dcoord") else 0.0),
-                    "linkage_method": "average",
-                    "tree_method": "neighbor_joining_midpoint",
-                    "rooting_method": "midpoint",
-                },
-                "matrix": variant_data["matrix"],
-                "meta": {
-                    "n_classes": n_classes,
-                    "missing_pairs": variant_data["missing_pairs"],
-                    "fill_distance": variant_data["fill_distance"],
-                    "summary_label": variant_data["label"],
-                },
+            variant_meta = {
+                "n_classes": n_classes,
+                "missing_pairs": variant_data["missing_pairs"],
+                "fill_distance": variant_data["fill_distance"],
+                "summary_label": variant_data["label"],
+                "max_distance": float(np.max(dendro.get("dcoord", [0.0])) if dendro.get("dcoord") else 0.0),
             }
+            tree_payload = {
+                "segments": segments,
+                "leaf_positions": leaf_positions,
+                "newick": tree_newick,
+                "phylogram": phylogram_tree,
+                "phylogram_newick": phylogram_newick,
+                "phylogram_rooted": phylogram_tree,
+                "phylogram_rooted_newick": phylogram_newick,
+                "phylogram_unrooted": raw_phylogram_tree,
+                "phylogram_unrooted_newick": raw_phylogram_newick,
+                "max_distance": variant_meta["max_distance"],
+                "linkage_method": "average",
+                "tree_method": "neighbor_joining_midpoint",
+                "rooting_method": "midpoint",
+            }
+            render_payload = self._build_class_tree_render_payload(
+                variant_key,
+                variant_data["label"],
+                variant_data["matrix"],
+                tip_annotations,
+                rooted_tree=phylogram_tree,
+                rooted_newick=phylogram_newick,
+                unrooted_tree=raw_phylogram_tree,
+                unrooted_newick=raw_phylogram_newick,
+                meta=variant_meta,
+            )
+            variants[variant_key] = self._build_class_tree_variant_payload(
+                variant_key,
+                variant_data["label"],
+                scatter_methods,
+                variant_data["matrix"],
+                variant_meta,
+                tip_annotations,
+                tree_payload,
+                render_payload,
+            )
 
         payload = {
+            "dataset": self._build_class_tree_storage_meta(),
             "classes": classes,
+            "tip_annotations": tip_annotations,
             "default_variant": class_data["default_variant"],
             "variants": variants,
         }
@@ -2624,8 +3184,10 @@ class CrossClassSimilarity(ClassSimilarityDataMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["embed_mode"] = str(self.request.GET.get("embed") or "").strip().lower() in {"1", "true", "yes"}
 
-        # 1) Build display list (no extra/non-human groups)
-        base_names   = list(self.CLASS_ORDER)
+        # 1) Build display list (no extra/non-human groups).
+        # The matrix keeps classless receptors as toggleable single-protein rows,
+        # but does not show "Unclassified" as a standalone class.
+        base_names = [name for name in self.CLASS_ORDER if name != "Unclassified"]
         single_names = [f"{lab} (Classless)" for lab in self.SINGLE_PROTEIN_LABELS]
         display_names = base_names + single_names
 
@@ -3032,95 +3594,48 @@ class ReceptorFamilyVisualizationDetail(ClassificationVisualizationMixin, ClassS
         return {"key": None, "label": name, "color": "#708090"}
 
     def _get_family_proteins(self):
-        family_name = self.family_entry["name"]
-        receptor_labels = [
-            str(label).strip().upper()
-            for label in self.family_entry.get("receptor_labels", [])
-            if str(label).strip()
-        ]
-        split_by_class = bool(self.family_entry.get("split_by_class"))
-        class_slug_prefix = self.family_entry.get("class_slug_prefix")
-        if split_by_class:
-            if receptor_labels:
-                receptor_q = self._visualization_receptor_label_q(receptor_labels)
-                qs = (
-                    Protein.objects
-                    .annotate(
-                        family_slug=F("family__slug"),
-                    )
-                    .filter(
-                        parent_id__isnull=True,
-                        species__common_name__iexact="Human",
-                    )
-                    .exclude(accession=None)
-                    .filter(receptor_q)
-                    .select_related("family__parent__parent__parent")
-                    .order_by("entry_name")
-                    .distinct()
-                )
-                if class_slug_prefix:
-                    qs = qs.filter(family_slug__startswith=class_slug_prefix)
-                else:
-                    class_name_q = Q()
-                    for candidate in self._visualization_class_name_candidates(self.family_entry.get("split_class_label")):
-                        class_name_q |= Q(family__parent__parent__parent__name__iexact=candidate)
-                    if class_name_q:
-                        qs = qs.filter(class_name_q)
-            else:
-                qs = self._get_visualization_family_queryset(
-                    family_name=family_name,
-                    class_slug_prefix=class_slug_prefix,
-                    class_label=self.family_entry.get("split_class_label"),
-                    exact_family_name_only=True,
-                )
-        else:
-            qs = self._get_visualization_family_queryset(
-                family_name=family_name,
-                class_slug_prefix=class_slug_prefix,
-                class_label=self.family_entry.get("split_class_label"),
-                exact_family_name_only=False,
-            )
-            if receptor_labels:
-                qs = qs.filter(self._visualization_receptor_label_q(receptor_labels))
-        return list(qs)
+        return self.get_visualization_family_proteins(self.family_entry)
 
-    def _build_family_cluster_payload(self):
-        proteins = self._get_family_proteins()
+    def _build_family_similarity_dataset(self):
+        proteins = list(sorted(self._get_family_proteins(), key=lambda protein: str(protein.entry_name or "")))
         family_name = self.family_entry["name"]
         family_label = self.family_entry.get("label") or family_name
         if not proteins:
-            return {
-                "family": family_label,
-                "points": [],
-                "meta": {
-                    "n_points": 0,
-                    "note": "No human receptors were found for this receptor family.",
-                    "classes": self.family_entry.get("class_labels", []),
-                    "chemotypes": self.family_entry.get("chemotypes", []),
-                    "modality_groups": self.family_entry.get("modality_groups", []),
-                },
-            }
+            return {"family": family_label, "proteins": [], "distance_matrix": np.zeros((0, 0), dtype=float), "fill_distance": 100.0, "missing_pairs": 0, "pair_map": {}, "identity_pair_map": {}}
 
         protein_ids = [p.id for p in proteins]
         pair_map = {}
+        identity_pair_map = {}
         pair_qs = (
             ReceptorSimilarity.objects
             .filter(protein_ref_id__in=protein_ids, protein_target_id__in=protein_ids)
-            .values("protein_ref_id", "protein_target_id", "similarity")
+            .values("protein_ref_id", "protein_target_id", "identity", "similarity")
         )
         for rec in pair_qs.iterator():
             try:
                 a = int(rec["protein_ref_id"])
                 b = int(rec["protein_target_id"])
-                sim = float(rec["similarity"])
             except Exception:
                 continue
             if a == b:
                 continue
             key = (a, b) if a < b else (b, a)
-            prev = pair_map.get(key)
-            if prev is None or sim > prev:
-                pair_map[key] = sim
+            try:
+                sim = float(rec["similarity"])
+            except Exception:
+                sim = None
+            try:
+                identity = float(rec["identity"])
+            except Exception:
+                identity = None
+            if sim is not None:
+                prev = pair_map.get(key)
+                if prev is None or sim > prev:
+                    pair_map[key] = sim
+            if identity is not None:
+                prev_identity = identity_pair_map.get(key)
+                if prev_identity is None or identity > prev_identity:
+                    identity_pair_map[key] = identity
 
         n_points = len(proteins)
         distance_matrix = np.full((n_points, n_points), np.nan, dtype=float)
@@ -3145,6 +3660,37 @@ class ReceptorFamilyVisualizationDetail(ClassificationVisualizationMixin, ClassS
                     distance_matrix[i, j] = fill_distance
                     distance_matrix[j, i] = fill_distance
                     missing_pairs += 1
+
+        return {
+            "family": family_label,
+            "proteins": proteins,
+            "distance_matrix": distance_matrix,
+            "fill_distance": fill_distance,
+            "missing_pairs": missing_pairs,
+            "pair_map": pair_map,
+            "identity_pair_map": identity_pair_map,
+        }
+
+    def _build_family_cluster_payload(self, similarity_data):
+        proteins = similarity_data["proteins"]
+        family_label = similarity_data["family"]
+        if not proteins:
+            return {
+                "family": family_label,
+                "points": [],
+                "meta": {
+                    "n_points": 0,
+                    "note": "No human receptors were found for this receptor family.",
+                    "classes": self.family_entry.get("class_labels", []),
+                    "chemotypes": self.family_entry.get("chemotypes", []),
+                    "modality_groups": self.family_entry.get("modality_groups", []),
+                },
+            }
+
+        n_points = len(proteins)
+        distance_matrix = similarity_data["distance_matrix"]
+        fill_distance = similarity_data["fill_distance"]
+        missing_pairs = similarity_data["missing_pairs"]
 
         coords = (
             self._manual_tsne_fallback(distance_matrix)
@@ -3188,16 +3734,116 @@ class ReceptorFamilyVisualizationDetail(ClassificationVisualizationMixin, ClassS
             },
         }
 
+    def _build_family_tree_ui_payload(self, tree_payload, similarity_data):
+        payload = json.loads(json.dumps(tree_payload or {}))
+        proteins = similarity_data["proteins"]
+        if not proteins:
+            payload.setdefault("tree", "")
+            payload.setdefault("annotations", {})
+            payload.setdefault("Gprot_coupling", {})
+            payload["entities"] = []
+            payload["matrix"] = []
+            payload["meta"] = dict(payload.get("meta") or {})
+            payload["meta"].update({
+                "n_points": 0,
+                "note": "No human receptors were found for this receptor family.",
+                "classes": self.family_entry.get("class_labels", []),
+                "chemotypes": self.family_entry.get("chemotypes", []),
+                "modality_groups": self.family_entry.get("modality_groups", []),
+            })
+            return payload
+
+        protein_ids = [protein.id for protein in proteins]
+        pair_map = similarity_data["pair_map"]
+        identity_pair_map = similarity_data.get("identity_pair_map", {})
+        distance_matrix = similarity_data["distance_matrix"]
+
+        entities = []
+        for idx, protein in enumerate(proteins):
+            fam = getattr(protein.family, "parent", None)
+            lig = getattr(fam, "parent", None) if fam else None
+            cls = getattr(lig, "parent", None) if lig else None
+            class_info = self._normalize_class_display(getattr(cls, "name", ""))
+            primary_genes = getattr(protein, "primary_genes_self", None) or []
+            gene_label = primary_genes[0].name if primary_genes else (
+                str(protein.entry_name or "").split("_", 1)[0].upper()
+            )
+            entities.append({
+                "symbol": protein.entry_name,
+                "name": protein.short(),
+                "short_label": protein.entry_short(),
+                "gene_label": gene_label,
+                "subtitle": class_info["label"],
+                "slug": getattr(protein.family, "slug", "") or "",
+                "color": class_info["color"],
+                "protein_url": f"/protein/{protein.entry_name}",
+            })
+
+        matrix_rows = []
+        for i, protein in enumerate(proteins):
+            row = []
+            for j, other_protein in enumerate(proteins):
+                if i == j:
+                    similarity = 100.0
+                    identity = 100.0
+                else:
+                    pair_key = (min(protein_ids[i], protein_ids[j]), max(protein_ids[i], protein_ids[j]))
+                    similarity = pair_map.get(pair_key)
+                    identity = identity_pair_map.get(pair_key)
+                row.append({
+                    "source": protein.entry_name,
+                    "target": other_protein.entry_name,
+                    "identity": float(identity) if identity is not None else None,
+                    "identity_display": self._format_similarity_display(identity),
+                    "similarity": float(similarity) if similarity is not None else None,
+                    "similarity_display": self._format_similarity_display(similarity),
+                    "distance": float(distance_matrix[i, j]),
+                })
+            matrix_rows.append(row)
+
+        payload.setdefault("meta", {})
+        payload["meta"].update({
+            "n_points": len(proteins),
+            "classes": self.family_entry.get("class_labels", []),
+            "chemotypes": self.family_entry.get("chemotypes", []),
+            "modality_groups": self.family_entry.get("modality_groups", []),
+        })
+        payload["entities"] = entities
+        payload["matrix"] = matrix_rows
+        return payload
+
     def get_context_data(self, **kwargs):
         ctx = super(ReceptorFamilyVisualizationDetail, self).get_context_data(**kwargs)
-        payload = self._build_family_cluster_payload()
+        similarity_data = self._build_family_similarity_dataset()
+        tree_row = (
+            TreeNetwork.objects
+            .filter(group_key=str(self.family_entry.get("key") or ""))
+            .only("payload", "protein_count", "updated_at")
+            .first()
+        )
+        payload = tree_row.payload if tree_row and tree_row.payload else {
+            "tree": "",
+            "annotations": {},
+            "Gprot_coupling": {},
+            "meta": {
+                "n_points": 0,
+                "classes": self.family_entry.get("class_labels", []),
+                "chemotypes": self.family_entry.get("chemotypes", []),
+                "modality_groups": self.family_entry.get("modality_groups", []),
+                "note": "No persisted family tree payload is available yet. Run build_treenetwork during the data build.",
+            },
+        }
+        tree_payload = self._build_family_tree_ui_payload(payload, similarity_data)
+        cluster_payload = self._build_family_cluster_payload(similarity_data)
         ctx["page_title"] = self.family_entry["label"]
         ctx["page_description"] = (
-            "Dynamic receptor-family cluster computed from pairwise sequence similarity at page load."
+            "Persisted receptor-family phylogenetic tree paired with a sequence-similarity cluster view."
         )
         ctx["family_entry_json"] = json.dumps(self.family_entry)
-        ctx["family_payload_json"] = json.dumps(payload)
-        ctx["family_receptor_count"] = self.family_entry.get("receptor_count", 0)
+        ctx["family_tree_payload_json"] = json.dumps(tree_payload)
+        ctx["family_cluster_payload_json"] = json.dumps(cluster_payload)
+        ctx["family_receptor_count"] = tree_row.protein_count if tree_row else self.family_entry.get("receptor_count", 0)
+        ctx["family_tree_has_payload"] = bool(tree_payload.get("tree"))
         return ctx
 
 
@@ -4086,7 +4732,7 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
 
         # Temporary label tweaks (to be removed after DB rebuild)
         try:
-            if str(clazz).strip().upper() == "OTHER GPCRS":
+            if str(clazz).strip().upper() in {"OTHER GPCRS", "CLASSLESS", "UNCLASSIFIED"}:
                 clazz = "Unclassified"
             if str(receptor_family).strip().upper() == "OTHER GPCR ORPHANS":
                 receptor_family = "Orphan receptor"
@@ -4112,6 +4758,7 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
             point_dataset="sequence",
             group_key=group_key,
             restrict_neighbor_targets_to_refs=restrict_neighbor_targets_to_refs,
+            filter_entry_names=None,
         )
 
     def _build_clustercoord_sequence_dataset_db(
@@ -4122,6 +4769,7 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
         point_dataset,
         group_key,
         restrict_neighbor_targets_to_refs,
+        filter_entry_names=None,
     ):
         """
         Shared loader for sequence-like datasets stored in ClusterCoord.
@@ -4143,6 +4791,29 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
             )
             .order_by('protein__entry_name')
         )
+        fallback_class_key = self.class_key_from_group_key(group_key)
+        if fallback_class_key == "U" and not rows.exists():
+            rows = (
+                ClusterCoord.objects
+                .filter(
+                    dataset_type=dataset_type,
+                    plot_type=plot_type,
+                    group_key=self.GLOBAL_GROUP_KEY,
+                    protein__species_id=1,
+                )
+                .filter(self._visualization_class_clustercoord_q(fallback_class_key))
+                .select_related(
+                    'protein',
+                    'protein__family',
+                    'protein__family__parent',
+                    'protein__family__parent__parent',
+                    'protein__family__parent__parent__parent',
+                )
+                .order_by('protein__entry_name')
+            )
+
+        if filter_entry_names:
+            rows = rows.filter(protein__entry_name__in=filter_entry_names)
 
         # Avoid N+1 for gene lookups: build a single mapping.
         protein_ids = list(rows.values_list('protein_id', flat=True))
@@ -4187,7 +4858,7 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
             "n": len(points),
         }
 
-    def _build_structure_dataset_db(self, state, pf_class_map, plot_type, group_key):
+    def _build_structure_dataset_db(self, state, pf_class_map, plot_type, group_key, filter_entry_names=None):
         """
         Load persisted coordinates for the structure dataset (active/inactive)
         from ClusterCoord.
@@ -4215,6 +4886,29 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
             )
             .order_by('protein__entry_name')
         )
+        fallback_class_key = self.class_key_from_group_key(group_key)
+        if fallback_class_key == "U" and not rows.exists():
+            rows = (
+                ClusterCoord.objects
+                .filter(
+                    dataset_type=dataset_type,
+                    plot_type=plot_type,
+                    group_key=self.GLOBAL_GROUP_KEY,
+                    protein__species_id=1,
+                )
+                .filter(self._visualization_class_clustercoord_q(fallback_class_key))
+                .select_related(
+                    'protein',
+                    'protein__family',
+                    'protein__family__parent',
+                    'protein__family__parent__parent',
+                    'protein__family__parent__parent__parent',
+                )
+                .order_by('protein__entry_name')
+            )
+
+        if filter_entry_names:
+            rows = rows.filter(protein__entry_name__in=filter_entry_names)
 
         # Avoid N+1 for gene lookups: build a single mapping.
         protein_ids = list(rows.values_list('protein_id', flat=True))
@@ -4247,27 +4941,31 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
         method = self._plot_method_key(plot_type)
         return {"method": method, "points": points, "n": len(points), "state": state}
 
-    def _build_payload_db(self, plot_type, group_key=None, restrict_neighbor_targets_to_refs=True):
+    def _build_payload_db(self, plot_type, group_key=None, restrict_neighbor_targets_to_refs=True, filter_entry_names=None):
         group_key = group_key or self.GLOBAL_GROUP_KEY
         is_class_scoped = group_key != self.GLOBAL_GROUP_KEY
+        filter_entry_names = list(filter_entry_names or [])
         pf_class_map = self._get_pf_classification_map_db()
         payload = {
-            "sequence": self._build_sequence_dataset_db(
-                pf_class_map,
-                plot_type,
+            "sequence": self._build_clustercoord_sequence_dataset_db(
+                pf_class_map=pf_class_map,
+                plot_type=plot_type,
+                dataset_type=ClusterCoord.DATASET_SEQUENCE,
+                point_dataset="sequence",
                 group_key=group_key,
                 restrict_neighbor_targets_to_refs=restrict_neighbor_targets_to_refs,
+                filter_entry_names=filter_entry_names,
             ),
             "structure": {
                 "inactive": (
                     {"method": self._plot_method_key(plot_type), "points": [], "n": 0, "state": "inactive"}
                     if self._is_sequence_only_plot_type(plot_type)
-                    else self._build_structure_dataset_db("inactive", pf_class_map, plot_type, group_key=group_key)
+                    else self._build_structure_dataset_db("inactive", pf_class_map, plot_type, group_key=group_key, filter_entry_names=filter_entry_names)
                 ),
                 "active": (
                     {"method": self._plot_method_key(plot_type), "points": [], "n": 0, "state": "active"}
                     if self._is_sequence_only_plot_type(plot_type)
-                    else self._build_structure_dataset_db("active", pf_class_map, plot_type, group_key=group_key)
+                    else self._build_structure_dataset_db("active", pf_class_map, plot_type, group_key=group_key, filter_entry_names=filter_entry_names)
                 ),
             },
         }
@@ -4322,7 +5020,19 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
                 return JsonResponse({"error": str(e)}, status=400)
             raise Http404(str(e))
         group_key = scope["group_key"]
-        restrict_neighbor_targets_to_refs = scope["class_key"] is None
+        tree_filter = None
+        if request.GET.get("filter_type") or request.GET.get("filter_selection"):
+            try:
+                tree_filter = self.resolve_tree_visualization_selection(
+                    request.GET.get("filter_type"),
+                    request.GET.get("filter_selection"),
+                )
+            except ValueError as e:
+                if want_json:
+                    return JsonResponse({"error": str(e)}, status=400)
+                raise Http404(str(e))
+        filter_entry_names = tree_filter.get("entry_names", []) if tree_filter else []
+        restrict_neighbor_targets_to_refs = scope["class_key"] is None or bool(filter_entry_names)
         if want_json:
             try:
                 plots_param = request.GET.get("plots")
@@ -4360,6 +5070,7 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
                                 plot_type,
                                 group_key=group_key,
                                 restrict_neighbor_targets_to_refs=restrict_neighbor_targets_to_refs,
+                                filter_entry_names=filter_entry_names,
                             )
                         except Exception as e:
                             errors[p] = str(e)
@@ -4393,6 +5104,7 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
                     plot_type,
                     group_key=group_key,
                     restrict_neighbor_targets_to_refs=restrict_neighbor_targets_to_refs,
+                    filter_entry_names=filter_entry_names,
                 )
             except Exception as e:
                 return JsonResponse({"error": str(e)}, status=400)
@@ -4406,6 +5118,12 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
         """
         ctx = super(StructureSim, self).get_context_data(**kwargs)
         scope = self.get_requested_visualization_scope(raise_404=True)
+        tree_filter = None
+        if self.request.GET.get("filter_type") or self.request.GET.get("filter_selection"):
+            tree_filter = self.resolve_tree_visualization_selection(
+                self.request.GET.get("filter_type"),
+                self.request.GET.get("filter_selection"),
+            )
         base = self.request.build_absolute_uri(self.request.path)
         params = self.request.GET.copy()
         params.pop("format", None)
@@ -4413,6 +5131,10 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
         params["format"] = "json"
         ctx["embed_url"] = "{}?{}".format(base, params.urlencode())
         ctx["structuresim_scope_class"] = scope["class_key"] or ""
-        ctx["structuresim_scope_title"] = scope["config"]["title"] if scope["config"] else "All classes"
+        ctx["structuresim_scope_title"] = (
+            tree_filter["selection"]
+            if tree_filter
+            else (scope["config"]["title"] if scope["config"] else "All classes")
+        )
         ctx["structuresim_embed_mode"] = str(self.request.GET.get("embed") or "").strip().lower() in {"1", "true", "yes"}
         return ctx

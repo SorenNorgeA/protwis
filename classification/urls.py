@@ -26,6 +26,11 @@ urlpatterns = [
         name='classification-visualizations-class',
     ),
     url(
+        r'^visualizations/tree[/]?$',
+        views.ClassificationTreeVisualizationDetail.as_view(),
+        name='classification-visualizations-tree',
+    ),
+    url(
         r'^visualizations/superfamily[/]?$',
         views.GPCRSuperfamilyVisualizationDetail.as_view(),
         name='classification-visualizations-superfamily',

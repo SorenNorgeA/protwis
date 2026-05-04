@@ -67,36 +67,47 @@
   overflow: hidden;
 }
 
+.cv-detail-wheel-panel {
+  display: none;
+}
+
+.cv-detail-wheel-panel.is-active {
+  display: block;
+}
+
+.cv-detail-wheel-toggle-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
+}
+
+.cv-detail-wheel-toggle {
+  border: 1px solid #2e6da4;
+  border-radius: 999px;
+  background: #337ab7;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 10px 18px;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.cv-detail-wheel-toggle:hover,
+.cv-detail-wheel-toggle:focus {
+  background: #286090;
+  border-color: #204d74;
+  color: #fff;
+  text-decoration: none;
+  outline: none;
+}
+
 .cv-detail-frame {
   width: 100%;
   border: 0;
   background: #fff;
   display: block;
   overflow: hidden;
-}
-
-.cv-detail-placeholder {
-  margin: 18px auto;
-  max-width: 760px;
-  padding: 56px 40px;
-  border: 1px dashed #c8d7e8;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #fbfdff 0%, #f4f8fc 100%);
-  text-align: center;
-}
-
-.cv-detail-placeholder h3 {
-  margin-top: 0;
-  margin-bottom: 12px;
-  color: #3f5368;
-  font-weight: 600;
-}
-
-.cv-detail-placeholder p {
-  margin: 0;
-  color: #5d6f81;
-  font-size: 15px;
-  line-height: 1.6;
 }
 
 .cv-detail-loading-overlay {
@@ -156,10 +167,7 @@
     <div class="cv-detail-tabs-bar">
       <ul id="cvSuperfamilyTabs" class="nav nav-tabs cv-detail-tabs is-disabled" role="tablist" aria-disabled="true">
         <li role="presentation" class="active">
-          <a href="#cv-superfamily-wheel-classic-tab" aria-controls="cv-superfamily-wheel-classic-tab" role="tab" data-toggle="tab">GPCRome wheel</a>
-        </li>
-        <li role="presentation">
-          <a href="#cv-superfamily-wheel-odorant-tab" aria-controls="cv-superfamily-wheel-odorant-tab" role="tab" data-toggle="tab">Odorant GPCR wheel</a>
+          <a href="#cv-superfamily-wheel-tab" aria-controls="cv-superfamily-wheel-tab" role="tab" data-toggle="tab">GPCRome wheel</a>
         </li>
         <li role="presentation">
           <a href="#cv-superfamily-cluster-tab" aria-controls="cv-superfamily-cluster-tab" role="tab" data-toggle="tab">Cluster</a>
@@ -167,36 +175,45 @@
         <li role="presentation">
           <a href="#cv-superfamily-matrix-tab" aria-controls="cv-superfamily-matrix-tab" role="tab" data-toggle="tab">Matrix</a>
         </li>
-        <li role="presentation">
-          <a href="#cv-superfamily-tree-tab" aria-controls="cv-superfamily-tree-tab" role="tab" data-toggle="tab">Tree</a>
-        </li>
       </ul>
       <div class="cv-detail-title-inline">{{ page_title }}</div>
     </div>
 
     <div class="tab-content cv-detail-body">
-      <div role="tabpanel" class="tab-pane active" id="cv-superfamily-wheel-classic-tab">
-        <iframe
-          id="cvSuperfamilyWheelClassicFrame"
-          class="cv-detail-frame cv-detail-frame--wheel"
-          data-src="{{ wheel_classic_url }}"
-          title="{{ page_title }} GPCRome wheel"
-          data-initial-height="1240"
-          scrolling="no"
-          loading="eager"
-        ></iframe>
-      </div>
-
-      <div role="tabpanel" class="tab-pane" id="cv-superfamily-wheel-odorant-tab">
-        <iframe
-          id="cvSuperfamilyWheelOdorantFrame"
-          class="cv-detail-frame cv-detail-frame--wheel"
-          data-src="{{ wheel_odorant_url }}"
-          title="{{ page_title }} odorant GPCR wheel"
-          data-initial-height="1240"
-          scrolling="no"
-          loading="eager"
-        ></iframe>
+      <div role="tabpanel" class="tab-pane active" id="cv-superfamily-wheel-tab">
+        <div id="cvSuperfamilyWheelClassicPanel" class="cv-detail-wheel-panel is-active" data-wheel-variant="classic">
+          <iframe
+            id="cvSuperfamilyWheelClassicFrame"
+            class="cv-detail-frame cv-detail-frame--wheel"
+            data-src="{{ wheel_classic_url }}"
+            title="{{ page_title }} GPCRome wheel"
+            data-initial-height="1240"
+            scrolling="no"
+            loading="eager"
+          ></iframe>
+        </div>
+        <div id="cvSuperfamilyWheelOdorantPanel" class="cv-detail-wheel-panel" data-wheel-variant="odorant">
+          <iframe
+            id="cvSuperfamilyWheelOdorantFrame"
+            class="cv-detail-frame cv-detail-frame--wheel"
+            data-src="{{ wheel_odorant_url }}"
+            title="{{ page_title }} odorant GPCR wheel"
+            data-initial-height="1240"
+            scrolling="no"
+            loading="eager"
+          ></iframe>
+        </div>
+        <div class="cv-detail-wheel-toggle-wrap">
+          <button
+            type="button"
+            id="cvSuperfamilyWheelToggle"
+            class="cv-detail-wheel-toggle"
+            aria-controls="cvSuperfamilyWheelClassicPanel cvSuperfamilyWheelOdorantPanel"
+            aria-pressed="false"
+          >
+            To view olfactory receptors (O1/O2) click here
+          </button>
+        </div>
       </div>
 
       <div role="tabpanel" class="tab-pane" id="cv-superfamily-cluster-tab">
@@ -223,17 +240,6 @@
         ></iframe>
       </div>
 
-      <div role="tabpanel" class="tab-pane" id="cv-superfamily-tree-tab">
-        <iframe
-          id="cvSuperfamilyTreeFrame"
-          class="cv-detail-frame"
-          data-src="{{ tree_url }}"
-          title="{{ page_title }} tree"
-          data-initial-height="980"
-          scrolling="no"
-          loading="eager"
-        ></iframe>
-      </div>
     </div>
   </div>
 </div>
@@ -246,9 +252,24 @@
     "cvSuperfamilyWheelClassicFrame",
     "cvSuperfamilyWheelOdorantFrame",
     "cvSuperfamilyClusterFrame",
-    "cvSuperfamilyMatrixFrame",
-    "cvSuperfamilyTreeFrame"
+    "cvSuperfamilyMatrixFrame"
   ];
+  const WHEEL_TOGGLE_BUTTON_ID = "cvSuperfamilyWheelToggle";
+  const WHEEL_VARIANTS = {
+    classic: {
+      panelId: "cvSuperfamilyWheelClassicPanel",
+      frameId: "cvSuperfamilyWheelClassicFrame",
+      toggleText: "To view olfactory receptors (O1/O2) click here",
+      pressed: "false"
+    },
+    odorant: {
+      panelId: "cvSuperfamilyWheelOdorantPanel",
+      frameId: "cvSuperfamilyWheelOdorantFrame",
+      toggleText: "Back to GPCRome wheel",
+      pressed: "true"
+    }
+  };
+  let activeWheelVariant = "classic";
 
   function anchoredFrameHeight(doc, selector) {
     if (!doc || !selector) return 0;
@@ -280,9 +301,7 @@
           ? "#GPCRomewheel_odorant_tab"
           : (frame.id === "cvSuperfamilyClusterFrame"
             ? ".ncct-page"
-            : (frame.id === "cvSuperfamilyMatrixFrame"
-              ? ".page-wrap"
-              : (frame.id === "cvSuperfamilyTreeFrame" ? ".sftree-page" : ""))));
+            : (frame.id === "cvSuperfamilyMatrixFrame" ? ".page-wrap" : "")));
       const anchoredHeight = anchoredSelector
         ? anchoredFrameHeight(doc, anchoredSelector)
         : 0;
@@ -319,6 +338,54 @@
       resizeFrame(frame);
       window.setTimeout(function() { resizeFrame(frame); }, 80);
       window.setTimeout(function() { resizeFrame(frame); }, 240);
+    });
+  }
+
+  function activeWheelFrame() {
+    const config = WHEEL_VARIANTS[activeWheelVariant] || WHEEL_VARIANTS.classic;
+    return document.getElementById(config.frameId);
+  }
+
+  function syncWheelPanels() {
+    Object.keys(WHEEL_VARIANTS).forEach(function(variantKey) {
+      const config = WHEEL_VARIANTS[variantKey];
+      const panel = document.getElementById(config.panelId);
+      if (!panel) return;
+      panel.classList.toggle("is-active", variantKey === activeWheelVariant);
+    });
+    const toggleButton = document.getElementById(WHEEL_TOGGLE_BUTTON_ID);
+    if (toggleButton) {
+      const activeConfig = WHEEL_VARIANTS[activeWheelVariant] || WHEEL_VARIANTS.classic;
+      toggleButton.textContent = activeConfig.toggleText;
+      toggleButton.setAttribute("aria-pressed", activeConfig.pressed);
+      toggleButton.classList.toggle("is-odorant", activeWheelVariant === "odorant");
+    }
+  }
+
+  function resizeActiveWheelFrame() {
+    const frame = activeWheelFrame();
+    ensureFrameSource(frame);
+    window.setTimeout(function() {
+      resizeFrame(frame);
+    }, 30);
+    window.setTimeout(function() {
+      resizeFrame(frame);
+    }, 260);
+  }
+
+  function setActiveWheelVariant(nextVariant) {
+    if (!WHEEL_VARIANTS[nextVariant] || nextVariant === activeWheelVariant) return;
+    activeWheelVariant = nextVariant;
+    syncWheelPanels();
+    resizeActiveWheelFrame();
+  }
+
+  function wireWheelToggle() {
+    const toggleButton = document.getElementById(WHEEL_TOGGLE_BUTTON_ID);
+    if (!toggleButton) return;
+    syncWheelPanels();
+    toggleButton.addEventListener("click", function() {
+      setActiveWheelVariant(activeWheelVariant === "classic" ? "odorant" : "classic");
     });
   }
 
@@ -390,9 +457,15 @@
     }, 60);
   });
 
+  wireWheelToggle();
+
   $('a[data-toggle="tab"]').on('shown.bs.tab', function (event) {
     const targetSelector = $(event.target).attr('href');
     if (!targetSelector) return;
+    if (targetSelector === "#cv-superfamily-wheel-tab") {
+      resizeActiveWheelFrame();
+      return;
+    }
     const pane = document.querySelector(targetSelector);
     if (!pane) return;
     const frame = pane.querySelector('iframe');

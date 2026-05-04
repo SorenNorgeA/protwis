@@ -18,9 +18,9 @@
 }
 
 .cv-detail-tabs-bar {
+  position: relative;
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
   gap: 12px;
   padding: 0 8px;
   background: #f8fbfe;
@@ -32,20 +32,68 @@
   padding: 0;
   background: transparent;
   flex: 1 1 auto;
+  position: relative;
+  z-index: 1;
 }
 
 .cv-detail-title-inline {
-  flex: 0 0 auto;
-  padding: 0 4px 10px 12px;
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  padding: 0 4px;
   font-size: 20px;
   line-height: 1.2;
   font-weight: 600;
   color: #3f5368;
-  text-align: right;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .cv-detail-tabs > li > a {
   margin-top: 10px;
+}
+
+.cv-detail-tabs > li.disabled > span {
+  position: relative;
+  display: block;
+  margin-top: 10px;
+  margin-right: 2px;
+  padding: 10px 15px;
+  border: 1px solid transparent;
+  border-radius: 4px 4px 0 0;
+  color: #8a9bad;
+  cursor: not-allowed;
+  background: transparent;
+}
+
+.cv-detail-tabs > li.disabled > span::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  z-index: 20;
+  width: max-content;
+  max-width: 320px;
+  transform: translateX(-50%);
+  padding: 7px 10px;
+  border: 1px solid #cbd8e6;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 18px rgba(31, 60, 90, 0.16);
+  color: #3f5368;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 60ms ease;
+}
+
+.cv-detail-tabs > li.disabled > span:hover::after {
+  opacity: 1;
 }
 
 .cv-detail-body {
@@ -84,12 +132,17 @@
   <div class="cv-detail-card">
     <div class="cv-detail-tabs-bar">
       <ul class="nav nav-tabs cv-detail-tabs" role="tablist">
-        <li role="presentation" class="active">
+        {% if has_tree %}
+          <li role="presentation" class="active">
+            <a href="#cv-tree-tab" aria-controls="cv-tree-tab" role="tab" data-toggle="tab">Tree (classification)</a>
+          </li>
+        {% endif %}
+        <li role="presentation"{% if not has_tree %} class="active"{% endif %}>
           <a href="#cv-cluster-tab" aria-controls="cv-cluster-tab" role="tab" data-toggle="tab">Cluster</a>
         </li>
-        {% if has_tree %}
-          <li role="presentation">
-            <a href="#cv-tree-tab" aria-controls="cv-tree-tab" role="tab" data-toggle="tab">Tree</a>
+        {% if not has_tree %}
+          <li role="presentation" class="disabled">
+            <span role="tab" aria-disabled="true" aria-label="{{ tree_note }}" data-tooltip="{{ tree_note }}">Tree (classification)</span>
           </li>
         {% endif %}
       </ul>
@@ -97,20 +150,8 @@
     </div>
 
     <div class="tab-content cv-detail-body">
-      <div role="tabpanel" class="tab-pane active" id="cv-cluster-tab">
-        <iframe
-          id="cvClusterFrame"
-          class="cv-detail-frame cv-detail-frame--cluster"
-          src="{{ cluster_url }}"
-          title="{{ class_title }} cluster"
-          data-initial-height="640"
-          scrolling="no"
-          loading="lazy"
-        ></iframe>
-      </div>
-
       {% if has_tree %}
-        <div role="tabpanel" class="tab-pane" id="cv-tree-tab">
+        <div role="tabpanel" class="tab-pane active" id="cv-tree-tab">
           <iframe
             id="cvTreeFrame"
             class="cv-detail-frame cv-detail-frame--tree"
@@ -121,11 +162,19 @@
             loading="lazy"
           ></iframe>
         </div>
-      {% else %}
-        <div class="cv-detail-note alert alert-info">
-          Tree mode is intentionally unavailable for {{ class_key }} in this first merged view, so this class opens in cluster-only mode.
-        </div>
       {% endif %}
+
+      <div role="tabpanel" class="tab-pane{% if not has_tree %} active{% endif %}" id="cv-cluster-tab">
+        <iframe
+          id="cvClusterFrame"
+          class="cv-detail-frame cv-detail-frame--cluster"
+          src="{{ cluster_url }}"
+          title="{{ class_title }} cluster"
+          data-initial-height="640"
+          scrolling="no"
+          loading="lazy"
+        ></iframe>
+      </div>
     </div>
   </div>
 </div>

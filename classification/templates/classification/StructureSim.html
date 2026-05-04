@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block content %}
-<div class="container-fluid ss-page{% if structuresim_embed_mode %} ss-embed-mode{% endif %}">
+<div class="container-fluid ss-page{% if structuresim_embed_mode %} ss-embed-mode{% endif %}{% if structuresim_scope_class %} ss-class-scope{% endif %}">
   <div id="sim-status" style="display:none;"></div>
 
   <!-- How-to Modal -->
@@ -36,6 +36,12 @@
 
   <!-- toolbar (Wheel-like dropdown controls in one row) -->
   <div class="ss-toolbar">
+    <div class="ss-search-wrap">
+      <select id="ssReceptorSearch" class="form-control" style="width: 100%;">
+        <option value="">Search receptor</option>
+      </select>
+    </div>
+
     <!-- How-to -->
     <button id="ssHowToBtn" type="button" class="btn btn-primary btn-sm">
       <span class="glyphicon glyphicon-info-sign" style="vertical-align: top; line-height:1.3;"></span>
@@ -117,12 +123,6 @@
 
   <div class="ss-plot-grid" id="ssPlotGrid" aria-label="Plot and legends" style="display:none;">
     <div class="ss-left-col">
-      <div class="ss-search-wrap">
-        <select id="ssReceptorSearch" class="form-control" style="width: 100%;">
-          <option value="">Search receptor</option>
-        </select>
-      </div>
-      <div id="ssDetailsPanel" class="ss-static-panel" aria-label="Receptor details"></div>
       <aside id="ss-legend" class="ss-legend" aria-label="Legend">
         <div id="ss-legend-body"></div>
       </aside>
@@ -132,7 +132,10 @@
       <div id="plot" style="min-height: 540px;"></div>
     </div>
 
-    <aside id="ssSimilarPanel" class="ss-right-col ss-static-panel" aria-label="Most similar receptors"></aside>
+    <div class="ss-right-col">
+      <div id="ssDetailsPanel" class="ss-static-panel ss-details-panel" aria-label="Receptor details"></div>
+      <aside id="ssSimilarPanel" class="ss-static-panel" aria-label="Most similar receptors"></aside>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -206,7 +209,7 @@
   gap:10px;
   flex-wrap:wrap;
   margin: 10px 0 8px;
-  padding-left: 90px;
+  padding-left: 0;
 }
 .ss-left-col{
   min-width: 0;
@@ -219,6 +222,19 @@
 .ss-right-col{
   min-width: 0;
   align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+#ssSimilarPanel{
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+.ss-class-scope .ss-right-col #ssDetailsPanel,
+.ss-class-scope .ss-right-col #ssSimilarPanel{
+  width: calc(100% - 4px);
 }
 .ss-static-panel{
   border: 1px solid #e6e6e6;
@@ -229,26 +245,37 @@
   box-sizing: border-box;
 }
 #ssDetailsPanel{
-  max-width: 232px;
-  margin-left: auto;
+  width: 100%;
 }
 #ssDetailsPanel .ss-hover-panel,
 #ssDetailsPanel .ss-similar-panel{
-  font-size: 11px;
-}
-#ssDetailsPanel .ss-hover-panel-title{
   font-size: 12px;
-  margin-bottom: 6px;
 }
 #ssDetailsPanel .ss-hover-panel-kv{
-  margin: 0 0 3px 0;
-  line-height: 1.32;
+  margin: 0;
+  line-height: 1.35;
 }
-.ss-right-col{
-  min-width: 0;
-  align-self: start;
-  min-width: 420px;
-  overflow: hidden;
+.ss-detail-compact{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ss-detail-compact-row{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  line-height: 1.35;
+}
+.ss-detail-compact-item{
+  display: inline;
+  white-space: normal;
+}
+.ss-detail-compact-label{
+  font-weight: 700;
+}
+.ss-detail-compact-sep{
+  color: #9a9a9a;
 }
 .ss-toolbar .btn{
   text-align:center;
@@ -293,12 +320,11 @@
   margin-bottom: 0;
 }
 .ss-search-wrap{
-  width: 208px;
-  min-width: 208px;
-  max-width: 208px;
+  width: 260px;
+  min-width: 220px;
+  max-width: 260px;
   box-sizing: border-box;
-  margin-left: auto;
-  margin-right: 0;
+  margin: 0;
   font-size: 12px;
 }
 .ss-search-wrap .select2-container,
@@ -404,10 +430,15 @@
 /* left details/legend | plot | right similar table */
 .ss-plot-grid{
   display: grid;
-  grid-template-columns: minmax(220px, 18%) minmax(420px, 42%) minmax(420px, 40%);
+  grid-template-columns: minmax(120px, 12%) minmax(480px, 50%) minmax(430px, 38%);
   align-items: start;
   column-gap: 14px;
   margin-top: 14px; /* whitespace between toolbar and plot */
+}
+.ss-class-scope .ss-plot-grid{
+  grid-template-columns: minmax(200px, 13%) minmax(420px, 1fr) minmax(460px, 40%);
+  box-sizing: border-box;
+  padding-right: 8px;
 }
 .ss-hover-panel{
   position: relative;
@@ -460,6 +491,7 @@
   min-height: 220px;
   height: 100%;
   box-sizing: border-box;
+  width: 100%;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -782,7 +814,7 @@ body > #content.container > #gpcrdb_alert_placeholder {
     "Unknown": "#cccccc",
   };
 
-  const CLASS_ORDER = ['A','B1','B2','C','F','O1','O2','T2'];
+  const CLASS_ORDER = ['A','B1','B2','C','F','O1','O2','T2','U'];
 
   function showBusyLoader() {
     if (statusEl) {
@@ -1068,7 +1100,7 @@ body > #content.container > #gpcrdb_alert_placeholder {
       case 'C':  return 'pentagon';
       case 'F':  return 'hexagram';
       case 'T2': return 'diamond-wide';
-      case 'U':  return 'circle-open';
+      case 'U':  return 'circle';
       default:   return 'circle-open';
     }
   }
@@ -1195,22 +1227,36 @@ body > #content.container > #gpcrdb_alert_placeholder {
     return normClassCodeFromString((row && row.class_name) || '') || '';
   }
 
+  function detailItem(label, valueHtml) {
+    const value = normKey(valueHtml);
+    if (!value) return '';
+    return '<span class="ss-detail-compact-item"><span class="ss-detail-compact-label">' + escapeHtml(label) + ':</span> ' + value + '</span>';
+  }
+
   function buildPointDetailsHtml(p) {
-    const rows = [];
     const receptorParts = [];
     if (p && p.label) receptorParts.push(allowSubsOnly(p.label));
     if (p && p.uniprot) receptorParts.push(escapeHtml(p.uniprot));
     if (p && p.gene) receptorParts.push(escapeHtml(p.gene));
-    if (p && p.pdb) rows.push('<div class="ss-hover-panel-kv"><b>PDB</b>: ' + escapeHtml(p.pdb) + '</div>');
-    if (receptorParts.length) rows.push('<div class="ss-hover-panel-kv"><b>Receptor</b>: ' + receptorParts.join(' | ') + '</div>');
-    if (p && p['Receptor family']) rows.push('<div class="ss-hover-panel-kv"><b>Receptor family</b>: ' + escapeHtml(p['Receptor family']) + '</div>');
-    if (p && p.Class) rows.push('<div class="ss-hover-panel-kv"><b>Class</b>: ' + escapeHtml(p.Class) + '</div>');
-    if (p && p.Modality) rows.push('<div class="ss-hover-panel-kv"><b>Modality</b>: ' + escapeHtml(p.Modality) + '</div>');
-    if (p && p.Chemotype) rows.push('<div class="ss-hover-panel-kv"><b>Chemotype</b>: ' + escapeHtml(p.Chemotype) + '</div>');
-    if (p && p.Sense) rows.push('<div class="ss-hover-panel-kv"><b>Sense</b>: ' + escapeHtml(p.Sense) + '</div>');
+    const firstRow = [];
+    if (receptorParts.length) firstRow.push(detailItem('Receptor', receptorParts.join(' | ')));
+    if (p && p.pdb) firstRow.push(detailItem('PDB', escapeHtml(p.pdb)));
+    if (p && p['Receptor family']) firstRow.push(detailItem('Family', escapeHtml(p['Receptor family'])));
+
+    const secondRow = [];
+    if (p && p.Modality) secondRow.push(detailItem('Modality', escapeHtml(p.Modality)));
+    if (p && p.Chemotype) secondRow.push(detailItem('Chemotype', escapeHtml(p.Chemotype)));
+    if (p && p.Sense) secondRow.push(detailItem('Sense', escapeHtml(p.Sense)));
+
+    const rows = [];
+    if (firstRow.length) {
+      rows.push('<div class="ss-detail-compact-row">' + firstRow.join('<span class="ss-detail-compact-sep">|</span>') + '</div>');
+    }
+    if (secondRow.length) {
+      rows.push('<div class="ss-detail-compact-row">' + secondRow.join('<span class="ss-detail-compact-sep">|</span>') + '</div>');
+    }
     return (
-      '<div class="ss-hover-panel-section">' +
-        '<div class="ss-hover-panel-title">Receptor details</div>' +
+      '<div class="ss-detail-compact">' +
         rows.join('') +
       '</div>'
     );
@@ -1294,13 +1340,17 @@ body > #content.container > #gpcrdb_alert_placeholder {
     const plotWrap = plotDiv.closest('.ss-plot-wrap') || plotDiv;
     const plotRect = plotWrap.getBoundingClientRect();
     const plotHeight = Math.max(220, Math.floor(plotRect.height - 2));
-    similarPanelHost.style.height = plotHeight + 'px';
-    similarPanelHost.style.maxHeight = plotHeight + 'px';
+    const detailsHeight = detailsPanelHost
+      ? Math.ceil(detailsPanelHost.getBoundingClientRect().height)
+      : 0;
+    const availableHeight = Math.max(220, plotHeight - detailsHeight - 10);
+    similarPanelHost.style.height = availableHeight + 'px';
+    similarPanelHost.style.maxHeight = availableHeight + 'px';
 
     const sectionEl = similarPanelEl.querySelector('.ss-hover-panel-section');
     if (!sectionEl) return;
-    sectionEl.style.height = plotHeight + 'px';
-    sectionEl.style.maxHeight = plotHeight + 'px';
+    sectionEl.style.height = availableHeight + 'px';
+    sectionEl.style.maxHeight = availableHeight + 'px';
     sectionEl.style.overflow = 'hidden';
 
     const tableWrapEl = similarPanelEl.querySelector('.ss-hover-panel-table-wrap');
@@ -1351,8 +1401,7 @@ body > #content.container > #gpcrdb_alert_placeholder {
         { data: 'similarity' },
         { data: 'identity' },
         { data: 'receptor_html' },
-        { data: 'receptor_family' },
-        { data: 'class_text' }
+        { data: 'receptor_family' }
       ],
       columnDefs: [
         {
@@ -1367,7 +1416,7 @@ body > #content.container > #gpcrdb_alert_placeholder {
           }
         },
         {
-          targets: [2, 3, 4],
+          targets: [2, 3],
           render: function (data) {
             return data == null ? '' : data;
           }
@@ -1400,7 +1449,6 @@ body > #content.container > #gpcrdb_alert_placeholder {
         identity: formatNeighborScore(row && row.identity),
         receptor_html: buildNeighborReceptorHtml(row) || '-',
         receptor_family: escapeHtml((row && row.receptor_family) || ''),
-        class_text: escapeHtml(buildNeighborClassText(row)),
       })));
       dt.draw();
       applySimilarTableHoverHighlight();
@@ -1415,7 +1463,6 @@ body > #content.container > #gpcrdb_alert_placeholder {
         '<td class="ss-num">' + escapeHtml(formatNeighborScore(row && row.identity)) + '</td>' +
         '<td>' + (buildNeighborReceptorHtml(row) || '-') + '</td>' +
         '<td>' + escapeHtml((row && row.receptor_family) || '') + '</td>' +
-        '<td>' + escapeHtml(buildNeighborClassText(row)) + '</td>' +
       '</tr>'
     )).join('');
     applySimilarTableHoverHighlight();
@@ -1426,13 +1473,8 @@ body > #content.container > #gpcrdb_alert_placeholder {
     destroySimilarTable();
     hoverPanelEl.className = 'ss-hover-panel';
     hoverPanelEl.innerHTML = (
-      '<div class="ss-hover-panel-body">' +
-        '<div class="ss-hover-panel-section">' +
-          '<div class="ss-hover-panel-title">Receptor details</div>' +
-          '<div class="ss-hover-panel-empty">' +
-            'Hover datapoints to view receptor details. Click datapoints to freeze the selection.' +
-          '</div>' +
-        '</div>' +
+      '<div class="ss-hover-panel-empty">' +
+        'Hover datapoints to view receptor details. Click datapoints to freeze the selection.' +
       '</div>'
     );
     if (similarPanelEl) {
@@ -1470,7 +1512,6 @@ body > #content.container > #gpcrdb_alert_placeholder {
                     '<th class="ss-num">ID</th>' +
                     '<th>Receptor</th>' +
                     '<th>Receptor family</th>' +
-                    '<th>Class</th>' +
                   '</tr></thead>' +
                   '<tbody></tbody>' +
                 '</table>' +

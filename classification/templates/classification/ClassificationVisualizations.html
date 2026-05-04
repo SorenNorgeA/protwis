@@ -5,25 +5,27 @@
 .cv-landing {
   position: relative;
   padding: 22px 0 36px;
-}
-
-.cv-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-
-.cv-scheme-toggle .btn {
-  min-width: 74px;
+  --cv-column-gap: 18px;
+  --cv-class-root-width: 40%;
+  --cv-modality-label-width: 180px;
+  --cv-static-box-width: 540px;
+  --cv-static-box-padding: 14px;
+  --cv-header-width: 180px;
+  --cv-header-width-wide: 270px;
+  --cv-superfamily-header-offset: 4px;
+  --cv-modality-header-offset: 14px;
+  --cv-color-superfamily: #22508e;
+  --cv-color-class: #3171ae;
+  --cv-color-family: #6698cb;
+  --cv-color-modality: #3d713f;
+  --cv-color-chemotype: #74b255;
 }
 
 .cv-landing-layout {
   display: grid;
   grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr) minmax(320px, 1fr);
-  gap: 18px;
-  align-items: stretch;
+  gap: var(--cv-column-gap);
+  align-items: start;
 }
 
 .cv-panel {
@@ -35,27 +37,70 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  height: var(--cv-column-height, auto);
 }
 
-.cv-panel h3 {
+.cv-panel-header {
   margin-top: 0;
   margin-bottom: 22px;
-  font-size: 21px;
-  text-align: center;
+}
+
+.cv-panel-heading-grid,
+.cv-panel-heading-single {
+  display: grid;
+  gap: var(--cv-column-gap);
+  align-items: stretch;
+}
+
+.cv-panel-heading-grid {
+  width: min(100%, calc(var(--cv-static-box-width) - (var(--cv-static-box-padding) * 2)));
+  margin: 0 auto;
+}
+
+.cv-panel-heading-grid--class {
+  grid-template-columns: minmax(0, var(--cv-class-root-width)) minmax(0, calc(100% - var(--cv-class-root-width)));
+}
+
+.cv-panel-heading-grid--modality {
+  grid-template-columns: minmax(0, var(--cv-modality-label-width)) minmax(0, 1fr);
 }
 
 .cv-heading-box {
-  display: inline-block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, var(--cv-header-width));
+  min-height: 46px;
   padding: 8px 16px;
-  border: 1px solid #7f8fa3;
-  border-radius: 999px;
+  border: 1px solid #000;
+  border-radius: 10px;
   background: #f4f9ff;
   box-shadow: 0 4px 12px rgba(31, 120, 180, 0.08);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  text-transform: uppercase;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.cv-panel-heading-single .cv-heading-box {
+  width: min(100%, var(--cv-header-width-wide));
+  margin: 0 auto;
+}
+
+.cv-heading-slot {
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.cv-heading-slot--branch {
+  padding-left: var(--cv-column-gap);
 }
 
 .cv-btn-theme {
   color: #fff;
+  border-color: #000;
   border-width: 1px;
   border-style: solid;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -74,6 +119,7 @@
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
+  justify-content: flex-start;
   min-height: 0;
 }
 
@@ -100,23 +146,45 @@
 }
 
 .cv-node-btn[data-role="superfamily"] {
-  background: #3C5488;
+  background: var(--cv-color-superfamily);
 }
 
 .cv-node-btn[data-role="class"] {
-  background: #5C78B0;
+  background: var(--cv-color-class);
 }
 
 .cv-node-btn[data-role="family"] {
-  background: #8FB4E8;
+  background: var(--cv-color-family);
 }
 
 .cv-node-btn[data-role="modality"] {
-  background: #7A68C3;
+  background: var(--cv-color-modality);
 }
 
 .cv-node-btn[data-role="chemotype"] {
-  background: #A691E6;
+  background: var(--cv-color-chemotype);
+}
+
+.cv-heading-box--superfamily {
+  background: var(--cv-color-superfamily);
+  transform: translateX(var(--cv-superfamily-header-offset));
+}
+
+.cv-heading-box--class {
+  background: var(--cv-color-class);
+}
+
+.cv-heading-box--family {
+  background: var(--cv-color-family);
+}
+
+.cv-heading-box--modality {
+  background: var(--cv-color-modality);
+  transform: translateX(var(--cv-modality-header-offset));
+}
+
+.cv-heading-box--chemotype {
+  background: var(--cv-color-chemotype);
 }
 
 .cv-landing.cv-scheme-test .cv-node-btn[data-role="superfamily"],
@@ -214,6 +282,12 @@
 
 .cv-column-tree-shell {
   position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.cv-class-tree-shell-balanced {
+  justify-content: center;
 }
 
 .cv-static-column-box {
@@ -223,6 +297,7 @@
   border-radius: 10px;
   background: linear-gradient(180deg, #fbfdff 0%, #f7fbff 100%);
   padding: 12px 14px;
+  overflow: visible;
 }
 
 .cv-column-connectors {
@@ -238,8 +313,8 @@
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  column-gap: 18px;
+  grid-template-columns: minmax(0, var(--cv-class-root-width)) minmax(0, calc(100% - var(--cv-class-root-width)));
+  column-gap: var(--cv-column-gap);
   align-items: stretch;
 }
 
@@ -283,7 +358,7 @@
   flex-direction: column;
   gap: 10px;
   width: 100%;
-  padding-left: 18px;
+  padding-left: var(--cv-column-gap);
 }
 
 .cv-branch-row {
@@ -310,56 +385,193 @@
   gap: 14px;
   align-items: center;
   width: 100%;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-height: 0;
+}
+
+.cv-family-search-wrap {
+  position: relative;
+  width: 100%;
+  margin: 0 auto 10px;
+  text-align: center;
 }
 
 .cv-family-search {
   display: block;
-  width: 100%;
-  max-width: 280px;
-  margin: 0;
+  width: 450px;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0 auto;
   text-align: center;
-  border: 1px solid #000;
+  border: 1px solid #b8c4d1;
   border-radius: 8px;
-  background: #fff;
-  box-shadow: inset 0 1px 2px rgba(31, 120, 180, 0.05);
+  background: #f3f6fa;
+  color: #405366;
+  box-shadow: inset 0 1px 2px rgba(31, 120, 180, 0.08);
 }
 
 .cv-family-search::placeholder {
-  color: #000;
+  color: #7b8b9c;
   text-align: center;
 }
 
-.cv-family-search-box {
-  width: min(100%, 320px);
-  display: flex;
-  justify-content: center;
+.cv-family-search-suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: none;
+  max-height: 50vh;
+  overflow-y: auto;
   border: 1px solid #d9e2ef;
-  border-radius: 10px;
-  background: linear-gradient(180deg, #fbfdff 0%, #f7fbff 100%);
-  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(31, 120, 180, 0.12);
+}
+
+.cv-family-search-suggestions.cv-family-search-suggestions--open {
+  display: block;
+}
+
+.cv-family-search-suggestion {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 1px solid #edf2f8;
+  background: #fff;
+  color: #405366;
+  text-align: left;
+}
+
+.cv-family-search-suggestion:last-child {
+  border-bottom: 0;
+}
+
+.cv-family-search-suggestion:hover,
+.cv-family-search-suggestion:focus,
+.cv-family-search-suggestion.cv-family-search-suggestion--active {
+  background: #eef5fc;
+  outline: none;
 }
 
 .cv-family-browser {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   width: 100%;
   border: 1px solid #d9e2ef;
   border-radius: 10px;
   background: linear-gradient(180deg, #fbfdff 0%, #f7fbff 100%);
   padding: 12px 14px;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-height: 0;
-  overflow: auto;
+  overflow: visible;
 }
 
-.cv-family-browser-title {
-  margin-bottom: 10px;
+.cv-family-browser-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 10px;
+  width: 100%;
+}
+
+.cv-family-class-selector {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cv-family-class-select-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  text-align: center;
+  white-space: nowrap;
+  line-height: 1.15;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.cv-family-class-select-btn.active {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 0 0 2px rgba(49, 113, 174, 0.18);
+}
+
+.cv-family-class-select-btn[disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.cv-family-browser-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cv-family-browser-content--active {
+  min-height: 240px;
+}
+
+.cv-family-browser-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cv-family-browser-subtitle {
   color: #52657a;
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   text-align: center;
+}
+
+.cv-family-browser-empty {
+  padding: 26px 18px;
+  border: 1px dashed #c9d7e6;
+  border-radius: 10px;
+  background: #fff;
+  color: #6f7f90;
+  text-align: center;
+}
+
+.cv-family-chemotype-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cv-family-chemotype-card {
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.2;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.cv-family-browser .cv-family-chemotype-card.cv-node-btn[data-role="chemotype"],
+.cv-family-browser .cv-family-chemotype-card.cv-node-btn[data-role="chemotype"][data-branch-theme] {
+  background: var(--cv-color-family);
+}
+
+.cv-family-browser-family-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cv-family-browser-family-row {
+  position: relative;
 }
 
 .cv-family-class-row {
@@ -598,9 +810,9 @@
 
 .cv-modality-row {
   display: grid;
-  grid-template-columns: 180px 1fr;
-  column-gap: 18px;
-  align-items: start;
+  grid-template-columns: minmax(0, var(--cv-modality-label-width)) minmax(0, 1fr);
+  column-gap: var(--cv-column-gap);
+  align-items: center;
 }
 
 .cv-modality-node {
@@ -618,17 +830,22 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-left: 18px;
+  min-width: 0;
+  padding-left: var(--cv-column-gap);
 }
 
 .cv-chemotype-item {
   position: relative;
+  min-width: 0;
 }
 
 .cv-chemotype-item .btn {
   width: 100%;
   text-align: left;
   white-space: normal;
+  height: auto;
+  min-height: 0;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 1199px) {
@@ -636,8 +853,27 @@
     grid-template-columns: 1fr;
   }
 
-  .cv-panel {
-    height: auto;
+  .cv-panel-heading-grid,
+  .cv-panel-heading-grid--class,
+  .cv-panel-heading-grid--modality {
+    grid-template-columns: 1fr;
+  }
+
+  .cv-heading-slot--branch {
+    padding-left: 0;
+  }
+
+  .cv-heading-box--superfamily,
+  .cv-heading-box--modality {
+    transform: none;
+  }
+
+  .cv-family-class-selector {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .cv-family-chemotype-grid {
+    grid-template-columns: 1fr;
   }
 
   .cv-class-tree,
@@ -685,30 +921,42 @@
 {% endblock %}
 
 {% block content %}
-<div class="container cv-landing cv-scheme-default" data-cv-scheme="default">
-  <div class="cv-toolbar">
-    <div class="btn-group btn-group-sm cv-scheme-toggle" role="group" aria-label="Color scheme toggle">
-      <button type="button" class="btn btn-primary active" data-cv-scheme-btn="default">Default</button>
-      <button type="button" class="btn btn-default" data-cv-scheme-btn="test">Test</button>
-    </div>
-    <div class="btn-group btn-group-sm cv-browser-toggle" role="group" aria-label="Browser chemotype toggle">
-      <button type="button" class="btn btn-primary active" data-cv-browser-mode-btn="default">Browser Default</button>
-      <button type="button" class="btn btn-default" data-cv-browser-mode-btn="test">Browser Test</button>
-    </div>
-  </div>
+<div class="container cv-landing cv-scheme-default" data-cv-scheme="default" data-cv-browser-mode="test">
   <div class="cv-landing-layout">
     <div class="cv-panel">
-      <h3><span class="cv-heading-box">Superfamily &amp; classes</span></h3>
+      <div class="cv-panel-header">
+        <div class="cv-panel-heading-grid cv-panel-heading-grid--class" aria-label="Superfamily and class headers">
+          <div class="cv-heading-slot">
+            <div class="cv-heading-box cv-heading-box--superfamily">Superfamily</div>
+          </div>
+          <div class="cv-heading-slot cv-heading-slot--branch">
+            <div class="cv-heading-box cv-heading-box--class">Class</div>
+          </div>
+        </div>
+      </div>
       <div id="cvClassColumn" class="cv-column-mount"></div>
     </div>
 
     <div class="cv-panel">
-      <h3><span class="cv-heading-box">Receptor families</span></h3>
+      <div class="cv-panel-header">
+        <div class="cv-panel-heading-single">
+          <div class="cv-heading-box cv-heading-box--family">Receptor family</div>
+        </div>
+      </div>
       <div id="cvFamilyColumn" class="cv-column-mount"></div>
     </div>
 
     <div class="cv-panel">
-      <h3><span class="cv-heading-box">Modalities &amp; chemotypes</span></h3>
+      <div class="cv-panel-header">
+        <div class="cv-panel-heading-grid cv-panel-heading-grid--modality" aria-label="Modality and chemotype headers">
+          <div class="cv-heading-slot">
+            <div class="cv-heading-box cv-heading-box--modality">Modality</div>
+          </div>
+          <div class="cv-heading-slot cv-heading-slot--branch">
+            <div class="cv-heading-box cv-heading-box--chemotype">Chemotype</div>
+          </div>
+        </div>
+      </div>
       <div id="cvModalityColumn" class="cv-column-mount"></div>
     </div>
   </div>
@@ -725,18 +973,9 @@
   if (!landing || !dataElement) return;
 
   const payload = JSON.parse(dataElement.textContent || "{}");
-  if (window.console && typeof window.console.log === "function") {
-    window.console.log("cv-landing-receptor-families", payload.receptorFamilies || {});
-    window.console.log("cv-landing-browser-nodes", (payload.receptorFamilies && payload.receptorFamilies.browserNodes) || []);
-    window.console.log("cv-landing-family-entries", (payload.receptorFamilies && payload.receptorFamilies.entries) || []);
-  }
   const classMount = document.getElementById("cvClassColumn");
   const familyMount = document.getElementById("cvFamilyColumn");
   const modalityMount = document.getElementById("cvModalityColumn");
-  const schemeButtons = Array.prototype.slice.call(document.querySelectorAll("[data-cv-scheme-btn]"));
-  const browserModeButtons = Array.prototype.slice.call(document.querySelectorAll("[data-cv-browser-mode-btn]"));
-  const storageKey = "classification-visualizations-scheme";
-  const browserModeStorageKey = "classification-visualizations-browser-mode";
   let classTreeShell = null;
   let classTreeContent = null;
   let familyTreeShell = null;
@@ -745,7 +984,12 @@
   let modalityTreeContent = null;
   let connectorDrawFrame = null;
   let connectorDrawFollowupFrame = null;
-  let activeBrowserMode = "default";
+  let staticConnectorDrawFrame = null;
+  let staticConnectorFollowupFrame = null;
+  let activeBrowserMode = "test";
+  let syncAlignmentFrame = null;
+  let syncAlignmentFollowupFrame = null;
+  let layoutObserver = null;
 
   function setLabel(node, value) {
     node.innerHTML = value || "";
@@ -766,8 +1010,24 @@
   }
 
   function sizeConnectorLayer(shell, content, svgSelector, layerSelector) {
-    const width = Math.max(content.scrollWidth, shell.clientWidth);
-    const height = Math.max(content.scrollHeight, content.offsetHeight);
+    const shellRect = shell.getBoundingClientRect();
+    const contentRect = content.getBoundingClientRect();
+    const contentBounds = {
+      left: contentRect.left - shellRect.left,
+      top: contentRect.top - shellRect.top,
+      right: contentRect.right - shellRect.left,
+      bottom: contentRect.bottom - shellRect.top,
+    };
+    const width = Math.max(
+      shell.clientWidth,
+      Math.ceil(contentBounds.right),
+      Math.ceil(contentBounds.left + Math.max(content.scrollWidth, content.offsetWidth))
+    );
+    const height = Math.max(
+      shell.clientHeight,
+      Math.ceil(contentBounds.bottom),
+      Math.ceil(contentBounds.top + Math.max(content.scrollHeight, content.offsetHeight))
+    );
     const svg = shell.querySelector(svgSelector);
     const layer = shell.querySelector(layerSelector);
     svg.setAttribute("width", width);
@@ -799,31 +1059,6 @@
     return node;
   }
 
-  function applyScheme(scheme) {
-    const activeScheme = scheme === "test" ? "test" : "default";
-    landing.classList.toggle("cv-scheme-default", activeScheme === "default");
-    landing.classList.toggle("cv-scheme-test", activeScheme === "test");
-    landing.setAttribute("data-cv-scheme", activeScheme);
-    schemeButtons.forEach(function(button) {
-      const isActive = button.getAttribute("data-cv-scheme-btn") === activeScheme;
-      button.classList.toggle("btn-primary", isActive);
-      button.classList.toggle("btn-default", !isActive);
-      button.classList.toggle("active", isActive);
-      button.setAttribute("aria-pressed", isActive ? "true" : "false");
-    });
-    try {
-      window.localStorage.setItem(storageKey, activeScheme);
-    } catch (error) {
-      // Ignore storage failures and keep the current in-memory scheme.
-    }
-  }
-
-  schemeButtons.forEach(function(button) {
-    button.addEventListener("click", function() {
-      applyScheme(button.getAttribute("data-cv-scheme-btn"));
-    });
-  });
-
   function attachFamilyToggleListeners() {
     if (!familyTreeContent) return;
     Array.prototype.slice.call(familyTreeContent.querySelectorAll("details")).forEach(function(details) {
@@ -842,33 +1077,6 @@
       });
     });
   }
-
-  function applyBrowserMode(mode) {
-    activeBrowserMode = mode === "test" ? "test" : "default";
-    landing.setAttribute("data-cv-browser-mode", activeBrowserMode);
-    browserModeButtons.forEach(function(button) {
-      const isActive = button.getAttribute("data-cv-browser-mode-btn") === activeBrowserMode;
-      button.classList.toggle("btn-primary", isActive);
-      button.classList.toggle("btn-default", !isActive);
-      button.classList.toggle("active", isActive);
-      button.setAttribute("aria-pressed", isActive ? "true" : "false");
-    });
-    try {
-      window.localStorage.setItem(browserModeStorageKey, activeBrowserMode);
-    } catch (error) {
-      // Ignore storage failures and keep the current in-memory mode.
-    }
-    renderFamilyColumn();
-    attachFamilyToggleListeners();
-    syncClassColumnAlignment();
-    queueConnectorDraw();
-  }
-
-  browserModeButtons.forEach(function(button) {
-    button.addEventListener("click", function() {
-      applyBrowserMode(button.getAttribute("data-cv-browser-mode-btn"));
-    });
-  });
 
   function openFamily(entry) {
     if (!entry || !entry.url) return;
@@ -1040,106 +1248,324 @@
     const controls = document.createElement("div");
     controls.className = "cv-family-controls";
 
-    const searchBox = document.createElement("div");
-    searchBox.className = "cv-family-search-box";
+    const searchWrap = document.createElement("div");
+    searchWrap.className = "cv-family-search-wrap";
     const searchInput = document.createElement("input");
     searchInput.id = "cvFamilySearch";
     searchInput.className = "form-control cv-family-search";
     searchInput.type = "search";
-    searchInput.placeholder = "Search receptor family";
+    searchInput.placeholder = "Search here or click a class below";
     searchInput.autocomplete = "off";
-    searchInput.setAttribute("list", "cvFamilySearchList");
-    searchBox.appendChild(searchInput);
+    searchInput.setAttribute("aria-autocomplete", "list");
+    searchInput.setAttribute("aria-expanded", "false");
+    const searchSuggestions = document.createElement("div");
+    searchSuggestions.className = "cv-family-search-suggestions";
+    searchSuggestions.setAttribute("role", "listbox");
+    const searchEntries = payload.receptorFamilies.entries || [];
+    let filteredSearchEntries = [];
+    let activeSearchSuggestionIndex = -1;
 
-    const datalist = document.createElement("datalist");
-    datalist.id = "cvFamilySearchList";
-    (payload.receptorFamilies.entries || []).forEach(function(entry) {
-      const option = document.createElement("option");
-      option.value = entry.label;
-      datalist.appendChild(option);
-    });
+    function closeSearchSuggestions() {
+      filteredSearchEntries = [];
+      activeSearchSuggestionIndex = -1;
+      searchSuggestions.innerHTML = "";
+      searchSuggestions.classList.remove("cv-family-search-suggestions--open");
+      searchInput.setAttribute("aria-expanded", "false");
+    }
+
+    function openSearchSuggestions(matches) {
+      filteredSearchEntries = matches;
+      activeSearchSuggestionIndex = -1;
+      searchSuggestions.innerHTML = "";
+      if (!matches.length) {
+        closeSearchSuggestions();
+        return;
+      }
+      matches.forEach(function(entry, index) {
+        const option = document.createElement("button");
+        option.type = "button";
+        option.className = "cv-family-search-suggestion";
+        option.setAttribute("role", "option");
+        option.textContent = entry.label;
+        option.addEventListener("mousedown", function(event) {
+          event.preventDefault();
+        });
+        option.addEventListener("click", function() {
+          activeSearchSuggestionIndex = index;
+          selectFromSearch();
+        });
+        searchSuggestions.appendChild(option);
+      });
+      searchSuggestions.classList.add("cv-family-search-suggestions--open");
+      searchInput.setAttribute("aria-expanded", "true");
+    }
+
+    function updateActiveSearchSuggestion() {
+      Array.prototype.slice.call(searchSuggestions.querySelectorAll(".cv-family-search-suggestion")).forEach(function(option, index) {
+        option.classList.toggle("cv-family-search-suggestion--active", index === activeSearchSuggestionIndex);
+      });
+    }
+
+    function updateSearchSuggestions() {
+      const query = (searchInput.value || "").trim().toLowerCase();
+      const matches = (query ? searchEntries.filter(function(entry) {
+        return entry && entry.label && entry.label.toLowerCase().indexOf(query) !== -1;
+      }) : searchEntries).filter(function(entry) {
+        return entry && entry.label;
+      });
+      openSearchSuggestions(matches);
+    }
 
     function selectFromSearch(event) {
       const value = (searchInput.value || "").trim();
-      const entry = (payload.receptorFamilies.entriesByLabel || {})[value] || null;
+      const activeEntry = activeSearchSuggestionIndex >= 0 ? (filteredSearchEntries[activeSearchSuggestionIndex] || null) : null;
+      const entry = activeEntry || (payload.receptorFamilies.entriesByLabel || {})[value] || null;
       if (!entry || !entry.url) return;
       if (event) {
         event.preventDefault();
       }
+      closeSearchSuggestions();
       searchInput.value = "";
       openFamily(entry);
     }
 
+    searchInput.addEventListener("input", function() {
+      updateSearchSuggestions();
+    });
+    searchInput.addEventListener("focus", function() {
+      updateSearchSuggestions();
+    });
+    searchInput.addEventListener("click", function() {
+      updateSearchSuggestions();
+    });
     searchInput.addEventListener("change", selectFromSearch);
-    searchInput.addEventListener("search", selectFromSearch);
+    searchInput.addEventListener("search", function(event) {
+      if (!searchInput.value.trim()) {
+        closeSearchSuggestions();
+        return;
+      }
+      selectFromSearch(event);
+    });
     searchInput.addEventListener("keydown", function(event) {
+      if (event.key === "ArrowDown") {
+        if (!filteredSearchEntries.length) {
+          updateSearchSuggestions();
+        }
+        if (!filteredSearchEntries.length) return;
+        event.preventDefault();
+        activeSearchSuggestionIndex = Math.min(activeSearchSuggestionIndex + 1, filteredSearchEntries.length - 1);
+        updateActiveSearchSuggestion();
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        if (!filteredSearchEntries.length) return;
+        event.preventDefault();
+        activeSearchSuggestionIndex = Math.max(activeSearchSuggestionIndex - 1, 0);
+        updateActiveSearchSuggestion();
+        return;
+      }
       if (event.key === "Enter") {
         selectFromSearch(event);
+        return;
+      }
+      if (event.key === "Escape") {
+        closeSearchSuggestions();
       }
     });
+    document.addEventListener("click", function(event) {
+      if (!searchWrap.contains(event.target)) {
+        closeSearchSuggestions();
+      }
+    });
+    searchWrap.appendChild(searchInput);
+    searchWrap.appendChild(searchSuggestions);
 
     const browser = document.createElement("div");
     browser.className = "cv-family-browser";
-    const title = document.createElement("div");
-    title.className = "cv-family-browser-title";
-    title.textContent = "Browse by classes";
-
     familyTreeShell = document.createElement("div");
-    familyTreeShell.className = "cv-family-tree-shell";
-    const svg = createSvgElement("svg");
-    svg.setAttribute("class", "cv-family-connectors");
-    const connectorLayer = createSvgElement("g");
-    connectorLayer.setAttribute("class", "cv-family-connector-layer");
-    svg.appendChild(connectorLayer);
-    familyTreeShell.appendChild(svg);
+    familyTreeShell.className = "cv-family-tree-shell cv-family-browser-shell";
 
     familyTreeContent = document.createElement("div");
-    familyTreeContent.className = "cv-family-tree-content";
+    familyTreeContent.className = "cv-family-browser-content";
 
-    (payload.receptorFamilies.browserNodes || []).forEach(function(classNode) {
-      const classRow = document.createElement("details");
-      classRow.className = "cv-family-class-row";
+    const selector = document.createElement("div");
+    selector.className = "cv-family-class-selector";
 
-      const summary = document.createElement("summary");
-      summary.className = "cv-family-class-summary";
-      summary.appendChild(createNodeButton({
-        tagName: "span",
-        role: "class",
-        label: classNode.label,
-      }));
+    const browserNodes = payload.receptorFamilies.browserNodes || [];
+    const browserClassOrder = ["A", "B1", "B2", "C", "F", "T2", "O1", "O2", "U"];
+    const browserClassLabels = {
+      "A": "Class A (Rhodopsin)",
+      "B1": "Class B1 (Secretin)",
+      "B2": "Class B2 (Adhesion)",
+      "C": "Class C (Glutamate)",
+      "F": "Class F (Frizzled)",
+      "T2": "Class T2 (Taste 2)",
+      "O1": "Class O1 (Fish-like olfactory receptors)",
+      "O2": "Class O2 (Tetrapod-specific olfactory receptors)",
+      "U": "Unclassified / Other GPCRs",
+    };
+    const browserNodeByKey = {};
+    browserNodes.forEach(function(classNode) {
+      if (classNode && classNode.class_key) {
+        browserNodeByKey[classNode.class_key] = classNode;
+      }
+    });
+    let activeClassKey = null;
+    let activeChemotypeLabel = null;
 
-      const body = document.createElement("div");
-      body.className = "cv-family-class-content";
-      const flattenNonClassA = activeBrowserMode === "test" && classNode.class_key !== "A";
-      if (flattenNonClassA) {
-        (classNode.chemotypes || []).forEach(function(chemotype) {
-          (chemotype.families || []).forEach(function(family) {
-            body.appendChild(buildFamilyButton(family, chemotype.modality_theme, "cv-family-family-row"));
-          });
+    function renderEmptyState(message) {
+      const empty = document.createElement("div");
+      empty.className = "cv-family-browser-empty";
+      empty.textContent = message;
+      return empty;
+    }
+
+    function renderFamilyList(families, rowClass) {
+      const list = document.createElement("div");
+      list.className = "cv-family-browser-family-list";
+      (families || []).forEach(function(family) {
+        list.appendChild(buildFamilyButton(family, "", rowClass || "cv-family-browser-family-row"));
+      });
+      return list;
+    }
+
+    function getClassLabel(classKey) {
+      const classNode = browserNodeByKey[classKey] || null;
+      return (classNode && classNode.label) || browserClassLabels[classKey] || classKey;
+    }
+
+    function setClassSelection(nextClassKey) {
+      if (activeClassKey === nextClassKey) {
+        if (nextClassKey === "A" && activeChemotypeLabel) {
+          activeChemotypeLabel = null;
+          renderBrowserState();
+          return;
+        }
+        activeClassKey = null;
+        activeChemotypeLabel = null;
+        renderBrowserState();
+        return;
+      }
+      activeClassKey = nextClassKey;
+      activeChemotypeLabel = null;
+      renderBrowserState();
+    }
+
+    function setChemotypeSelection(nextChemotypeLabel) {
+      activeChemotypeLabel = nextChemotypeLabel;
+      renderBrowserState();
+    }
+
+    function renderClassSelector() {
+      selector.innerHTML = "";
+      browserClassOrder.forEach(function(classKey) {
+        const button = createNodeButton({
+          tagName: "button",
+          role: "class",
+          label: classKey,
         });
-      } else {
-        (classNode.chemotypes || []).forEach(function(chemotype, index) {
-          body.appendChild(createChemotypeGroup(
-            chemotype,
-            !!classNode.interactive_chemotypes,
-            index === classNode.chemotypes.length - 1
-          ));
+        button.classList.add("cv-family-class-select-btn");
+        button.title = getClassLabel(classKey);
+        const isActive = classKey === activeClassKey;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-pressed", isActive ? "true" : "false");
+        button.addEventListener("click", function() {
+          setClassSelection(classKey);
         });
+        selector.appendChild(button);
+      });
+    }
+
+    function renderClassAFamilies(target, classNode) {
+      const chemotypes = classNode.chemotypes || [];
+      const activeChemotype = chemotypes.find(function(chemotype) {
+        return chemotype.label === activeChemotypeLabel;
+      }) || null;
+      if (activeChemotype) {
+        const familiesPanel = document.createElement("div");
+        familiesPanel.className = "cv-family-browser-panel";
+        const familiesTitle = document.createElement("div");
+        familiesTitle.className = "cv-family-browser-subtitle";
+        familiesTitle.textContent = getClassLabel("A") + " - " + activeChemotype.label;
+        familiesPanel.appendChild(familiesTitle);
+        familiesPanel.appendChild(renderFamilyList(activeChemotype.families || []));
+        target.appendChild(familiesPanel);
+        return;
       }
 
-      classRow.appendChild(summary);
-      classRow.appendChild(body);
-      familyTreeContent.appendChild(classRow);
-    });
+      const chemotypePanel = document.createElement("div");
+      chemotypePanel.className = "cv-family-browser-panel";
+      const chemotypeTitle = document.createElement("div");
+      chemotypeTitle.className = "cv-family-browser-subtitle";
+      chemotypeTitle.textContent = getClassLabel("A");
+      chemotypePanel.appendChild(chemotypeTitle);
 
+      const grid = document.createElement("div");
+      grid.className = "cv-family-chemotype-grid";
+      chemotypes.forEach(function(chemotype) {
+        const button = createNodeButton({
+          tagName: "button",
+          role: "chemotype",
+          branchTheme: chemotype.modality_theme,
+          label: chemotype.label,
+        });
+        button.classList.add("cv-family-chemotype-card");
+        button.addEventListener("click", function() {
+          setChemotypeSelection(chemotype.label);
+        });
+        grid.appendChild(button);
+      });
+      chemotypePanel.appendChild(grid);
+      target.appendChild(chemotypePanel);
+      if (!chemotypes.length) {
+        target.appendChild(renderEmptyState("No chemotypes are available for this class."));
+        return;
+      }
+      if (!activeChemotype) {
+        target.appendChild(renderEmptyState("Select a chemotype to browse receptor families."));
+        return;
+      }
+    }
+
+    function renderSelectedClass(target, classNode) {
+      if (!classNode) {
+        target.appendChild(renderEmptyState("Select a class to browse receptor families."));
+        return;
+      }
+      if (classNode.class_key === "A") {
+        renderClassAFamilies(target, classNode);
+        return;
+      }
+      const familiesPanel = document.createElement("div");
+      familiesPanel.className = "cv-family-browser-panel";
+      const familiesTitle = document.createElement("div");
+      familiesTitle.className = "cv-family-browser-subtitle";
+      familiesTitle.textContent = getClassLabel(activeClassKey);
+      familiesPanel.appendChild(familiesTitle);
+      const families = classNode.families || [];
+      if (families.length) {
+        familiesPanel.appendChild(renderFamilyList(families));
+      } else {
+        familiesPanel.appendChild(renderEmptyState("No receptor families are available for this class."));
+      }
+      target.appendChild(familiesPanel);
+    }
+
+    function renderBrowserState() {
+      renderClassSelector();
+      familyTreeContent.innerHTML = "";
+      familyTreeContent.classList.toggle("cv-family-browser-content--active", Boolean(activeClassKey));
+      renderSelectedClass(familyTreeContent, activeClassKey ? (browserNodeByKey[activeClassKey] || { class_key: activeClassKey, label: getClassLabel(activeClassKey), chemotypes: [], families: [] }) : null);
+    }
+
+    familyTreeShell.appendChild(selector);
     familyTreeShell.appendChild(familyTreeContent);
-    browser.appendChild(title);
+    browser.appendChild(searchWrap);
     browser.appendChild(familyTreeShell);
 
-    controls.appendChild(searchBox);
-    controls.appendChild(datalist);
     controls.appendChild(browser);
     familyMount.appendChild(controls);
+    renderBrowserState();
   }
 
   function relRect(element, shellRect) {
@@ -1226,96 +1652,7 @@
   }
 
   function drawFamilyConnectors() {
-    if (!familyTreeShell || !familyTreeContent) return;
-
-    const shellRect = familyTreeShell.getBoundingClientRect();
-    const layer = sizeConnectorLayer(
-      familyTreeShell,
-      familyTreeContent,
-      ".cv-family-connectors",
-      ".cv-family-connector-layer"
-    );
-
-    Array.prototype.slice.call(familyTreeContent.children).forEach(function(classRow) {
-      if (!classRow.open) return;
-
-      const classButton = classRow.querySelector(".cv-family-class-summary .cv-node-btn");
-      const classBody = classRow.querySelector(".cv-family-class-content");
-      if (!classButton || !classBody) return;
-
-      const chemRows = Array.prototype.slice.call(classBody.children).filter(function(node) {
-        return node.classList.contains("cv-family-chemotype-row") || node.classList.contains("cv-family-chemotype-row-static");
-      });
-      const classRect = relRect(classButton, shellRect);
-      const directFamilyButtons = Array.prototype.slice.call(classBody.querySelectorAll(":scope > .cv-family-family-row .cv-family-leaf"));
-
-      if (!chemRows.length && directFamilyButtons.length) {
-        const familyRects = directFamilyButtons.map(function(button) {
-          return relRect(button, shellRect);
-        });
-        const familyLastRect = familyRects[familyRects.length - 1];
-        const familyLastY = familyLastRect.top + (familyLastRect.height / 2);
-        const familySpineX = Math.min(
-          classRect.left + (classRect.width * 0.20),
-          familyRects[0].left - 18
-        );
-        appendConnectorLine(layer, "cv-family-connector-line", familySpineX, classRect.bottom, familySpineX, familyLastY);
-        familyRects.forEach(function(rect) {
-          const familyY = rect.top + (rect.height / 2);
-          appendConnectorLine(layer, "cv-family-connector-line", familySpineX, familyY, rect.left, familyY);
-        });
-        return;
-      }
-
-      if (!chemRows.length) return;
-
-      const chemEntries = chemRows.map(function(row) {
-        const chemButton = row.querySelector(".cv-family-chemotype-summary .cv-node-btn");
-        const chemRect = relRect(chemButton, shellRect);
-        return {
-          row: row,
-          rect: chemRect,
-          branchY: chemRect.top + (chemRect.height / 2),
-          leftX: chemRect.left,
-        };
-      });
-
-      const classLastY = chemEntries[chemEntries.length - 1].branchY;
-      const chemSpineX = Math.min(
-        classRect.left + (classRect.width * 0.20),
-        chemEntries[0].leftX - 18
-      );
-      const chemSpineTop = classRect.bottom;
-
-      appendConnectorLine(layer, "cv-family-connector-line", chemSpineX, chemSpineTop, chemSpineX, classLastY);
-
-      chemEntries.forEach(function(entry) {
-        appendConnectorLine(layer, "cv-family-connector-line", chemSpineX, entry.branchY, entry.leftX, entry.branchY);
-
-        const isInteractive = entry.row.tagName === "DETAILS";
-        if (isInteractive && !entry.row.open) return;
-
-        const familyButtons = Array.prototype.slice.call(entry.row.querySelectorAll(".cv-family-chemotype-families .cv-family-leaf"));
-        if (!familyButtons.length) return;
-
-        const familyRects = familyButtons.map(function(button) {
-          return relRect(button, shellRect);
-        });
-        const familyLastRect = familyRects[familyRects.length - 1];
-        const familyLastY = familyLastRect.top + (familyLastRect.height / 2);
-        const familySpineX = Math.min(
-          entry.rect.left + (entry.rect.width * 0.20),
-          familyRects[0].left - 18
-        );
-        const familySpineTop = entry.rect.bottom;
-        appendConnectorLine(layer, "cv-family-connector-line", familySpineX, familySpineTop, familySpineX, familyLastY);
-
-        familyRects.forEach(function(rect) {
-          const familyY = rect.top + (rect.height / 2);
-          appendConnectorLine(layer, "cv-family-connector-line", familySpineX, familyY, rect.left, familyY);
-        });
-      });
-    });
+    return;
   }
 
   function drawStaticConnectors() {
@@ -1323,77 +1660,112 @@
     drawModalityConnectors();
   }
 
-  function queueConnectorDraw() {
-    if (connectorDrawFrame !== null) {
-      window.cancelAnimationFrame(connectorDrawFrame);
+  function queueStaticConnectorDraw() {
+    if (staticConnectorDrawFrame !== null) {
+      window.cancelAnimationFrame(staticConnectorDrawFrame);
     }
-    if (connectorDrawFollowupFrame !== null) {
-      window.cancelAnimationFrame(connectorDrawFollowupFrame);
+    if (staticConnectorFollowupFrame !== null) {
+      window.cancelAnimationFrame(staticConnectorFollowupFrame);
     }
-    connectorDrawFrame = window.requestAnimationFrame(function() {
-      drawFamilyConnectors();
-      connectorDrawFollowupFrame = window.requestAnimationFrame(function() {
-        drawFamilyConnectors();
+    staticConnectorDrawFrame = window.requestAnimationFrame(function() {
+      drawStaticConnectors();
+      staticConnectorFollowupFrame = window.requestAnimationFrame(function() {
+        drawStaticConnectors();
       });
     });
   }
 
-  function syncClassColumnAlignment() {
-    if (!classMount || !familyMount || !classTreeShell) return;
+  function queueConnectorDraw() {
+    return;
+  }
 
-    classMount.classList.add("cv-class-column-centered");
+  function syncColumnBoxHeights() {
+    if (!classTreeShell || !modalityTreeShell || !familyMount) return;
+
+    classMount.classList.remove("cv-class-column-centered");
     classMount.style.setProperty("--cv-class-column-offset", "0px");
+    classTreeShell.classList.add("cv-class-tree-shell-balanced");
 
-    window.requestAnimationFrame(function() {
-      const familyBrowser = familyMount.querySelector(".cv-family-browser");
-      if (!familyBrowser) return;
+    classTreeShell.style.minHeight = "";
+    modalityTreeShell.style.minHeight = "";
+    familyMount.style.minHeight = "";
 
-      const classRect = classTreeShell.getBoundingClientRect();
-      const browserRect = familyBrowser.getBoundingClientRect();
-      const familyMountRect = familyMount.getBoundingClientRect();
-      const shouldAlignTop = classRect.top > browserRect.top;
-      const browserOffset = Math.max(0, browserRect.top - familyMountRect.top);
-
-      classMount.classList.toggle("cv-class-column-centered", !shouldAlignTop);
-      classMount.style.setProperty("--cv-class-column-offset", shouldAlignTop ? (browserOffset + "px") : "0px");
+    if (window.matchMedia("(max-width: 1199px)").matches) {
       drawStaticConnectors();
+      return;
+    }
+
+    const sharedMinHeight = Math.ceil(Math.max(
+      classTreeShell.getBoundingClientRect().height,
+      modalityTreeShell.getBoundingClientRect().height
+    ));
+    if (sharedMinHeight > 0) {
+      classTreeShell.style.minHeight = sharedMinHeight + "px";
+      modalityTreeShell.style.minHeight = sharedMinHeight + "px";
+      familyMount.style.minHeight = sharedMinHeight + "px";
+    }
+
+    drawStaticConnectors();
+  }
+
+  function queueLayoutSync() {
+    if (syncAlignmentFrame !== null) {
+      window.cancelAnimationFrame(syncAlignmentFrame);
+    }
+    if (syncAlignmentFollowupFrame !== null) {
+      window.cancelAnimationFrame(syncAlignmentFollowupFrame);
+    }
+    syncAlignmentFrame = window.requestAnimationFrame(function() {
+      syncColumnBoxHeights();
+      queueStaticConnectorDraw();
+      queueConnectorDraw();
+      syncAlignmentFollowupFrame = window.requestAnimationFrame(function() {
+        syncColumnBoxHeights();
+        queueStaticConnectorDraw();
+        queueConnectorDraw();
+      });
     });
   }
 
-  function lockInitialColumnHeight() {
-    const familyPanel = familyMount ? familyMount.closest(".cv-panel") : null;
-    if (!familyPanel) return;
-    const measuredHeight = familyPanel.offsetHeight;
-    if (!measuredHeight) return;
-    landing.style.setProperty("--cv-column-height", measuredHeight + "px");
-    syncClassColumnAlignment();
-    drawStaticConnectors();
-    queueConnectorDraw();
+  function observeLayoutChanges() {
+    if (typeof window.ResizeObserver !== "function") return;
+    if (layoutObserver) {
+      layoutObserver.disconnect();
+    }
+    layoutObserver = new window.ResizeObserver(function() {
+      queueLayoutSync();
+    });
+    [classTreeShell, familyTreeShell, modalityTreeShell].forEach(function(node) {
+      if (node) {
+        layoutObserver.observe(node);
+      }
+    });
   }
 
   renderClassColumn();
   renderFamilyColumn();
   renderModalityColumn();
   attachFamilyToggleListeners();
+  observeLayoutChanges();
   window.addEventListener("resize", function() {
-    syncClassColumnAlignment();
-    queueConnectorDraw();
-    window.requestAnimationFrame(drawStaticConnectors);
+    queueLayoutSync();
   });
-  syncClassColumnAlignment();
-  drawStaticConnectors();
-  queueConnectorDraw();
-  try {
-    applyScheme(window.localStorage.getItem(storageKey));
-  } catch (error) {
-    applyScheme("default");
+  window.addEventListener("load", function() {
+    queueLayoutSync();
+  });
+  if (document.fonts && typeof document.fonts.ready === "object" && typeof document.fonts.ready.then === "function") {
+    document.fonts.ready.then(function() {
+      queueLayoutSync();
+    });
   }
-  try {
-    applyBrowserMode(window.localStorage.getItem(browserModeStorageKey));
-  } catch (error) {
-    applyBrowserMode("default");
-  }
-  window.requestAnimationFrame(lockInitialColumnHeight);
+  window.requestAnimationFrame(function() {
+    queueLayoutSync();
+  });
+  window.requestAnimationFrame(function() {
+    window.requestAnimationFrame(function() {
+      queueLayoutSync();
+    });
+  });
 })();
 </script>
 {% endblock %}

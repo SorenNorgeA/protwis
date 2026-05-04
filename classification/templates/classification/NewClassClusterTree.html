@@ -135,7 +135,7 @@ body > #content.container > #gpcrdb_alert_placeholder {
 }
 .ncct-superfamily-shell {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr) 250px;
+  grid-template-columns: 245px minmax(0, 1fr) 300px;
   gap: 12px;
   align-items: stretch;
 }
@@ -419,7 +419,7 @@ body > #content.container > #gpcrdb_alert_placeholder {
             </div>
 
             <div class="ncct-superfamily-side">
-              <div class="ncct-superfamily-side-title">Similarity</div>
+              <div id="ncct-superfamily-similarity-title" class="ncct-superfamily-side-title">Similarity</div>
               <div id="ncct-superfamily-hover"></div>
             </div>
           </div>
@@ -479,6 +479,7 @@ body > #content.container > #gpcrdb_alert_placeholder {
   const clusterMetaEl = document.getElementById('ncct-cluster-meta');
   const treeMetaEl = document.getElementById('ncct-tree-meta');
   const superfamilyLabelsEl = document.getElementById('ncct-superfamily-labels');
+  const superfamilySimilarityTitleEl = document.getElementById('ncct-superfamily-similarity-title');
   const superfamilyHoverEl = document.getElementById('ncct-superfamily-hover');
   let currentDistanceVariant = INITIAL_VARIANT || 'max';
   let currentClusterMethod = 'tsne';
@@ -525,13 +526,26 @@ body > #content.container > #gpcrdb_alert_placeholder {
   }
 
   function titleCaseFragment(value) {
+    const normalizedValue = String(value || '').trim().toLowerCase();
+    if (normalizedValue === 'tetrapod-specific olfactory receptors') {
+      return 'Tetrapod-specific olfactory receptors';
+    }
+    if (normalizedValue === 'fish-like olfactory receptors') {
+      return 'Fish-like olfactory receptors';
+    }
     return String(value || '').replace(/\b([A-Za-z][A-Za-z'-]*)/g, function(match) {
       return match.charAt(0).toUpperCase() + match.slice(1).toLowerCase();
     });
   }
 
+  function normalizeClassName(name) {
+    return String(name || '')
+      .replace('Class O1 (fish-like)', 'Class O1 (fish-like olfactory receptors)')
+      .replace('Class O2 (tetrapod specific)', 'Class O2 (tetrapod-specific olfactory receptors)');
+  }
+
   function formattedClassNameHtml(name) {
-    const raw = String(name || '').trim();
+    const raw = normalizeClassName(name).trim();
     if (!raw) return '';
     const match = raw.match(/^(.*?)(\s*\(([^)]+)\))$/);
     if (!match) return escapeHtml(raw);
@@ -549,7 +563,7 @@ body > #content.container > #gpcrdb_alert_placeholder {
 
   function variantMatrixFor(variantKey) {
     const variant = ((currentPayload || {}).variants || {})[variantKey] || currentVariantPayload();
-    return variant.matrix || [];
+    return variant.matrix || ((variant.render_payload || {}).matrix) || [];
   }
 
   function matrixEntryFor(sourceId, targetId) {
@@ -594,6 +608,25 @@ body > #content.container > #gpcrdb_alert_placeholder {
     });
   }
 
+  function updateSuperfamilySimilarityTitle(classId) {
+    if (!superfamilySimilarityTitleEl) return;
+    const classes = (currentPayload || {}).classes || [];
+    const classRow = classes[classId];
+    if (!classRow) {
+      superfamilySimilarityTitleEl.textContent = 'Similarity ranking';
+      return;
+    }
+    const classSymbol = escapeHtml(classRow.symbol || '');
+    const formattedName = formattedClassNameHtml(classRow.name || classRow.symbol || '');
+    const secondaryMatch = formattedName.match(/<span class="ncct-superfamily-secondary">([\s\S]+?)<\/span>/);
+    const secondaryHtml = secondaryMatch ? secondaryMatch[0] : '';
+    if (classSymbol) {
+      superfamilySimilarityTitleEl.innerHTML = 'Class ' + classSymbol + ' similarity ranking' + secondaryHtml;
+      return;
+    }
+    superfamilySimilarityTitleEl.textContent = 'Class similarity ranking';
+  }
+
   function renderSuperfamilyHoverCard(classId) {
     if (!superfamilyHoverEl) return;
     const classes = (currentPayload || {}).classes || [];
@@ -613,6 +646,7 @@ body > #content.container > #gpcrdb_alert_placeholder {
         name: otherClass.name,
         color: otherClass.color || '#808080',
         similarity: cell.similarity,
+        similarityDisplay: cell.similarity_display,
         distance: cell.distance,
       });
     });
@@ -631,7 +665,7 @@ body > #content.container > #gpcrdb_alert_placeholder {
           '</div>' +
           '<div class="ncct-superfamily-hover-metric ncct-superfamily-hover-value-box">' +
             '<div class="ncct-superfamily-hover-metric-label">Similarity</div>' +
-            '<div class="ncct-superfamily-hover-metric-value ncct-superfamily-hover-value">' + formatPercent(peer.similarity) + '</div>' +
+            '<div class="ncct-superfamily-hover-metric-value ncct-superfamily-hover-value">' + escapeHtml(peer.similarityDisplay || formatPercent(peer.similarity)) + '</div>' +
           '</div>' +
         '</div>'
       );
@@ -664,6 +698,7 @@ body > #content.container > #gpcrdb_alert_placeholder {
   function setHoveredClass(classId) {
     hoveredClassId = classId;
     setActiveSuperfamilyLabel(classId);
+    updateSuperfamilySimilarityTitle(classId);
     renderSuperfamilyHoverCard(classId);
     updateSuperfamilyPointHighlight(classId);
   }

@@ -2,6 +2,7 @@ from build.management.commands.base_build import Command as BaseBuild
 
 from django.core.cache import cache, caches
 from django.core.management.base import CommandError
+from django.db.models import Q
 from django.db import transaction
 
 import logging
@@ -36,6 +37,10 @@ class Command(BaseBuild):
         "O1": "007",
         "O2": "008",
         "T2": "009",
+        "U": "010",
+    }
+    CLASS_NAME_ALIASES_BY_KEY = {
+        "U": ("Unclassified", "Classless", "Other GPCRs", "Unclassified / Other GPCRs"),
     }
 
     @staticmethod
@@ -49,6 +54,16 @@ class Command(BaseBuild):
     @classmethod
     def _class_group_key(cls, class_key):
         return f"class:{class_key}"
+
+    @classmethod
+    def _class_family_q(cls, class_key, prefix=""):
+        slug = cls.CLASS_SLUG_BY_KEY.get(class_key)
+        q_obj = Q()
+        if slug:
+            q_obj |= Q(**{prefix + "slug": slug})
+        for name in cls.CLASS_NAME_ALIASES_BY_KEY.get(class_key, ()):
+            q_obj |= Q(**{prefix + "name__iexact": name})
+        return q_obj
 
     def add_arguments(self, parser):
         super(Command, self).add_arguments(parser=parser)
@@ -243,21 +258,21 @@ class Command(BaseBuild):
             dry_run=dry_run,
         )
 
-        family_ids = {
-            family.slug: family.id
-            for family in ProteinFamily.objects.filter(slug__in=self.CLASS_SLUG_BY_KEY.values()).only("id", "slug")
-        }
-        for class_key, slug in self.CLASS_SLUG_BY_KEY.items():
-            family_id = family_ids.get(slug)
-            if not family_id:
+        for class_key in self.CLASS_SLUG_BY_KEY.keys():
+            family_ids = list(
+                ProteinFamily.objects
+                .filter(self._class_family_q(class_key))
+                .values_list("id", flat=True)
+            )
+            if not family_ids:
                 counts[self._class_group_key(class_key)] = 0
                 continue
             class_qs = (
                 ReceptorSimilarity.objects.filter(
                     protein_ref__species_id=1,
                     protein_target__species_id=1,
-                    ref_class_id=family_id,
-                    target_class_id=family_id,
+                    ref_class_id__in=family_ids,
+                    target_class_id__in=family_ids,
                 ).values_list("protein_ref_id", "protein_target_id", "similarity")
             )
             group_key = self._class_group_key(class_key)
@@ -294,13 +309,17 @@ class Command(BaseBuild):
             protein_target__species_id=1,
         )
         if class_key:
-            class_slug = self.CLASS_SLUG_BY_KEY.get(class_key)
-            if not class_slug:
-                return 0
-            qs = qs.filter(
-                protein_ref__family__parent__parent__parent__slug=class_slug,
-                protein_target__family__parent__parent__parent__slug=class_slug,
+            ref_class_q = self._class_family_q(
+                class_key,
+                prefix="protein_ref__family__parent__parent__parent__",
             )
+            target_class_q = self._class_family_q(
+                class_key,
+                prefix="protein_target__family__parent__parent__parent__",
+            )
+            if not ref_class_q or not target_class_q:
+                return 0
+            qs = qs.filter(ref_class_q, target_class_q)
 
         value_qs = qs.values_list("protein_ref_id", "protein_target_id", "distance")
 
