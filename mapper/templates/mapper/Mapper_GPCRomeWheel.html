@@ -1,0 +1,3305 @@
+{% extends "home/base.html" %}
+{% load static %}
+{% load humanize %}
+{% block addon_css %}
+<link rel="stylesheet" href="{% static 'home/css/nv.d3.min.css' %}" type="text/css" />
+<link rel="stylesheet" href="{% static 'home/css/nvd3-update.css' %}" type="text/css" />
+<link rel="stylesheet" href="{% static 'home/css/Spectrum_1_8_1.css' %}" type="text/css" />
+<link rel="stylesheet" href="{% static 'home/css/select2_4.1.0-rc.0._full.css' %}" type="text/css" />
+<link rel="stylesheet" href="{% static 'home/css/NewDrugsBrowser_datatables.min.css' %}" type="text/css" />
+<style>
+.mapper20-wheel-wrap {
+  margin-bottom: 24px;
+}
+.mapper20-wheel-wrap.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+@media (min-width: 992px) {
+  .mapper20-wheel-primary-col.col-xs-12 {
+    width: auto;
+    float: none;
+    flex: 0 1 auto;
+    max-width: 100%;
+  }
+  .mapper20-wheel-plot-col.col-xs-12 {
+    width: auto;
+    float: none;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+@media (max-width: 991px) {
+  .mapper20-wheel-wrap.row {
+    display: block;
+  }
+  .mapper20-wheel-primary-col,
+  .mapper20-wheel-plot-col {
+    width: 100%;
+    float: none;
+  }
+  .mapper20-wheel-plot-col {
+    margin-top: 20px;
+  }
+}
+.mapper20-wheel-left {
+  display: inline-block;
+  width: max-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  vertical-align: top;
+  background: #fff;
+  border: 1px solid rgba(26, 43, 60, 0.08);
+  border-radius: 10px;
+  padding: 10px 10px 12px;
+  box-shadow: 0 4px 14px rgba(26, 43, 60, 0.05);
+  font-size: 11px;
+  line-height: 1.35;
+  color: #333;
+}
+.mapper20-wheel-left .table-responsive {
+  width: max-content;
+  max-width: 100%;
+}
+/* Header: intrinsic width — back btn + tight title side-by-side (no wide empty “title column”) */
+.mapper20-wheel-top-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 4px;
+  width: auto;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  min-height: 28px;
+}
+.mapper20-wheel-top-left {
+  flex: 0 1 auto;
+  min-width: 0;
+  text-align: left;
+}
+.mapper20-wheel-page-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  align-self: center;
+  text-align: left;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #1a2b3c;
+}
+.mapper20-wheel-top-left a.btn.mapper20-wheel-back-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  line-height: 1.35;
+  max-width: 100%;
+  box-sizing: border-box;
+  white-space: nowrap;
+  text-align: left;
+}
+.mapper20-wheel-toolbar-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+  width: auto;
+  max-width: 100%;
+}
+.mapper20-wheel-toolbar-stack .mapper20-wheel-toolbar {
+  margin-bottom: 0;
+}
+.mapper20-wheel-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: 8px;
+}
+.mapper20-wheel-toolbar .btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  line-height: 1.35;
+}
+.mapper20-howto-modal .modal-body { font-size: 13px; color: #333; line-height: 1.5; }
+.mapper20-howto-modal .modal-body p:last-child { margin-bottom: 0; }
+.mapper20-wheel-left .table { margin-bottom: 8px; font-size: 11px; }
+.mapper20-wheel-left .table thead th { border-bottom-width: 1px; padding: 4px 5px; }
+.mapper20-wheel-left .table tbody td { padding: 3px 4px; vertical-align: middle; }
+/* Narrow fixed grid: lock table width and clip cells so inputs cannot spill into the next column */
+.mapper20-wheel-left .mapper20-input-table {
+  table-layout: fixed;
+  width: 228px;
+  max-width: 100%;
+  border-collapse: collapse;
+}
+.mapper20-wheel-left .mapper20-input-table thead th,
+.mapper20-wheel-left .mapper20-input-table tbody td {
+  box-sizing: border-box;
+  overflow: hidden;
+  word-wrap: break-word;
+  word-break: break-word;
+}
+.mapper20-wheel-left .mapper20-input-table th:nth-child(1),
+.mapper20-wheel-left .mapper20-input-table td:nth-child(1) {
+  width: 64%;
+}
+.mapper20-wheel-left .mapper20-input-table th:nth-child(2),
+.mapper20-wheel-left .mapper20-input-table td:nth-child(2) {
+  width: 36%;
+}
+.mapper20-wheel-left .mapper20-input-table td.mapper20-receptor-cell,
+.mapper20-wheel-left .mapper20-input-table td.mapper20-value-cell {
+  max-width: 0;
+}
+.mapper20-wheel-left .mapper20-input-table .form-control.input-sm {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.mapper20-wheel-left .mapper20-input-table .mapper20-in-receptor::placeholder {
+  color: #8a9399;
+  opacity: 1;
+}
+.mapper20-wheel-left .mapper20-input-table .mapper20-in-receptor::-webkit-input-placeholder {
+  color: #8a9399;
+}
+.mapper20-wheel-left .mapper20-input-table .mapper20-in-receptor::-moz-placeholder {
+  color: #8a9399;
+  opacity: 1;
+}
+.mapper20-wheel-left .mapper20-input-table .mapper20-in-receptor:-ms-input-placeholder {
+  color: #8a9399;
+}
+/* Value column stays single-line; receptor is a textarea that grows with placeholder / text */
+.mapper20-wheel-left .mapper20-input-table .mapper20-in-value.form-control.input-sm {
+  height: 26px;
+  padding: 2px 6px;
+  font-size: 11px;
+  line-height: 1.3;
+}
+.mapper20-wheel-left .mapper20-input-table textarea.mapper20-in-receptor.form-control.input-sm {
+  height: auto;
+  min-height: 44px;
+  max-height: 200px;
+  padding: 4px 6px;
+  font-size: 11px;
+  line-height: 1.38;
+  resize: vertical;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+.mapper20-wheel-left .mapper20-input-table.mapper20-receptors-compact textarea.mapper20-in-receptor.form-control.input-sm {
+  min-height: 26px;
+  max-height: 26px;
+  height: 26px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  line-height: 1.3;
+  resize: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+}
+.mapper20-wheel-left .mapper20-input-table.mapper20-receptors-compact .mapper20-receptor-html-view {
+  min-height: 26px;
+}
+.mapper20-wheel-left .mapper20-input-table tbody td.mapper20-receptor-cell {
+  vertical-align: top;
+}
+.mapper20-wheel-left .mapper20-input-table tbody td.mapper20-value-cell {
+  vertical-align: middle;
+}
+.mapper20-wheel-errors { margin-top: 8px; font-size: 10px; max-height: 160px; overflow: auto; color: #a94442; }
+.mapper20-wheel-errors:empty { display: none; }
+.mapper20-plot-panel {
+  background: transparent;
+  border-radius: 12px;
+  padding: 8px 8px 16px;
+  border: none;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.mapper20-wheel-wrap .mapper20-wheel-plot-col {
+  min-width: 0;
+}
+.mapper20-gpcrome-plot-wrap {
+  margin-top: 8px;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  text-align: center;
+}
+.mapper20-gpcrome-plot-wrap #GPCRome_plot svg[data-gpcrome-datatype="text"] {
+  /* With `height: auto`, a short viewBox + max-width collapses vertical space; categorical wheels need air */
+  min-height: clamp(520px, 82vh, 1120px);
+}
+.mapper20-gpcrome-plot-wrap #GPCRome_plot svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+.mapper20-plot-toolbar { display: flex; justify-content: center; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 11px; margin-bottom: 8px; padding-top: 8px; }
+/* Invalid / unknown receptor (live validation). Detailed errors only use cell hint classes below. */
+.mapper20-input-table tbody tr.mapper20-row-invalid td.mapper20-receptor-cell {
+  border: 2px solid #a94442 !important;
+  background-color: rgba(169, 68, 66, 0.06);
+}
+.mapper20-input-table tbody td.mapper20-cell-hint-error {
+  border: 2px solid #a94442 !important;
+  background-color: rgba(169, 68, 66, 0.06);
+  cursor: help;
+}
+.mapper20-input-table tbody td.mapper20-cell-hint-warn {
+  border: 2px solid #e0892e !important;
+  background-color: rgba(224, 137, 46, 0.1);
+  cursor: help;
+}
+.mapper20-wheel-left .mapper20-receptor-ac-menu.ui-autocomplete {
+  z-index: 4000;
+  max-height: 224px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.mapper20-wheel-left .mapper20-receptor-ac-menu .ui-menu-item {
+  padding: 0;
+  margin: 0;
+}
+.mapper20-wheel-left .mapper20-receptor-ac-menu .mapper20-ac-item-label {
+  padding: 4px 8px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.mapper20-receptor-html-view {
+  display: none;
+  cursor: text;
+  min-height: 44px;
+  height: auto;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: normal;
+  word-break: break-word;
+}
+.mapper20-receptor-html-view:not(:empty) {
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+.mapper20-receptor-html-view:focus {
+  outline: thin dotted #333;
+  outline-offset: 1px;
+}
+.mapper20-receptor-input-wrap {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.mapper20-receptor-input-wrap .mapper20-in-receptor,
+.mapper20-receptor-input-wrap .mapper20-receptor-html-view {
+  padding-right: 26px;
+}
+.mapper20-receptor-clear {
+  display: block;
+  position: absolute;
+  top: 4px;
+  right: 3px;
+  z-index: 2;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  line-height: 16px;
+  font-size: 16px;
+  font-weight: 400;
+  color: #8a9399;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.mapper20-receptor-clear:hover,
+.mapper20-receptor-clear:focus {
+  color: #333;
+  background: rgba(0, 0, 0, 0.05);
+  outline: none;
+}
+.mapper20-receptor-input-wrap.is-empty .mapper20-receptor-clear {
+  display: none;
+}
+#mapper20-gpcrome-picker-modal .modal-dialog {
+  width: 95%;
+  max-width: 1200px;
+}
+#mapper20-gpcrome-picker-modal table.dataTable {
+  font-size: 12px;
+}
+#mapper20-gpcrome-picker-modal img.gpcrdb-link {
+  vertical-align: middle;
+}
+#mapper20-gpcrome-picker-modal th.mapper20-picker-gpcrdb-label {
+  white-space: nowrap;
+}
+#mapper20-gpcrome-picker-modal .mapper20-picker-dt-note {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 10px;
+}
+#mapper20-gpcrome-picker-modal .select2-container--open .select2-dropdown {
+  z-index: 2060 !important;
+}
+
+/* ------- Text mode: swatch column + widen grid ------- */
+.mapper20-wheel-left .mapper20-input-table.mapper20-text-mode {
+  width: 268px;
+}
+.mapper20-wheel-left .mapper20-input-table.mapper20-text-mode th:nth-child(1),
+.mapper20-wheel-left .mapper20-input-table.mapper20-text-mode td:nth-child(1) {
+  width: 52%;
+}
+.mapper20-wheel-left .mapper20-input-table.mapper20-text-mode th:nth-child(2),
+.mapper20-wheel-left .mapper20-input-table.mapper20-text-mode td:nth-child(2) {
+  width: 35%;
+}
+.mapper20-wheel-left .mapper20-input-table.mapper20-text-mode th.mapper20-th-swatch,
+.mapper20-wheel-left .mapper20-input-table.mapper20-text-mode td.mapper20-swatch-cell {
+  width: 28px;
+  max-width: 28px;
+  text-align: center;
+  vertical-align: middle !important;
+  padding: 2px !important;
+}
+.mapper20-wheel-left .mapper20-input-table:not(.mapper20-text-mode) .mapper20-th-swatch,
+.mapper20-wheel-left .mapper20-input-table:not(.mapper20-text-mode) td.mapper20-swatch-cell {
+  display: none;
+}
+.mapper20-label-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 1px solid #aaa;
+  border-radius: 3px;
+  box-sizing: border-box;
+  vertical-align: middle;
+  background-color: transparent;
+}
+
+/* Sidebar dropdown beside toolbar buttons: align top of panel with top of toggle */
+.mapper20-plot-toolbar .dropdown.mapper20-dropdown-anchor-topleft > .dropdown-menu.mapper20-dropdown-menu-topleft {
+  top: 0 !important;
+  bottom: auto !important;
+  margin-top: 0 !important;
+  transform: none !important;
+}
+
+/* ------- Label colour customise (Spectrum in Colors dropdown) ------- */
+#mapper20-colors-dropdown-menu {
+  overflow: visible;
+}
+
+#mapper20-colors-dropdown-menu.mapper20-colors-show-text {
+  /* Explicit width so the label column gets a predictable share; avoids collapsing to ~0 and char-by-char wraps */
+  box-sizing: border-box !important;
+  width: min(332px, 92vw);
+  max-width: min(332px, 92vw);
+  padding: 8px 8px !important;
+}
+
+#mapper20-colors-dropdown-menu.mapper20-colors-show-numeric {
+  min-width: 420px;
+  padding: 10px 15px !important;
+  box-sizing: border-box;
+}
+
+.mapper20-colors-text-wrap .customize-menu {
+  --check-col: 20px;
+  --picker-col: 32px;
+  --gap: 4px;
+  width: 100%;
+  max-width: none;
+  max-height: 58vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px 4px 6px 6px;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+}
+.mapper20-colors-text-wrap .customize-menu.dropdown-menu {
+  min-width: 0 !important;
+}
+.mapper20-colors-text-wrap .customize-menu::-webkit-scrollbar {
+  width: 6px;
+}
+.mapper20-colors-text-wrap .customize-menu::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.mapper20-colors-text-wrap .mapper20-label-cat-head {
+  display: grid;
+  grid-template-columns: var(--check-col) minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--gap);
+  padding: 0 0 6px;
+  margin: 0 0 6px;
+  border-bottom: 1px solid #eaeaea;
+}
+.mapper20-colors-text-wrap .mapper20-label-cat-head-title {
+  font-weight: 600;
+  font-size: 12px;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+.mapper20-colors-text-wrap .color-item {
+  display: grid;
+  grid-template-columns: var(--check-col) minmax(0, 1fr) var(--picker-col);
+  align-items: center;
+  column-gap: var(--gap);
+  padding: 2px 0;
+  border-bottom: 1px solid #ebebeb;
+}
+.mapper20-colors-text-wrap .color-item:last-child {
+  border-bottom: none;
+}
+.mapper20-colors-text-wrap .color-item .color-label {
+  margin: 0;
+  min-width: 0;
+  align-self: center;
+  line-height: 1.3;
+  font-weight: normal;
+  font-size: 11px;
+  /* Prefer whole words / natural breaks; split long tokens only when they would overflow */
+  word-break: normal;
+  overflow-wrap: break-word;
+  hyphens: none;
+}
+.mapper20-colors-text-wrap .mapper20-lcat-replacer.sp-replacer {
+  height: 22px !important;
+  padding: 2px !important;
+  vertical-align: middle;
+}
+.mapper20-colors-text-wrap .mapper20-lcat-replacer .sp-preview {
+  width: 20px !important;
+  height: 16px !important;
+}
+.mapper20-colors-text-wrap .mapper20-lcat-replacer .sp-dd {
+  height: auto !important;
+  line-height: 16px !important;
+  padding: 0 1px !important;
+  font-size: 9px;
+}
+
+/* Label Spectra: sit under the Colors menu DOM + constrain width vs viewport edge */
+.mapper20-colors-dropdown-anchor .mapper20-lcat-sp-container.sp-container {
+  box-sizing: border-box !important;
+  z-index: 10055 !important;
+  max-width: min(316px, calc(100vw - 20px)) !important;
+}
+.mapper20-colors-dropdown-anchor .mapper20-lcat-sp-container .sp-input-container.sp-cf input {
+  max-width: 100%;
+}
+#mapper20-colors-panel-text.mapper20-colors-text-wrap {
+  min-width: 0;
+}
+
+.mapper20-plot-toolbar .mapper20-datalabels-wrap.mapper20-hide-when-numeric {
+  display: none;
+}
+.mapper20-colors-panel-wrap #mapper20-colors-panel-numeric,
+.mapper20-colors-panel-wrap #mapper20-colors-panel-text {
+  display: none;
+}
+.mapper20-colors-panel-wrap.mapper20-colors-show-numeric #mapper20-colors-panel-numeric {
+  display: block;
+}
+.mapper20-colors-panel-wrap.mapper20-colors-show-text #mapper20-colors-panel-text {
+  display: block;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mapper20-wheel-wrap row">
+  <div class="col-xs-12 mapper20-wheel-primary-col">
+    <div class="mapper20-wheel-left">
+      <div class="mapper20-wheel-top-row">
+        <div class="mapper20-wheel-top-left">
+          <a href="{% url 'MapperLandingPage' %}" class="btn btn-default btn-xs mapper20-wheel-back-btn">&larr; Data Mapper 2.0</a>
+        </div>
+        <h2 class="mapper20-wheel-page-title">GPCRome wheel</h2>
+      </div>
+      <div class="mapper20-wheel-toolbar-stack">
+        <div class="mapper20-wheel-toolbar" aria-label="Mapper tools primary">
+          <button type="button" class="btn btn-default btn-xs" data-toggle="modal" data-target="#mapper20-howto-modal">How to</button>
+          <div class="btn-group btn-group-xs" role="group" aria-label="Input mode">
+            <button type="button" class="btn btn-default btn-xs active" id="mapper20-mode-numeric-btn" aria-pressed="true">Numeric</button>
+            <button type="button" class="btn btn-default btn-xs" id="mapper20-mode-labels-btn" aria-pressed="false">Text</button>
+          </div>
+        </div>
+        <div class="mapper20-wheel-toolbar" aria-label="Table actions">
+          <button type="button" class="btn btn-primary btn-xs" id="mapper20-open-gpcrome-picker" data-toggle="modal" data-target="#mapper20-gpcrome-picker-modal">Select from table</button>
+          <button type="button" class="btn btn-default btn-xs" id="mapper20-clear-rows">Clear table</button>
+        </div>
+      </div>
+      {% csrf_token %}
+      <div class="table-responsive" id="mapper20-paste-zone">
+        <table class="table table-bordered table-condensed mapper20-input-table" id="mapper20-input-table">
+          <thead>
+            <tr><th>Receptor</th><th class="mapper20-th-value">Value</th><th class="mapper20-th-swatch" title="Label colour">&nbsp;</th></tr>
+          </thead>
+          <tbody id="mapper20-input-tbody"></tbody>
+        </table>
+      </div>
+      <div class="mapper20-wheel-errors" id="mapper20-wheel-errors" role="alert"></div>
+    </div>
+  </div>
+
+  <div class="col-xs-12 mapper20-wheel-plot-col">
+    <div class="mapper20-plot-panel">
+      <div class="mapper20-plot-toolbar">
+    <div class="dropdown" style="position: relative;">
+      <button class="btn btn-primary dropdown-toggle btn-sm" type="button" id="GPCRome_LabelType_Button"
+              data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+        Receptor names
+      </button>
+      <div class="dropdown-menu p-2"
+           style="min-width: 160px; padding: 10px 15px; left: 100%; top: 50%; margin-left: 5px; position: absolute; transform: translateY(-30%);">
+        <button type="button" class="btn btn-outline-primary btn-block mb-1 GPCRome-label-btn" data-value="Protein">Protein</button>
+        <button type="button" class="btn btn-outline-primary btn-block mb-1 GPCRome-label-btn" data-value="Entrez">Gene</button>
+        <button type="button" class="btn btn-outline-primary btn-block GPCRome-label-btn" data-value="Uniprot">UniProt</button>
+      </div>
+    </div>
+    <div class="dropdown mapper20-colors-dropdown-anchor mapper20-dropdown-anchor-topleft" style="position: relative;">
+      <button class="btn btn-primary dropdown-toggle btn-sm" type="button" id="GPCRome_Color_Styling_Menu"
+              data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+        Colors
+      </button>
+      <div id="mapper20-colors-dropdown-menu" class="dropdown-menu dropdown-menu-listplot mapper20-colors-panel-wrap mapper20-dropdown-menu-topleft mapper20-colors-show-numeric"
+          aria-labelledby="GPCRome_Color_Styling_Menu"
+          style="left: 100%; margin-left: 5px; position: absolute;">
+        <div id="mapper20-colors-panel-numeric" class="mapper20-colors-numeric-inner">
+          <div class="col-md-12" style="margin: 15px 0px;">
+            <div class="row">
+              <div class="col-md-5 text-center">
+                <label style="font-weight: bold; font-size: 13px; display: block; margin-bottom: 5px;">Number of colors</label>
+                <div style="width: 100%; margin: -3px auto;">
+                  <select id="GPCRome_color_styling" class="form-control" style="width: 130px;">
+                    <option value="One">One</option>
+                    <option value="Two">Two</option>
+                    <option value="Three_RWB">Three</option>
+                    <option value="Three_TWM">Three</option>
+                  </select>
+                </div>
+              </div>
+              <div class="col-md-7">
+                <div style="display: flex; gap: 5px; justify-content: start; margin-bottom: 3px; font-size: 12px;">
+                  <div id="GPCRome_Color_min_label" style="width: 80px; text-align: center;">Min</div>
+                  <div id="GPCRome_Color_avg_label" style="width: 80px; text-align: center;">Mid</div>
+                  <div style="width: 80px; text-align: center;">Max</div>
+                </div>
+                <div style="display: flex; gap: 5px; align-items: center;">
+                  <div id="GPCRome_Color_min_container" style="width: 80px; display: flex; justify-content: center;">
+                    <input type="text" id="GPCRome_colorPicker_min" />
+                  </div>
+                  <div id="GPCRome_Color_avg_container" style="width: 80px; display: flex; justify-content: center;">
+                    <input type="text" id="GPCRome_colorPicker_avg" />
+                  </div>
+                  <div id="GPCRome_Color_max_container" style="width: 80px; display: flex; justify-content: center;">
+                    <input type="text" id="GPCRome_colorPicker_max" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="mapper20-colors-panel-text" class="mapper20-colors-text-wrap">
+          <div class="customize-menu mapper20-colors-text-menu" onclick="event.stopPropagation();">
+            <div id="mapper20-label-color-pickers"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="dropdown mapper20-datalabels-wrap mapper20-hide-when-numeric mapper20-dropdown-anchor-topleft" id="mapper20-datalabels-wrap" style="position: relative;">
+      <button class="btn btn-primary dropdown-toggle btn-sm" type="button" id="mapper20-legend-layout-btn"
+              data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+        Legend layout
+      </button>
+      <div class="dropdown-menu p-2 mapper20-dropdown-menu-topleft"
+           style="min-width: 250px; padding: 12px 14px; left: 100%; margin-left: 5px; position: absolute;">
+        <div style="display:flex; align-items:center; margin-bottom:12px;">
+          <label style="flex:1; font-weight:bold; font-size:12px; margin:0;">Layout</label>
+          <select id="mapper20-legend-layout-select" class="form-control input-sm" style="width:68%;"></select>
+        </div>
+        <div style="display:flex; align-items:center;">
+          <label style="flex:1; font-size:12px; margin:0;">Sorting</label>
+          <button type="button" id="mapper20-toggle-legend-sorting" class="btn btn-primary btn-sm" style="width:68%;">Vertically</button>
+        </div>
+      </div>
+    </div>
+    <div class="dropdown" style="position: relative;">
+      <button class="btn btn-primary dropdown-toggle btn-sm" type="button" id="GraphicalLegend_Button"
+              data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+        Graphical legend
+      </button>
+      <div class="dropdown-menu p-2"
+           style="min-width: 160px; padding: 10px 15px; left: 100%; top: 50%; margin-left: 5px; position: absolute; transform: translateY(-25%);">
+        <button type="button" class="btn btn-outline-primary btn-block mb-1 graphical-legend-option" data-icon="false" data-legend="false">None</button>
+        <button type="button" class="btn btn-outline-primary btn-block mb-1 graphical-legend-option" data-icon="true" data-legend="false">Left</button>
+        <button type="button" class="btn btn-outline-primary btn-block mb-1 graphical-legend-option" data-icon="false" data-legend="true">Right</button>
+        <button type="button" class="btn btn-outline-primary btn-block graphical-legend-option" data-icon="true" data-legend="true">Both</button>
+      </div>
+    </div>
+    <div class="dropdown" style="position: relative;">
+      <button type="button" class="btn btn-primary dropdown-toggle btn-sm"
+            id="DownloadDropdownToggle" style="font-size: 14px;">
+        <span class="glyphicon glyphicon-download" style="vertical-align: top; line-height: 1.3;"></span>
+        Download <span class="caret"></span>
+      </button>
+      <div class="dropdown-menu"
+          style="min-width: 160px; padding: 10px 15px; left: 100%; top: 50%;
+                  margin-left: 5px; position: absolute; transform: translateY(-25%); display: none;">
+        <button type="button" class="btn btn-primary btn-block"
+                onclick="saveSvgAsJpg(document.getElementById('GPCRome_plot_svg'), 'GPCRome_plot.jpg');">
+          JPG
+        </button>
+         <button type="button" class="btn btn-primary btn-block"
+                onclick="saveSvgAsPng(document.getElementById('GPCRome_plot_svg'), 'GPCRome_plot.png');">
+          PNG
+        </button>
+        <button type="button" class="btn btn-primary btn-block"
+                onclick="saveSvg(document.getElementById('GPCRome_plot_svg'), 'GPCRome_plot.svg');">
+          SVG
+        </button>
+        <button type="button" class="btn btn-primary btn-block"
+                onclick="saveSvgAsTiff(document.getElementById('GPCRome_plot_svg'), 'GPCRome_plot.tiff');">
+          TIFF
+        </button>
+      </div>
+    </div>
+      </div>
+      <div id="image-container" data-image-url="{% static 'home/images/DataMapper/DataMapper_GPCRome_icon_legend.png' %}"></div>
+      <div class="mapper20-gpcrome-plot-wrap">
+        <div id="GPCRome_plot"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade mapper20-howto-modal" id="mapper20-howto-modal" tabindex="-1" role="dialog" aria-labelledby="mapper20-howto-modal-label">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title" id="mapper20-howto-modal-label">How to use — GPCRome wheel</h4>
+      </div>
+      <div class="modal-body">
+        <p>Each row has a <strong>receptor</strong> cell and a second cell for a <strong>numeric value</strong> (Numeric mode) or a <strong>text label</strong> (Text mode). <strong>Type at least one character</strong> in the receptor cell to open suggestions (formatted GtoPdb-style receptor names with genes); chosen receptors show as formatted names while the plot uses the canonical UniProt entry behind the scenes. Paste multi-line/tab data in the table as before.</p>
+        <p>Use <strong>Numeric</strong> for heatmap colouring by number, or <strong>Text</strong> for text categories shared across receptors (Colours menu lists unique labels once; two identical labels use the same colour). An extra swatch appears beside the label cell in Text mode. Use <strong>Legend layout</strong> (toolbar) to arrange the categorical legend in Text mode.</p>
+        <p>Use <strong>Select from table</strong> for a searchable GPCR list (same set as this wheel): filter columns, tick rows, then <strong>Add to table</strong> to fill receptors in the grid.</p>
+        <p><strong>Paste from Excel:</strong> One column while focused in the <strong>value/label</strong> or <strong>Receptor</strong> column fills that column only from the current row downward (overwrites existing rows; adds rows if needed). Two tab-separated columns update both columns from the focused row the same way; paste with focus outside the grid still appends new rows.</p>
+        <p>Unknown receptors are outlined in red; invalid numbers red on the value cell in Numeric mode. A valid receptor with an empty second cell shows an orange hint (hover): enter a number or a label depending on mode. Duplicate receptors: <strong>last row wins</strong>. Max <strong>500</strong> rows; validation runs locally in your browser.</p>
+        <p>An empty row is kept at the bottom of the table for quick entry.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="mapper20-gpcrome-picker-modal" tabindex="-1" role="dialog" aria-labelledby="mapper20-gpcrome-picker-modal-label">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" id="mapper20-gpcrome-picker-dismiss-x" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title" id="mapper20-gpcrome-picker-modal-label">Select receptors (GPCRome wheel)</h4>
+      </div>
+      <div class="modal-body">
+        <p class="mapper20-picker-dt-note">Same receptor set as this plot. Use the <strong>GPCRdb</strong> column for the receptor page link; <strong>GtoPdb</strong> through <strong>Class</strong> each have a Select2 filter row (selector and GPCRdb columns have no filter).</p>
+        <div style="overflow-x: auto;">
+          <table width="100%" class="display compact" id="mapper20-gpcrome-picker-table">
+            <thead>
+              <tr>
+                <th data-dt-order="disable"><input type="checkbox" id="mapper20-gpcrome-picker-select-all" title="Select all rows currently shown by filters"></th>
+                <th class="mapper20-picker-gpcrdb-label" data-dt-order="disable">GPCRdb</th>
+                <th>GtoPdb</th>
+                <th>Gene</th>
+                <th>UniProt</th>
+                <th>Receptor family</th>
+                <th>Class</th>
+              </tr>
+              <tr>
+                <th data-dt-order="disable"></th>
+                <th data-dt-order="disable"></th>
+                <th data-dt-order="disable"></th>
+                <th data-dt-order="disable"></th>
+                <th data-dt-order="disable"></th>
+                <th data-dt-order="disable"></th>
+                <th data-dt-order="disable"></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal" id="mapper20-gpcrome-picker-cancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="mapper20-gpcrome-picker-add">Add to table</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block addon_js %}
+<script src="{% static 'home/js/d3.min.js' %}"></script>
+<script src="{% static 'home/js/nv.d3.min.js' %}"></script>
+<script src="{% static 'home/js/d3.v4.min.js' %}"></script>
+<script src="{% static 'home/js/saveSvgAsPng.js' %}"></script>
+<script src="{% static 'home/js/saveSvg.js' %}"></script>
+<script src="{% static 'home/js/datamapper.js' %}"></script>
+<script src="{% static 'home/js/spectrum_v1_8_1.js' %}"></script>
+<script src="{% static 'home/js/select2_4.1.0-rc.0_full.js' %}"></script>
+<script src="{% static 'home/js/NewDrugsBrowser_datatables.min.js' %}"></script>
+<script src="{% static 'home/js/NorgesDTFilterBuilder.js' %}"></script>
+<script src="{% static 'home/js/mapper_gpcrome_picker_modal.js' %}"></script>
+
+<script>
+$('.dropdown-menu').on('click', function(event){
+  event.stopPropagation();
+});
+
+var MAPPER20_MAX_ROWS = 500;
+/** Hint on the top receptor cell only */
+var MAPPER20_FIRST_ROW_RECEPTOR_PLACEHOLDER =
+    'Paste in 1–2 columns of data, or start typing to fill in.';
+/** Tall, wrap-friendly receptor cells until first multi-line/tab grid paste (then compact). Cleared rows restore this. */
+var mapper20ReceptorTallPlaceholderIntro = true;
+var receptorSelect2Data = {{ receptor_select2_json|safe }};
+var MAPPER20_RESOLVE = {{ gpcrome_resolve_json|safe }};
+var MAPPER20_GPCROME_PICKER_ROWS = {{ gpcrome_picker_rows_json|safe }};
+
+var MAPPER20_ENTRY_META = {};
+(function() {
+  if (receptorSelect2Data && receptorSelect2Data.length) {
+    receptorSelect2Data.forEach(function(item) {
+      var uni = item.uniprot != null ? String(item.uniprot).trim().toUpperCase() : '';
+      if (!uni && item.id && String(item.id).indexOf('_') !== -1) {
+        uni = String(item.id).split('_')[0].trim().toUpperCase();
+      } else if (!uni && item.id) {
+        uni = String(item.id).trim().toUpperCase();
+      }
+      MAPPER20_ENTRY_META[item.id] = {
+        name_html: item.name_html || '',
+        name_plain: item.name_plain || '',
+        text: item.text || '',
+        gene: item.gene != null ? String(item.gene).trim() : '',
+        uniprot: uni
+      };
+    });
+  }
+})();
+
+var MAPPER20_TREE_IDS = {};
+(function() {
+  if (receptorSelect2Data && receptorSelect2Data.length) {
+    receptorSelect2Data.forEach(function(item) {
+      MAPPER20_TREE_IDS[item.id] = true;
+    });
+  }
+})();
+
+/**
+ * Mapper 2 wheel: Numeric values vs categorical text Labels (Colours per unique label string).
+ */
+var mapper20WheelInputMode = 'numeric';
+var MAPPER20_LABEL_COLORS = {};
+var MAPPER20_LABEL_ENABLED = {};
+/** Captured snapshots for round-trips keyed by wheel input mode. */
+var MAPPER20_MODE_SNAPSHOTS = {
+  numeric: null,
+  text: null
+};
+
+function mapper20IsTextMode() {
+  return mapper20WheelInputMode === 'text';
+}
+
+function mapper20MessageReceptorRequiredForLabelCell() {
+  return 'Enter a receptor (use search) before typing a label in this row.';
+}
+
+function mapper20MessageLabelMissingForReceptor() {
+  return 'Enter a label for this receptor to show it with a colour on the plot.';
+}
+
+function mapper20FNV1a32(str) {
+  var h = 0x811c9dc5;
+  var i; var code;
+  for (i = 0; i < str.length; i++) {
+    code = str.charCodeAt(i);
+    h ^= code;
+    h += ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24));
+    h = h >>> 0;
+  }
+  return h >>> 0;
+}
+
+function mapper20DefaultHexForLabelKey(lbl) {
+  var hue = mapper20FNV1a32(String(lbl || '').toLowerCase()) % 360;
+  return 'hsl(' + hue + ', 68%, 48%)';
+}
+
+function mapper20SerializeDomRows() {
+  var rows = [];
+  $('#mapper20-input-tbody tr').each(function() {
+    var $tr = $(this);
+    var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+    var unmatched = $tr.data('mapper20UnmatchedRaw');
+    var unmatchedStr = unmatched != null ? String(unmatched) : '';
+    var ta = mapper20NormalizeTypedReceptorInput($tr.find('.mapper20-in-receptor').val() || '');
+    var val = ($tr.find('.mapper20-in-value').val() || '');
+    rows.push({ entry: entry, unmatched: unmatchedStr, ta: ta, value: val });
+  });
+  return rows;
+}
+
+function mapper20DestroyLabelColorSpectrumWidgets() {
+  $('#mapper20-label-color-pickers .mapper20-lcat-spectrum').each(function() {
+    var $inp = $(this);
+    try {
+      if ($inp.data('spectrum')) {
+        $inp.spectrum('destroy');
+      }
+    } catch (eIgnore) {}
+  });
+}
+
+/** Nudge Spectrum popup so it stays inside the viewport (close control remains reachable). */
+function mapper20ClampSpectrumPickerToViewport($input) {
+  if (!$input || !$input.length) {
+    return;
+  }
+  function adjust() {
+    var $container;
+    try {
+      $container = $input.spectrum('container');
+    } catch (eAdj) {
+      return;
+    }
+    if (!$container || !$container.length || $container.hasClass('sp-hidden')) {
+      return;
+    }
+    var pad = 10;
+    var sl = window.pageXOffset || document.documentElement.scrollLeft || 0;
+    var st = window.pageYOffset || document.documentElement.scrollTop || 0;
+    var vw = window.innerWidth || document.documentElement.clientWidth || 0;
+    var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+    var maxR = sl + vw - pad;
+    var maxB = st + vh - pad;
+    var off = $container.offset();
+    if (!off) {
+      return;
+    }
+    var left = off.left;
+    var top = off.top;
+    var cw = $container.outerWidth();
+    var ch = $container.outerHeight();
+    if (left + cw > maxR) {
+      left = Math.max(sl + pad, maxR - cw);
+    }
+    if (top + ch > maxB) {
+      top = Math.max(st + pad, maxB - ch);
+    }
+    if (left < sl + pad) {
+      left = sl + pad;
+    }
+    if (top < st + pad) {
+      top = st + pad;
+    }
+    $container.offset({ top: top, left: left });
+  }
+  window.requestAnimationFrame(function() {
+    window.requestAnimationFrame(adjust);
+  });
+}
+
+function mapper20DistinctSortedLabelsFromGrid() {
+  var seen = {};
+  mapper20CollectRows().forEach(function(r) {
+    var t = mapper20TrimmedValueFromRowRaw(r.value_raw);
+    if (t) {
+      seen[t] = true;
+    }
+  });
+  var arr = Object.keys(seen);
+  arr.sort(function(a, b) {
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  });
+  return arr;
+}
+
+function mapper20EnsureMapsForDistinctLabels(sortedLabels) {
+  (sortedLabels || []).forEach(function(lbl) {
+    if (!lbl) {
+      return;
+    }
+    if (!Object.prototype.hasOwnProperty.call(MAPPER20_LABEL_COLORS, lbl)) {
+      MAPPER20_LABEL_COLORS[lbl] = mapper20DefaultHexForLabelKey(lbl);
+    }
+    if (!Object.prototype.hasOwnProperty.call(MAPPER20_LABEL_ENABLED, lbl)) {
+      MAPPER20_LABEL_ENABLED[lbl] = true;
+    }
+  });
+}
+
+function mapper20SyncRowSwatch($tr) {
+  if (!$tr || !$tr.length) {
+    return;
+  }
+  var $sw = $tr.find('.mapper20-label-swatch');
+  if (!$sw.length) {
+    return;
+  }
+  if (!mapper20IsTextMode()) {
+    $sw.css('background-color', 'transparent');
+    return;
+  }
+  var lbl = mapper20TrimmedValueFromRowRaw($tr.find('.mapper20-in-value').val());
+  if (!lbl) {
+    $sw.css('background-color', '#f5f5f5');
+    return;
+  }
+  var hex = MAPPER20_LABEL_COLORS[lbl];
+  $sw.css('background-color', hex || mapper20DefaultHexForLabelKey(lbl));
+}
+
+function mapper20RefreshAllLabelSwatches() {
+  $('#mapper20-input-tbody tr').each(function() {
+    mapper20SyncRowSwatch($(this));
+  });
+}
+
+function mapper20SpectrumGetHex(sel) {
+  var $el = $(sel);
+  if (!$el.length || typeof $el.spectrum !== 'function') {
+    return null;
+  }
+  try {
+    var c = $el.spectrum('get');
+    return c ? c.toHexString() : null;
+  } catch (eCatch) {
+    return null;
+  }
+}
+
+function mapper20CloneObj(obj) {
+  try {
+    return JSON.parse(JSON.stringify(obj));
+  } catch (eC) {
+    return obj;
+  }
+}
+
+function mapper20CaptureNumericUiSnapshotExtras() {
+  return {
+    colorSchemeSelect: ($('#GPCRome_color_styling').val() || 'One'),
+    stylingNums: {
+      colorStart: GPCRomes_styling.colorStart,
+      colorAvg: GPCRomes_styling.colorAvg,
+      colorEnd: GPCRomes_styling.colorEnd,
+      ColorSetup: GPCRomes_styling.ColorSetup,
+      showIcon: GPCRomes_styling.showIcon,
+      ShowLegend: GPCRomes_styling.ShowLegend,
+      LabelType: GPCRomes_styling.LabelType
+    },
+    specHex: {
+      min: mapper20SpectrumGetHex('#GPCRome_colorPicker_min'),
+      avg: mapper20SpectrumGetHex('#GPCRome_colorPicker_avg'),
+      max: mapper20SpectrumGetHex('#GPCRome_colorPicker_max')
+    }
+  };
+}
+
+function mapper20CaptureTextUiSnapshotExtras() {
+  return {
+    labelColors: mapper20CloneObj(MAPPER20_LABEL_COLORS),
+    labelEnabled: mapper20CloneObj(MAPPER20_LABEL_ENABLED),
+    legendLayout: mapper20CloneObj(GPCRomes_styling.LegendLayout || { mode: 'row', columns: '1', sorted: 'Vertically' }),
+    stylingFrag: {
+      showIcon: GPCRomes_styling.showIcon,
+      ShowLegend: GPCRomes_styling.ShowLegend,
+      LabelType: GPCRomes_styling.LabelType
+    }
+  };
+}
+
+function mapper20CaptureSnapshotForActiveMode() {
+  var snap = {
+    rows: mapper20SerializeDomRows(),
+    receptorTallPlaceholderIntro: mapper20ReceptorTallPlaceholderIntro
+  };
+  if (mapper20IsTextMode()) {
+    var xt = mapper20CaptureTextUiSnapshotExtras();
+    Object.assign(snap, xt);
+    MAPPER20_MODE_SNAPSHOTS.text = snap;
+  } else {
+    var nx = mapper20CaptureNumericUiSnapshotExtras();
+    Object.assign(snap, nx);
+    MAPPER20_MODE_SNAPSHOTS.numeric = snap;
+  }
+}
+
+function mapper20CloneRowsDeep(rows) {
+  return mapper20CloneObj(rows || []);
+}
+
+function mapper20EnsureOppositeModeSeed(targetMode) {
+  if (MAPPER20_MODE_SNAPSHOTS[targetMode] != null) {
+    return;
+  }
+  if (targetMode === 'text') {
+    var baseSnap = MAPPER20_MODE_SNAPSHOTS.numeric || { rows: [] };
+    MAPPER20_MODE_SNAPSHOTS.text = {
+      rows: mapper20CloneRowsDeep(baseSnap.rows),
+      receptorTallPlaceholderIntro: baseSnap.receptorTallPlaceholderIntro,
+      labelColors: {},
+      labelEnabled: {},
+      legendLayout: { mode: 'row', columns: '1', sorted: 'Vertically' },
+      stylingFrag: {
+        showIcon: GPCRomes_styling.showIcon,
+        ShowLegend: GPCRomes_styling.ShowLegend,
+        LabelType: GPCRomes_styling.LabelType
+      }
+    };
+  } else if (targetMode === 'numeric') {
+    var tSnap = MAPPER20_MODE_SNAPSHOTS.text || { rows: [] };
+    var n0 = MAPPER20_MODE_SNAPSHOTS.numeric || {};
+    MAPPER20_MODE_SNAPSHOTS.numeric = {
+      rows: mapper20CloneRowsDeep(tSnap.rows),
+      receptorTallPlaceholderIntro: tSnap.receptorTallPlaceholderIntro,
+      colorSchemeSelect: n0.colorSchemeSelect || ($('#GPCRome_color_styling').val() || 'One'),
+      stylingNums: n0.stylingNums ? mapper20CloneObj(n0.stylingNums) : null,
+      specHex: mapper20CloneObj(n0.specHex || {})
+    };
+    if (!MAPPER20_MODE_SNAPSHOTS.numeric.stylingNums) {
+      delete MAPPER20_MODE_SNAPSHOTS.numeric.stylingNums;
+    }
+  }
+}
+
+function mapper20HydrateSpectrumTriplet(specHexObj) {
+  if (!specHexObj) {
+    return;
+  }
+  function set(id, hex) {
+    if (!hex) {
+      return;
+    }
+    var $e = $('#' + id);
+    if ($e.length && $e.data('spectrum')) {
+      try {
+        $e.spectrum('set', hex);
+      } catch (eI) {}
+    }
+  }
+  set('GPCRome_colorPicker_min', specHexObj.min);
+  set('GPCRome_colorPicker_avg', specHexObj.avg);
+  set('GPCRome_colorPicker_max', specHexObj.max);
+}
+
+function mapper20RestoreRowsFromSerialized(rows) {
+  mapper20RestoringDomRows = true;
+  try {
+  window.clearTimeout(mapper20PlotRebuildTimer);
+  mapper20PlotRebuildTimer = null;
+  mapper20DestroyRowReceptorWidgets();
+  $('#mapper20-input-tbody').empty();
+  var list = rows && rows.length ? rows : [{ entry: '', unmatched: '', ta: '', value: '' }];
+  list.forEach(function(ro) {
+    mapper20AppendRow('', ro.value != null ? String(ro.value) : '', true);
+    var $tr = $('#mapper20-input-tbody tr').last();
+    if ((ro.entry || '').trim()) {
+      mapper20ApplyCanonicalToRowSelect($tr, ro.entry.trim());
+    } else if ((ro.unmatched || '').trim()) {
+      mapper20SetReceptorRawOnRow($tr, String(ro.unmatched).trim());
+    } else if ((ro.ta || '').trim()) {
+      mapper20DestroyReceptorAutocomplete($tr.find('.mapper20-in-receptor'));
+      var $td = $tr.find('td.mapper20-receptor-cell');
+      $td.empty();
+      var $inp2 = mapper20CreateReceptorCell($td);
+      mapper20BindReceptorAutocomplete($inp2);
+      $tr.find('.mapper20-receptor-entry').val('');
+      $inp2.val(ro.ta).show();
+      $tr.removeClass('mapper20-row-invalid');
+      $tr.removeData('mapper20UnmatchedRaw');
+      mapper20SyncReceptorClearBtn($tr);
+    }
+    mapper20SetValueCellRawOnRow($tr, ro.value);
+    mapper20SyncRowSwatch($tr);
+    mapper20SyncValueCellHint($tr);
+  });
+  mapper20SyncFirstRowReceptorPlaceholder();
+  mapper20SyncReceptorTextareaHeights();
+  mapper20EnsureTrailingBlankRow();
+  } finally {
+    mapper20RestoringDomRows = false;
+  }
+}
+
+function mapper20ApplyChromeForInputMode() {
+  var text = mapper20IsTextMode();
+  $('#mapper20-input-table').toggleClass('mapper20-text-mode', text);
+  $('.mapper20-th-value').text(text ? 'Label' : 'Value');
+  $('#mapper20-datalabels-wrap').toggleClass('mapper20-hide-when-numeric', !text);
+  var $cw = $('.mapper20-colors-panel-wrap');
+  $cw.toggleClass('mapper20-colors-show-numeric', !text);
+  $cw.toggleClass('mapper20-colors-show-text', text);
+
+  $('#mapper20-mode-numeric-btn')
+    .toggleClass('btn-primary', !text)
+    .toggleClass('btn-default', text)
+    .toggleClass('active', !text)
+    .attr('aria-pressed', !text ? 'true' : 'false');
+  $('#mapper20-mode-labels-btn')
+    .toggleClass('btn-primary', text)
+    .toggleClass('btn-default', !text)
+    .toggleClass('active', text)
+    .attr('aria-pressed', text ? 'true' : 'false');
+}
+
+function mapper20GraphicalLegendSyncActiveButtons() {
+  var graphicalLegendOptions = document.querySelectorAll('.graphical-legend-option');
+  var iconShown = !!(GPCRomes_styling.showIcon);
+  var legShown = !!(GPCRomes_styling.ShowLegend);
+  graphicalLegendOptions.forEach(function(btn) {
+    var iconValue = btn.getAttribute('data-icon') === 'true';
+    var legendValue = btn.getAttribute('data-legend') === 'true';
+    var match = iconValue === iconShown && legendValue === legShown;
+    btn.classList.remove('btn-primary', 'btn-outline-primary');
+    if (match) {
+      btn.classList.add('btn-primary');
+    } else {
+      btn.classList.add('btn-outline-primary');
+    }
+  });
+}
+
+function mapper20SetWheelInputMode(nextMode, skipRedraw) {
+  if (nextMode !== 'numeric' && nextMode !== 'text') {
+    return;
+  }
+  if (nextMode === mapper20WheelInputMode) {
+    return;
+  }
+  mapper20CaptureSnapshotForActiveMode();
+  mapper20EnsureOppositeModeSeed(nextMode);
+  mapper20WheelInputMode = nextMode;
+  var snap = MAPPER20_MODE_SNAPSHOTS[nextMode] || {};
+  mapper20ReceptorTallPlaceholderIntro = snap.receptorTallPlaceholderIntro !== undefined ? !!snap.receptorTallPlaceholderIntro : mapper20ReceptorTallPlaceholderIntro;
+  mapper20RestoreRowsFromSerialized(snap.rows || []);
+
+  if (mapper20IsTextMode()) {
+    MAPPER20_LABEL_COLORS = snap.labelColors && typeof snap.labelColors === 'object' ? mapper20CloneObj(snap.labelColors) : {};
+    MAPPER20_LABEL_ENABLED = snap.labelEnabled && typeof snap.labelEnabled === 'object' ? mapper20CloneObj(snap.labelEnabled) : {};
+    if (snap.legendLayout && typeof snap.legendLayout === 'object') {
+      GPCRomes_styling.LegendLayout = mapper20CloneObj(snap.legendLayout);
+    }
+    if (snap.stylingFrag && typeof snap.stylingFrag === 'object') {
+      if (snap.stylingFrag.LabelType !== undefined) {
+        GPCRomes_styling.LabelType = snap.stylingFrag.LabelType;
+      }
+      if (snap.stylingFrag.showIcon !== undefined) {
+        GPCRomes_styling.showIcon = !!snap.stylingFrag.showIcon;
+      }
+      if (snap.stylingFrag.ShowLegend !== undefined) {
+        GPCRomes_styling.ShowLegend = !!snap.stylingFrag.ShowLegend;
+      }
+    }
+    GPCRomes_styling.DataType = 'Text';
+    GPCRomes_styling.FontStyle = 'Arial';
+    if (!GPCRomes_styling.LegendLayout) {
+      GPCRomes_styling.LegendLayout = { mode: 'row', columns: '1', sorted: 'Vertically' };
+    }
+    mapper20SyncLegendLayoutUiFromStyling();
+  } else {
+    if (snap.stylingNums && typeof snap.stylingNums === 'object') {
+      GPCRomes_styling.colorStart = snap.stylingNums.colorStart != null ? snap.stylingNums.colorStart : GPCRomes_styling.colorStart;
+      GPCRomes_styling.colorAvg = snap.stylingNums.colorAvg != null ? snap.stylingNums.colorAvg : GPCRomes_styling.colorAvg;
+      GPCRomes_styling.colorEnd = snap.stylingNums.colorEnd != null ? snap.stylingNums.colorEnd : GPCRomes_styling.colorEnd;
+      GPCRomes_styling.ColorSetup = snap.stylingNums.ColorSetup || GPCRomes_styling.ColorSetup;
+      if (snap.stylingNums.LabelType !== undefined) {
+        GPCRomes_styling.LabelType = snap.stylingNums.LabelType;
+      }
+      if (snap.stylingNums.showIcon !== undefined) {
+        GPCRomes_styling.showIcon = !!snap.stylingNums.showIcon;
+      }
+      if (snap.stylingNums.ShowLegend !== undefined) {
+        GPCRomes_styling.ShowLegend = !!snap.stylingNums.ShowLegend;
+      }
+    }
+    if (snap.colorSchemeSelect) {
+      $('#GPCRome_color_styling').val(snap.colorSchemeSelect).trigger('change.select2');
+    }
+    GPCRomes_styling.DataType = 'Numeric';
+    window.setTimeout(function() {
+      mapper20HydrateSpectrumTriplet(snap.specHex || {});
+      if (typeof window.Mapper20UpdateNumericColorPanels === 'function') {
+        window.Mapper20UpdateNumericColorPanels();
+      }
+    }, 0);
+    mapper20RecalcNumericStyling();
+  }
+
+  mapper20ApplyChromeForInputMode();
+  mapper20RefreshResolvedReceptorDisplaysInGrid();
+  mapper20GraphicalLegendSyncActiveButtons();
+  mapper20RebuildLabelColorCustomizePanel(false);
+  if (!skipRedraw) {
+    mapper20RebuildPlotImmediate();
+  }
+
+  $('.GPCRome-label-btn').each(function() {
+    var v = $(this).data('value') || '';
+    $(this).toggleClass('btn-primary', v === GPCRomes_styling.LabelType).toggleClass('btn-outline-primary', v !== GPCRomes_styling.LabelType);
+  });
+}
+
+function mapper20InitLegendLayoutSelectUi() {
+  var $sel = $('#mapper20-legend-layout-select');
+  if (!$sel.length || $sel.children().length > 0) {
+    return;
+  }
+  $sel.append('<option value="row">Continuous text</option>');
+  var i;
+  for (i = 1; i <= 4; i++) {
+    $sel.append($('<option>').attr('value', 'columns-' + String(i)).text(String(i) + ' column(s)'));
+  }
+}
+
+function mapper20SyncLegendLayoutUiFromStyling() {
+  var ll = GPCRomes_styling.LegendLayout || { mode: 'row', columns: '1', sorted: 'Vertically' };
+  if (!ll.sorted) {
+    ll.sorted = 'Vertically';
+  }
+  var $sel = $('#mapper20-legend-layout-select');
+  if (!$sel.length) {
+    return;
+  }
+  if (ll.mode === 'columns' && ll.columns != null) {
+    $sel.val('columns-' + String(parseInt(ll.columns, 10) || 1));
+  } else {
+    $sel.val('row');
+  }
+  var sortBtn = $('#mapper20-toggle-legend-sorting');
+  if (sortBtn.length) {
+    sortBtn.text(ll.sorted === 'Horizontally' ? 'Horizontally' : 'Vertically');
+  }
+}
+
+function mapper20ApplyLegendLayoutSelectionFromDropdown() {
+  var v = ($('#mapper20-legend-layout-select').val() || 'row');
+  if (!GPCRomes_styling.LegendLayout) {
+    GPCRomes_styling.LegendLayout = {};
+  }
+  var sortedKeep = GPCRomes_styling.LegendLayout.sorted || 'Vertically';
+  if (v === 'row') {
+    GPCRomes_styling.LegendLayout.mode = 'row';
+    GPCRomes_styling.LegendLayout.columns = '1';
+  } else if (typeof v === 'string' && v.indexOf('columns-') === 0) {
+    GPCRomes_styling.LegendLayout.mode = 'columns';
+    GPCRomes_styling.LegendLayout.columns = String(parseInt(v.split('-')[1], 10) || 1);
+  }
+  GPCRomes_styling.LegendLayout.sorted = sortedKeep;
+}
+
+function mapper20RebuildLabelColorCustomizePanel(forceRedrawWheel) {
+  mapper20DestroyLabelColorSpectrumWidgets();
+  var $mount = $('#mapper20-label-color-pickers');
+  if (!$mount.length) {
+    return;
+  }
+  $mount.empty();
+  if (!mapper20IsTextMode()) {
+    if (forceRedrawWheel) {
+      mapper20RebuildPlotImmediate();
+    }
+    return;
+  }
+
+  var labels = mapper20DistinctSortedLabelsFromGrid();
+  mapper20EnsureMapsForDistinctLabels(labels);
+
+  var hdr = $('<div class="mapper20-label-cat-head">').append(
+    $('<input type="checkbox" id="mapper20-label-cat-master" aria-label="Toggle all label colours enabled">'),
+    $('<div class="mapper20-label-cat-head-title">Labels</div>')
+  );
+  var grid = $('<div class="color-grid" id="mapper20-label-color-grid"></div>');
+  $mount.append(hdr, grid);
+
+  function domId(ix, kind) {
+    return 'mapper20_l_' + kind + '_' + String(ix);
+  }
+
+  function updateMasterCheckbox() {
+    var allOn = labels.length > 0 && labels.every(function(l) {
+      return MAPPER20_LABEL_ENABLED[l] !== false;
+    });
+    var allOff = labels.length > 0 && labels.every(function(l) {
+      return MAPPER20_LABEL_ENABLED[l] === false;
+    });
+    var mx = $('#mapper20-label-cat-master')[0];
+    if (!mx) {
+      return;
+    }
+    mx.checked = !!allOn;
+    mx.indeterminate = !allOn && !allOff && labels.length > 0;
+  }
+
+  function refreshGridRowUi(ix, lbl) {
+    var chkId = domId(ix, 'chk');
+    var spId = domId(ix, 'spe');
+    var en = MAPPER20_LABEL_ENABLED[lbl] !== false;
+    $('#' + chkId).prop('checked', en);
+    var $inp = $('#' + spId);
+    if (!$inp.length || !$inp.data('spectrum')) {
+      return;
+    }
+    try {
+      if (en) {
+        $inp.spectrum('enable').css('opacity', '1');
+      } else {
+        $inp.spectrum('disable').css('opacity', '0.5');
+      }
+    } catch (eR) {}
+  }
+
+  labels.forEach(function(lbl, ix) {
+    var chkId = domId(ix, 'chk');
+    var pickerId = domId(ix, 'spe');
+    var hex = MAPPER20_LABEL_COLORS[lbl] || mapper20DefaultHexForLabelKey(lbl);
+    MAPPER20_LABEL_COLORS[lbl] = hex;
+    var en = MAPPER20_LABEL_ENABLED[lbl] !== false;
+
+    var $spe = $('<input type="text">').addClass('mapper20-lcat-spectrum form-control input-sm').attr('id', pickerId);
+    grid.append($('<div class="color-item">').append(
+      $('<input type="checkbox">').attr('id', chkId).prop('checked', !!en),
+      $('<label>').attr('for', chkId).addClass('color-label').text(lbl),
+      $spe
+    ));
+
+    $('#' + chkId).on('change', function() {
+      MAPPER20_LABEL_ENABLED[lbl] = !!$(this).prop('checked');
+      refreshGridRowUi(ix, lbl);
+      mapper20RefreshAllLabelSwatches();
+      mapper20ScheduleRebuildPlot();
+    });
+
+    $spe.spectrum({
+      color: hex,
+      showPalette: true,
+      showInput: true,
+      showButtons: false,
+      preferredFormat: 'hex',
+      appendTo: '#mapper20-colors-dropdown-menu',
+      containerClassName: 'mapper20-lcat-sp-container',
+      replacerClassName: 'mapper20-lcat-replacer',
+      palette: [
+        ['#000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00'],
+        ['#FF00FF', '#00FFFF', '#FFFFFF', '#C0C0C0', '#808080']
+      ],
+      show: function() {
+        mapper20ClampSpectrumPickerToViewport($spe);
+      },
+      change: function(c) {
+        if (MAPPER20_LABEL_ENABLED[lbl] === false) {
+          return;
+        }
+        var nextHex = hex;
+        if (c && c.toHexString) {
+          nextHex = c.toHexString();
+        } else if (c && c.toRgbString) {
+          nextHex = c.toRgbString();
+        }
+        MAPPER20_LABEL_COLORS[lbl] = nextHex || hex;
+        mapper20RefreshAllLabelSwatches();
+        mapper20ScheduleRebuildPlot();
+      },
+      move: function(c) {
+        if (MAPPER20_LABEL_ENABLED[lbl] === false) {
+          return;
+        }
+        var nextHex = hex;
+        if (c && c.toHexString) {
+          nextHex = c.toHexString();
+        } else if (c && c.toRgbString) {
+          nextHex = c.toRgbString();
+        }
+        MAPPER20_LABEL_COLORS[lbl] = nextHex || hex;
+        mapper20RefreshAllLabelSwatches();
+        mapper20ScheduleRebuildPlot();
+      }
+    });
+
+    if (!en) {
+      $spe.spectrum('disable').css('opacity', '0.5');
+    }
+  });
+
+  $('#mapper20-label-cat-master').on('change', function() {
+    var setOn = !!$(this).prop('checked');
+    labels.forEach(function(lbl0, ix0) {
+      MAPPER20_LABEL_ENABLED[lbl0] = setOn;
+      $('#' + domId(ix0, 'chk')).prop('checked', setOn);
+      refreshGridRowUi(ix0, lbl0);
+    });
+    mapper20RefreshAllLabelSwatches();
+    mapper20ScheduleRebuildPlot();
+    updateMasterCheckbox();
+  });
+
+  updateMasterCheckbox();
+
+  if (forceRedrawWheel) {
+    mapper20RebuildPlotImmediate();
+  }
+}
+
+function mapper20WheelLabelType() {
+  if (typeof GPCRomes_styling !== 'undefined' && GPCRomes_styling && GPCRomes_styling.LabelType) {
+    return GPCRomes_styling.LabelType;
+  }
+  return 'Protein';
+}
+
+function mapper20FallbackUniprotFromEntry(entryId, meta) {
+  var sid = entryId != null ? String(entryId).trim() : '';
+  var u = meta && meta.uniprot ? String(meta.uniprot).trim().toUpperCase() : '';
+  if (u) {
+    return u;
+  }
+  if (sid.indexOf('_') !== -1) {
+    return sid.split('_')[0].trim().toUpperCase();
+  }
+  return sid.toUpperCase();
+}
+
+function mapper20ResolvedReceptorDisplayHtml(entryId) {
+  var sid = entryId != null ? String(entryId).trim() : '';
+  if (!sid) {
+    return '';
+  }
+  var meta = MAPPER20_ENTRY_META[sid];
+  var lt = mapper20WheelLabelType();
+  if (lt === 'Entrez') {
+    var g = meta && meta.gene ? String(meta.gene).trim() : '';
+    return g ? $('<span/>').text(g).html() : $('<span/>').text(sid).html();
+  }
+  if (lt === 'Uniprot') {
+    var uni = mapper20FallbackUniprotFromEntry(sid, meta);
+    return $('<span/>').text(uni || sid).html();
+  }
+  if (meta && meta.name_html) {
+    return String(meta.name_html);
+  }
+  return $('<span/>').text(sid).html();
+}
+
+/** Plain string for autocomplete `label` (accessibility / matching). */
+function mapper20ReceptorAutocompleteLabelPlain(it) {
+  if (!it || it.id == null) {
+    return '';
+  }
+  var meta = MAPPER20_ENTRY_META[it.id];
+  var lt = mapper20WheelLabelType();
+  if (lt === 'Entrez') {
+    var g = meta && meta.gene ? String(meta.gene).trim() : '';
+    return g || it.name_plain || it.text || it.id;
+  }
+  if (lt === 'Uniprot') {
+    return mapper20FallbackUniprotFromEntry(it.id, meta) || it.id;
+  }
+  return it.name_plain || it.text || it.id;
+}
+
+function mapper20ReceptorEditSeed(id) {
+  if (!id) {
+    return '';
+  }
+  var meta = MAPPER20_ENTRY_META[id] || {};
+  var lt = mapper20WheelLabelType();
+  if (lt === 'Entrez') {
+    return meta.gene || meta.name_plain || '';
+  }
+  if (lt === 'Uniprot') {
+    return mapper20FallbackUniprotFromEntry(id, meta);
+  }
+  return meta.name_plain || '';
+}
+
+function mapper20RefreshResolvedReceptorDisplaysInGrid() {
+  $('#mapper20-input-tbody tr').each(function() {
+    var $tr = $(this);
+    var id = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+    if (!id) {
+      return;
+    }
+    var $view = $tr.find('.mapper20-receptor-html-view');
+    if (!$view.length || !$view.is(':visible')) {
+      return;
+    }
+    $view.html(mapper20ResolvedReceptorDisplayHtml(id));
+  });
+}
+
+function mapper20QuoteForMsg(s) {
+  var t = s == null ? '' : String(s);
+  if (t.trim() === '') {
+    return '(empty)';
+  }
+  return '"' + t + '"';
+}
+
+function mapper20MessageInvalidReceptor(x) {
+  return mapper20QuoteForMsg(x) + ' is an invalid receptor for the GPCR plot — try the search option for correct receptor name input.';
+}
+
+function mapper20MessageInvalidNumeric(x) {
+  return mapper20QuoteForMsg(x) + ' is not a valid numeric value.';
+}
+
+function mapper20MessageReceptorRequiredForValue() {
+  return 'Enter a receptor (use search) before applying a numeric value in this row.';
+}
+
+function mapper20MessageNumericMissingForReceptor() {
+  return 'Enter a numeric value for this receptor to show it on the plot.';
+}
+
+var mapper20PlotDebounceMs = 200;
+var mapper20PlotRebuildTimer = null;
+var mapper20RestoringDomRows = false;
+var mapper20LabelPanelDebouncer = null;
+
+function mapper20ScheduleRebuildPlot() {
+  window.clearTimeout(mapper20PlotRebuildTimer);
+  mapper20PlotRebuildTimer = window.setTimeout(function() {
+    mapper20PlotRebuildTimer = null;
+    mapper20RebuildPlotFromTableInternal();
+  }, mapper20PlotDebounceMs);
+}
+
+function mapper20RebuildPlotImmediate() {
+  window.clearTimeout(mapper20PlotRebuildTimer);
+  mapper20PlotRebuildTimer = null;
+  mapper20RebuildPlotFromTableInternal();
+}
+
+function mapper20TrimmedValueFromRowRaw(valueRaw) {
+  if (valueRaw === true || valueRaw === false) {
+    return String(valueRaw).trim();
+  }
+  if (valueRaw === null || valueRaw === undefined) {
+    return '';
+  }
+  if (typeof valueRaw === 'number') {
+    return String(valueRaw);
+  }
+  return String(valueRaw).trim();
+}
+
+function mapper20NumericStringAcceptable(trimmed) {
+  if (trimmed === '') {
+    return true;
+  }
+  var n = Number(trimmed);
+  return Number.isFinite(n);
+}
+
+/**
+ * Turn locale-style numbers into dot-decimal form for JS Number().
+ * 1,222.2 -> 1222.2 · 1.222,2 -> 1222.2 · 1,2 -> 1.2 · 12,345 -> 12345 (US-style thousands)
+ */
+function mapper20NormalizeLocalizedNumberString(raw) {
+  var orig = raw == null ? '' : String(raw);
+  var t = orig.trim();
+  if (!t) {
+    return '';
+  }
+  if (/[eE]/.test(t)) {
+    return t;
+  }
+  var compact = t.replace(/\s+/g, '');
+  var signCh = '';
+  if (/^[+-]/.test(compact)) {
+    signCh = compact.charAt(0);
+    compact = compact.slice(1);
+  }
+  if (!compact.length) {
+    return orig.trim();
+  }
+  if (!/[,.]/.test(compact)) {
+    return signCh + compact;
+  }
+  if (!/^[\d,.]+$/.test(compact)) {
+    return orig.trim();
+  }
+
+  var s = compact;
+  var hasComma = s.indexOf(',') >= 0;
+  var hasDot = s.indexOf('.') >= 0;
+
+  if (hasComma && hasDot) {
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      s = s.replace(/,/g, '');
+    }
+    return signCh + s;
+  }
+
+  if (hasComma && !hasDot) {
+    var cp = s.split(',');
+    if (cp.length > 2) {
+      s = cp.join('');
+    } else if (cp.length === 2) {
+      var ca = cp[0];
+      var cb = cp[1];
+      if (!/^\d+$/.test(ca) || !/^\d+$/.test(cb)) {
+        return orig.trim();
+      }
+      if (cb.length <= 2) {
+        s = ca + '.' + cb;
+      } else if (cb.length === 3) {
+        s = ca + cb;
+      } else {
+        s = ca + cb;
+      }
+    }
+    return signCh + s;
+  }
+
+  if (!hasComma && hasDot) {
+    var dp = s.split('.');
+    if (dp.length > 2 && dp.every(function(p) {
+      return /^\d+$/.test(p);
+    })) {
+      var decFrag = dp.pop();
+      if (decFrag.length <= 2) {
+        s = dp.join('') + '.' + decFrag;
+      } else {
+        s = dp.join('');
+      }
+    }
+    return signCh + s;
+  }
+
+  return signCh + s;
+}
+
+/** Returns a string acceptable to Number(...), preserving input when already valid or unrecognized. */
+function mapper20NormalizedValueForJsNumber(trimmedStr) {
+  if (trimmedStr === '') {
+    return '';
+  }
+  if (/[eE]/.test(trimmedStr)) {
+    return trimmedStr;
+  }
+  if (!/[,.]/.test(trimmedStr)) {
+    return trimmedStr;
+  }
+  var n = mapper20NormalizeLocalizedNumberString(trimmedStr);
+  return mapper20NumericStringAcceptable(n) ? n : trimmedStr;
+}
+
+function mapper20ApplyOrangeMissingValueHints(rawRows, errReceptorRows, errValRows) {
+  $('#mapper20-input-tbody tr').each(function(ix) {
+    var idx = ix + 1;
+    var row = rawRows[ix];
+    if (!row) {
+      return;
+    }
+    if (errReceptorRows[idx] || errValRows[idx]) {
+      return;
+    }
+    var rs = row.receptor_raw != null ? String(row.receptor_raw).trim() : '';
+    var vTrim;
+    if (mapper20IsTextMode()) {
+      vTrim = mapper20TrimmedValueFromRowRaw(row.value_raw);
+    } else {
+      vTrim = mapper20NormalizedValueForJsNumber(mapper20TrimmedValueFromRowRaw(row.value_raw));
+    }
+    if (vTrim !== '') {
+      return;
+    }
+    if (!mapper20NormalizeReceptorForWheel(rs)) {
+      return;
+    }
+    var $tr = $(this);
+    if ($tr.hasClass('mapper20-row-invalid')) {
+      return;
+    }
+    var $tdV = $tr.find('td.mapper20-value-cell');
+    mapper20SetCellWarnHint($tdV, mapper20IsTextMode() ? mapper20MessageLabelMissingForReceptor() : mapper20MessageNumericMissingForReceptor());
+  });
+}
+
+function mapper20ClearCellHoverHint($td) {
+  if (!$td || !$td.length) {
+    return;
+  }
+  $td.removeClass('mapper20-cell-hint-error mapper20-cell-hint-warn');
+  $td.removeAttr('title');
+}
+
+function mapper20SetCellHoverHint($td, message) {
+  if (!$td || !$td.length) {
+    return;
+  }
+  $td.removeClass('mapper20-cell-hint-warn');
+  $td.addClass('mapper20-cell-hint-error');
+  $td.attr('title', message);
+}
+
+function mapper20SetCellWarnHint($td, message) {
+  if (!$td || !$td.length) {
+    return;
+  }
+  $td.removeClass('mapper20-cell-hint-error');
+  $td.addClass('mapper20-cell-hint-warn');
+  $td.attr('title', message);
+}
+
+function mapper20ClearRowApplyHints($tr) {
+  if (!$tr || !$tr.length) {
+    return;
+  }
+  mapper20ClearCellHoverHint($tr.find('td.mapper20-receptor-cell'));
+  mapper20ClearCellHoverHint($tr.find('td.mapper20-value-cell'));
+}
+
+function mapper20ClearAllPlotRowUiHints() {
+  $('#mapper20-input-tbody tr').each(function() {
+    var $tr = $(this);
+    $tr.removeClass('mapper20-row-error');
+    mapper20ClearRowApplyHints($tr);
+  });
+}
+
+/** Live value-/label-cell hint while typing; full grid hints come from mapper20RebuildPlotFromTableInternal. */
+function mapper20SyncValueCellHint($tr) {
+  if (!$tr || !$tr.length) {
+    return;
+  }
+  var $td = $tr.find('td.mapper20-value-cell');
+  var rawTrim = mapper20TrimmedValueFromRowRaw($tr.find('.mapper20-in-value').val());
+  if (mapper20IsTextMode()) {
+    mapper20ClearCellHoverHint($td);
+    return;
+  }
+  var s = mapper20NormalizedValueForJsNumber(rawTrim);
+  if (s === '') {
+    mapper20ClearCellHoverHint($td);
+    return;
+  }
+  if (!mapper20NumericStringAcceptable(s)) {
+    mapper20SetCellHoverHint($td, mapper20MessageInvalidNumeric(s));
+  } else {
+    mapper20ClearCellHoverHint($td);
+  }
+}
+
+/**
+ * Validates rows like Apply, merges valid points into wheel data, redraws plot.
+ * Applies red hover hints where Apply would; orange warn on value cell when receptor is OK but value empty (no conflicting row-level errors).
+ * Canonicalizes receptors only when there are zero validation errors across the grid.
+ */
+function mapper20RebuildPlotFromTableInternal() {
+  $('#mapper20-wheel-errors').empty();
+  mapper20ClearAllPlotRowUiHints();
+
+  var rawRows = mapper20CollectRows();
+  if (rawRows.length > MAPPER20_MAX_ROWS) {
+    return;
+  }
+
+  var Data = {};
+  var errors = [];
+
+  if (!mapper20IsTextMode()) {
+
+    rawRows.forEach(function(row, ix) {
+      var idx = ix + 1;
+      var rs = row.receptor_raw != null ? String(row.receptor_raw).trim() : '';
+      var valueRaw = row.value_raw;
+
+      var valueStrOrig = mapper20TrimmedValueFromRowRaw(valueRaw);
+      var valueStr = mapper20NormalizedValueForJsNumber(valueStrOrig);
+
+      var valueNonempty = valueStr !== '';
+
+      if (!rs && !valueNonempty) {
+        return;
+      }
+      if (!rs && valueNonempty) {
+        errors.push({ row: idx, field: 'receptor', hint: mapper20MessageReceptorRequiredForValue() });
+        return;
+      }
+
+      var receptor = mapper20NormalizeReceptorForWheel(rs);
+      if (!receptor) {
+        errors.push({ row: idx, field: 'receptor', hint: mapper20MessageInvalidReceptor(rs) });
+        return;
+      }
+
+      if (!valueNonempty) {
+        return;
+      }
+      if (!mapper20NumericStringAcceptable(valueStr)) {
+        errors.push({ row: idx, field: 'value', hint: mapper20MessageInvalidNumeric(valueStrOrig) });
+        return;
+      }
+
+      var valNum = Number(valueStr);
+      Data[receptor] = { Value1: valNum };
+    });
+  } else {
+
+    rawRows.forEach(function(row, ix) {
+      var idx = ix + 1;
+      var rs = row.receptor_raw != null ? String(row.receptor_raw).trim() : '';
+      var valueRaw = row.value_raw;
+
+      var labelTrim = mapper20TrimmedValueFromRowRaw(valueRaw);
+      var labelNonempty = labelTrim !== '';
+
+      if (!rs && !labelNonempty) {
+        return;
+      }
+      if (!rs && labelNonempty) {
+        errors.push({ row: idx, field: 'receptor', hint: mapper20MessageReceptorRequiredForLabelCell() });
+        return;
+      }
+
+      var receptor = mapper20NormalizeReceptorForWheel(rs);
+      if (!receptor) {
+        errors.push({ row: idx, field: 'receptor', hint: mapper20MessageInvalidReceptor(rs) });
+        return;
+      }
+
+      if (!labelNonempty) {
+        return;
+      }
+
+      mapper20EnsureMapsForDistinctLabels([labelTrim]);
+      var enabled = MAPPER20_LABEL_ENABLED[labelTrim] !== false;
+      var col = '#ffffff';
+      if (enabled) {
+        col = MAPPER20_LABEL_COLORS[labelTrim] || mapper20DefaultHexForLabelKey(labelTrim);
+        MAPPER20_LABEL_COLORS[labelTrim] = col;
+      }
+      Data[receptor] = { Value1: labelTrim, Value2: col };
+    });
+  }
+
+  errors.forEach(function(err) {
+    if (err.row == null) {
+      return;
+    }
+    var $trErr = $('#mapper20-input-tbody tr').eq(err.row - 1);
+    if (!$trErr.length) {
+      return;
+    }
+    $trErr.addClass('mapper20-row-error');
+    var $tdR = $trErr.find('td.mapper20-receptor-cell');
+    var $tdV = $trErr.find('td.mapper20-value-cell');
+    if (err.field === 'receptor') {
+      mapper20ClearCellHoverHint($tdV);
+      mapper20SetCellHoverHint($tdR, err.hint);
+      mapper20UpgradeReceptorToSelect2($trErr);
+    } else if (err.field === 'value') {
+      mapper20ClearCellHoverHint($tdR);
+      mapper20SetCellHoverHint($tdV, err.hint);
+    }
+  });
+
+  var errReceptorRows = {};
+  var errValRows = {};
+  errors.forEach(function(e) {
+    if (e.row != null && e.field === 'receptor') {
+      errReceptorRows[e.row] = true;
+    }
+    if (e.row != null && e.field === 'value') {
+      errValRows[e.row] = true;
+    }
+  });
+
+  if (errors.length === 0) {
+    $('#mapper20-input-tbody tr').each(function() {
+      var $tr = $(this);
+      var val = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+      if (!val) {
+        val = mapper20NormalizeTypedReceptorInput($tr.find('.mapper20-in-receptor').val() || '');
+      }
+      if (!val) {
+        val = ($tr.data('mapper20UnmatchedRaw') || '').trim();
+      }
+      mapper20ApplyCanonicalToRowSelect($tr, val);
+    });
+    rawRows = mapper20CollectRows();
+  }
+
+  mapper20ApplyOrangeMissingValueHints(rawRows, errReceptorRows, errValRows);
+
+  var base = JSON.parse(JSON.stringify(MAPPER20_GPCROME_BASE));
+  GPCRome_WheelDict = mapper20UpdateNestedGPCRomeData(base, Data);
+  if (!mapper20IsTextMode()) {
+    mapper20RecalcNumericStyling();
+  }
+  mapper20RefreshAllLabelSwatches();
+  if (mapper20IsTextMode()) {
+    mapper20ScheduleLabelColorPanelRebuildSoon();
+  }
+  updateGPCRome();
+}
+
+/** Collapses line breaks when reading typed receptor paste (textarea allows wrapped placeholder editing). */
+function mapper20NormalizeTypedReceptorInput(val) {
+  if (val == null) {
+    return '';
+  }
+  return String(val).replace(/\r\n/g, '\n').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function mapper20AutoSizeReceptorTextarea($ta) {
+  if (!$ta || !$ta.length || !$ta[0] || String($ta[0].tagName || '').toUpperCase() !== 'TEXTAREA') {
+    return;
+  }
+  var el = $ta[0];
+  var minPx = 44;
+  var maxPx = 200;
+  window.requestAnimationFrame(function() {
+    el.style.height = 'auto';
+    var sh = el.scrollHeight;
+    var next = Math.max(minPx, Math.min(sh, maxPx));
+    el.style.height = next + 'px';
+    el.style.overflowY = sh > maxPx ? 'auto' : 'hidden';
+  });
+}
+
+function mapper20SyncReceptorTextareaHeights() {
+  $('#mapper20-input-table').toggleClass('mapper20-receptors-compact', !mapper20ReceptorTallPlaceholderIntro);
+  $('#mapper20-input-tbody .mapper20-in-receptor').each(function() {
+    var el = this;
+    if (mapper20ReceptorTallPlaceholderIntro) {
+      el.style.overflowY = '';
+      mapper20AutoSizeReceptorTextarea($(this));
+    } else {
+      el.style.height = '';
+      el.style.overflowY = 'hidden';
+    }
+  });
+}
+
+function mapper20FilterReceptorsLocal(term, limit) {
+  var t = (term || '').trim().toUpperCase();
+  if (!t) {
+    return [];
+  }
+  var filtered = receptorSelect2Data.filter(function(item) {
+    var st = (item.search_text || item.text || '').toUpperCase();
+    if (st.indexOf(t) !== -1) {
+      return true;
+    }
+    if (item.id && String(item.id).toUpperCase().indexOf(t) !== -1) {
+      return true;
+    }
+    return false;
+  });
+  filtered.sort(function(a, b) {
+    function rank(item) {
+      var id = String(item.id || '').toUpperCase();
+      var st = (item.search_text || item.text || '').toUpperCase();
+      if (id.indexOf(t) === 0) {
+        return 0;
+      }
+      if (st.indexOf(t) === 0) {
+        return 1;
+      }
+      if (id.indexOf(t) !== -1) {
+        return 2;
+      }
+      if (st.indexOf(t) !== -1) {
+        return 3;
+      }
+      return 4;
+    }
+    var ra = rank(a);
+    var rb = rank(b);
+    if (ra !== rb) {
+      return ra - rb;
+    }
+    return String(a.text || '').localeCompare(String(b.text || ''));
+  });
+  var lim = limit || 80;
+  if (filtered.length > lim) {
+    filtered = filtered.slice(0, lim);
+  }
+  return filtered.map(function(item) {
+    return {
+      id: item.id,
+      text: item.text,
+      name_html: item.name_html || '',
+      name_plain: item.name_plain || ''
+    };
+  });
+}
+
+function mapper20SyncReceptorClearBtn($tr) {
+  var $wrap = $tr.find('.mapper20-receptor-input-wrap');
+  if (!$wrap.length) {
+    return;
+  }
+  var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+  var iv = mapper20NormalizeTypedReceptorInput($tr.find('.mapper20-in-receptor').val() || '');
+  var um = $tr.data('mapper20UnmatchedRaw');
+  var umS = um != null ? String(um).trim() : '';
+  var $view = $tr.find('.mapper20-receptor-html-view');
+  var viewOn = $view.is(':visible') && ($view.text() || '').replace(/\s+/g, ' ').trim().length > 0;
+  var has = !!(entry || iv || umS || viewOn);
+  $wrap.toggleClass('is-empty', !has);
+}
+
+function mapper20CreateReceptorCell($tdR) {
+  var $hid = $('<input type="hidden" class="mapper20-receptor-entry" value="">');
+  var $wrap = $('<div class="mapper20-receptor-input-wrap is-empty">');
+  var $inp = $('<textarea class="form-control input-sm mapper20-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>');
+  var $view = $('<div class="form-control input-sm mapper20-receptor-html-view" tabindex="0"></div>');
+  var $clr = $('<button type="button" class="mapper20-receptor-clear" aria-label="Clear receptor" title="Clear receptor">&times;</button>');
+  $wrap.append($inp, $view, $clr);
+  $tdR.append($hid, $wrap);
+  $view.hide();
+  return $inp;
+}
+
+function mapper20SetReceptorResolvedUI($tr, entryId) {
+  var sid = entryId != null ? String(entryId).trim() : '';
+  var $inp = $tr.find('.mapper20-in-receptor');
+  var $hid = $tr.find('.mapper20-receptor-entry');
+  var $view = $tr.find('.mapper20-receptor-html-view');
+  mapper20DestroyReceptorAutocomplete($inp);
+  if (!sid) {
+    $hid.val('');
+    $view.hide().empty();
+    $inp.val('').show();
+    mapper20BindReceptorAutocomplete($inp);
+    mapper20SyncReceptorClearBtn($tr);
+    return;
+  }
+  $hid.val(sid);
+  $view.html(mapper20ResolvedReceptorDisplayHtml(sid));
+  $inp.val('');
+  $inp.hide();
+  $view.show();
+  mapper20BindReceptorAutocomplete($inp);
+  mapper20SyncReceptorClearBtn($tr);
+}
+
+function mapper20BeginEditReceptor($tr) {
+  var $hid = $tr.find('.mapper20-receptor-entry');
+  var id = ($hid.val() || '').trim();
+  var $inp = $tr.find('.mapper20-in-receptor');
+  var $view = $tr.find('.mapper20-receptor-html-view');
+  var seed = mapper20ReceptorEditSeed(id);
+  $hid.val('');
+  $view.hide().empty();
+  $inp.val(seed).show().focus();
+  window.setTimeout(function() {
+    var t = ($inp.val() || '').trim();
+    if (t.length >= 1 && $inp.data('ui-autocomplete')) {
+      $inp.autocomplete('search', t);
+    }
+  }, 0);
+  mapper20SyncReceptorClearBtn($tr);
+  mapper20SyncReceptorTextareaHeights();
+}
+
+function mapper20DestroyReceptorAutocomplete($inp) {
+  if ($inp && $inp.length && $inp.data('ui-autocomplete')) {
+    try {
+      $inp.autocomplete('destroy');
+    } catch (e) {}
+  }
+}
+
+function mapper20BindReceptorAutocomplete($inp) {
+  if (!$inp || !$inp.length) {
+    return;
+  }
+  mapper20DestroyReceptorAutocomplete($inp);
+  $inp.autocomplete({
+    minLength: 1,
+    delay: 0,
+    appendTo: '.mapper20-wheel-left',
+    source: function(request, response) {
+      var items = mapper20FilterReceptorsLocal(request.term, 80);
+      response($.map(items, function(it) {
+        return {
+          label: mapper20ReceptorAutocompleteLabelPlain(it),
+          value: it.id,
+          html: mapper20ResolvedReceptorDisplayHtml(it.id)
+        };
+      }));
+    },
+    select: function(event, ui) {
+      var $tr = $inp.closest('tr');
+      $tr.removeClass('mapper20-row-invalid mapper20-row-error');
+      $tr.removeData('mapper20UnmatchedRaw');
+      mapper20SetReceptorResolvedUI($tr, ui.item.value);
+      mapper20EnsureTrailingBlankRow();
+      return false;
+    },
+    open: function() {
+      $(this).autocomplete('widget').addClass('mapper20-receptor-ac-menu');
+    },
+    close: function() {
+      var w = $(this).autocomplete('widget');
+      if (w && w.length) {
+        w.removeClass('mapper20-receptor-ac-menu');
+      }
+    },
+    create: function() {
+      var widget = $(this).data('ui-autocomplete');
+      widget._renderItem = function(ul, item) {
+        var inner = item.html || $('<span/>').text(item.label || '').html();
+        return $('<li>')
+          .append($('<div class="mapper20-ac-item-label">').html(inner))
+          .appendTo(ul);
+      };
+    }
+  });
+  $inp.off('input.mapper20-ta-grow').on('input.mapper20-ta-grow', function() {
+    if (mapper20ReceptorTallPlaceholderIntro) {
+      mapper20AutoSizeReceptorTextarea($inp);
+    }
+  });
+  mapper20SyncReceptorTextareaHeights();
+  $inp.off('focus.mapper20-ac').on('focus.mapper20-ac', function() {
+    var t = ($inp.val() || '').trim();
+    if (t.length >= 1) {
+      $inp.autocomplete('search', t);
+    }
+  });
+}
+
+function mapper20EnsureReceptorInputCanonical($inp, id) {
+  mapper20SetReceptorResolvedUI($inp.closest('tr'), id);
+}
+
+function mapper20DestroyRowReceptorWidgets() {
+  $('#mapper20-input-tbody .mapper20-in-receptor').each(function() {
+    mapper20DestroyReceptorAutocomplete($(this));
+  });
+}
+
+function mapper20DestroyRowReceptorWidgetForTr($tr) {
+  mapper20DestroyReceptorAutocomplete($tr.find('.mapper20-in-receptor'));
+}
+
+function mapper20ApplyCanonicalToRowSelect($tr, entryId) {
+  var id = entryId != null ? String(entryId).trim() : '';
+  var $inp = $tr.find('.mapper20-in-receptor');
+  if (!$inp.length) {
+    return;
+  }
+  $tr.removeClass('mapper20-row-invalid mapper20-row-error');
+  $tr.removeData('mapper20UnmatchedRaw');
+  mapper20EnsureReceptorInputCanonical($inp, id);
+}
+
+function mapper20UpgradeReceptorToSelect2($tr) {
+}
+
+function mapper20ResolveEntry(raw) {
+  if (raw == null || !String(raw).trim()) {
+    return null;
+  }
+  var u = String(raw).trim().toUpperCase();
+  return MAPPER20_RESOLVE[u] || null;
+}
+
+function mapper20RowIsContentEmpty($tr) {
+  var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+  var v = mapper20NormalizeTypedReceptorInput($tr.find('.mapper20-in-receptor').val() || '');
+  var unmatched = $tr.data('mapper20UnmatchedRaw');
+  var um = unmatched != null ? String(unmatched).trim() : '';
+  var valCell = ($tr.find('.mapper20-in-value').val() || '').trim();
+  return !entry && !v && !um && !valCell;
+}
+
+function mapper20SyncFirstRowReceptorPlaceholder() {
+  var hint = MAPPER20_FIRST_ROW_RECEPTOR_PLACEHOLDER;
+  $('#mapper20-input-tbody tr').each(function(idx) {
+    var $inp = $(this).find('.mapper20-in-receptor');
+    if (!$inp.length) {
+      return;
+    }
+    if (idx === 0) {
+      $inp.attr('placeholder', hint);
+    } else {
+      $inp.removeAttr('placeholder');
+    }
+  });
+}
+
+function mapper20EnsureTrailingBlankRow() {
+  var $tbody = $('#mapper20-input-tbody');
+
+  function rows() {
+    return $tbody.children('tr');
+  }
+
+  var $rows = rows();
+  if (!$rows.length) {
+    mapper20AppendRow('', '', true);
+  } else {
+    while ($rows.length >= 2) {
+      var $last = $rows.last();
+      var $prev = $last.prev();
+      if (mapper20RowIsContentEmpty($last) && mapper20RowIsContentEmpty($prev)) {
+        mapper20DestroyRowReceptorWidgetForTr($last);
+        $last.remove();
+        $rows = rows();
+        continue;
+      }
+      break;
+    }
+    $rows = rows();
+    var $lastOne = $rows.last();
+    if (!mapper20RowIsContentEmpty($lastOne) && $rows.length < MAPPER20_MAX_ROWS) {
+      mapper20AppendRow('', '', true);
+    }
+  }
+
+  mapper20SyncFirstRowReceptorPlaceholder();
+  mapper20SyncReceptorTextareaHeights();
+  if (!mapper20RestoringDomRows) {
+    mapper20ScheduleRebuildPlot();
+  }
+}
+
+function mapper20AppendRow(receptorText, value, skipTrailingEnsure) {
+  if (skipTrailingEnsure === undefined) {
+    skipTrailingEnsure = false;
+  }
+  var tr = $('<tr>');
+  var $tdR = $('<td class="mapper20-receptor-cell">');
+  var $inp = mapper20CreateReceptorCell($tdR);
+  tr.append($tdR);
+  tr.append($('<td class="mapper20-value-cell">').append($('<input type="text" class="form-control input-sm mapper20-in-value" autocomplete="off">').val(value != null ? value : '')));
+  tr.append($('<td class="mapper20-swatch-cell">').append('<span class="mapper20-label-swatch" aria-hidden="true"></span>'));
+  $('#mapper20-input-tbody').append(tr);
+  mapper20BindReceptorAutocomplete($inp);
+  var rt = receptorText != null ? String(receptorText).trim() : '';
+  var $tr = tr;
+  if (rt) {
+    var resolved = mapper20ResolveEntry(rt);
+    var knownId = receptorSelect2Data.some(function(x) {
+      return String(x.id) === rt;
+    });
+    if (resolved || knownId) {
+      var rid = resolved || rt;
+      mapper20EnsureReceptorInputCanonical($inp, rid);
+      $tr.removeClass('mapper20-row-invalid');
+      $tr.removeData('mapper20UnmatchedRaw');
+    } else {
+      $tr.find('.mapper20-receptor-entry').val('');
+      $tr.find('.mapper20-receptor-html-view').hide().empty();
+      $inp.val(rt).show();
+      $tr.addClass('mapper20-row-invalid');
+      $tr.data('mapper20UnmatchedRaw', rt);
+    }
+  }
+  mapper20SyncReceptorClearBtn($tr);
+  mapper20SyncRowSwatch($tr);
+  mapper20SyncValueCellHint($tr);
+  if (!skipTrailingEnsure) {
+    mapper20EnsureTrailingBlankRow();
+  }
+}
+
+function mapper20AppendRowFromPaste(rawR, valCell) {
+  mapper20AppendRow('', valCell, true);
+  var $tr = $('#mapper20-input-tbody tr').last();
+  mapper20SetReceptorRawOnRow($tr, rawR);
+  mapper20EnsureTrailingBlankRow();
+}
+
+function mapper20SetValueCellRawOnRow($tr, valCell) {
+  if (!$tr || !$tr.length) {
+    return;
+  }
+  $tr.find('.mapper20-in-value').val(valCell != null ? String(valCell) : '');
+}
+
+function mapper20SetValueOnRow($tr, valCell) {
+  mapper20SetValueCellRawOnRow($tr, valCell);
+  mapper20SyncRowSwatch($tr);
+  mapper20SyncValueCellHint($tr);
+}
+
+function mapper20SetReceptorRawOnRow($tr, rawR) {
+  if (!$tr || !$tr.length) {
+    return;
+  }
+  rawR = rawR != null ? String(rawR).trim() : '';
+  var resolved = rawR ? mapper20ResolveEntry(rawR) : null;
+  var knownId = rawR && receptorSelect2Data.some(function(x) {
+    return String(x.id) === rawR;
+  });
+  var $td = $tr.find('td.mapper20-receptor-cell');
+  mapper20DestroyReceptorAutocomplete($tr.find('.mapper20-in-receptor'));
+  $td.empty();
+  var $inp = mapper20CreateReceptorCell($td);
+  mapper20BindReceptorAutocomplete($inp);
+  $tr.removeClass('mapper20-row-error');
+  if (!rawR) {
+    $tr.removeClass('mapper20-row-invalid');
+    $tr.removeData('mapper20UnmatchedRaw');
+    $inp.show();
+    mapper20SyncReceptorClearBtn($tr);
+    return;
+  }
+  if (resolved || knownId) {
+    mapper20EnsureReceptorInputCanonical($inp, resolved || rawR);
+    $tr.removeClass('mapper20-row-invalid');
+    $tr.removeData('mapper20UnmatchedRaw');
+  } else {
+    $td.find('.mapper20-receptor-entry').val('');
+    $td.find('.mapper20-receptor-html-view').hide().empty();
+    $inp.val(rawR).show();
+    $tr.addClass('mapper20-row-invalid');
+    $tr.data('mapper20UnmatchedRaw', rawR);
+  }
+  mapper20SyncReceptorClearBtn($tr);
+}
+
+function mapper20PasteAnchorFromEvent(e) {
+  var $t = $(e.target);
+  var $tr = $t.closest('#mapper20-input-tbody tr');
+  if ($t.closest('.mapper20-in-value').length && $tr.length) {
+    return { $tr: $tr, col: 'value' };
+  }
+  if ($tr.length && ($t.closest('.mapper20-in-receptor').length || $t.closest('.mapper20-receptor-html-view').length || $t.closest('.mapper20-receptor-clear').length || $t.closest('.mapper20-receptor-input-wrap').length || $t.closest('td.mapper20-receptor-cell').length)) {
+    return { $tr: $tr, col: 'receptor' };
+  }
+  return { $tr: $tr, col: null };
+}
+
+function mapper20NormalizePastedLines(text) {
+  var lines = String(text || '').split(/\r?\n/);
+  while (lines.length && lines[lines.length - 1] === '') {
+    lines.pop();
+  }
+  return lines;
+}
+
+/** Prefer TAB columns (spreadsheet); else first `;` splits receptor/value (CSV / Excel semicolon export). */
+function mapper20SplitPasteLineIntoReceptorAndValue(line) {
+  var s = String(line || '').trim();
+  if (!s) {
+    return { rawR: '', valCell: '' };
+  }
+  var ti = s.indexOf('\t');
+  if (ti !== -1) {
+    var p = s.split('\t');
+    var rawRt = p[0] ? p[0].trim() : '';
+    var rest = p.length > 1 ? p.slice(1).join('\t').trim() : '';
+    return { rawR: rawRt, valCell: rest };
+  }
+  var si = s.indexOf(';');
+  if (si !== -1) {
+    return {
+      rawR: s.slice(0, si).trim(),
+      valCell: s.slice(si + 1).trim()
+    };
+  }
+  return { rawR: s.trim(), valCell: '' };
+}
+
+/** When clipboard has no TAB, treat nonempty lines that all contain ';' as receptor;value rows (incl. one-line CSV). */
+function mapper20PasteLooksSemicolonCsvGrid(contentLines, hasTab) {
+  if (hasTab || !contentLines || !contentLines.length) {
+    return false;
+  }
+  return contentLines.every(function(line) {
+    return String(line).trim().indexOf(';') !== -1;
+  });
+}
+
+/** Align with Classification wheel: rename a few receptor-family keys and refresh leaf metadata. */
+function mapper20ClassicWheelNormGroupKey(fam) {
+  var s = String(fam == null ? '' : fam).trim();
+  if (!s) return s;
+  var lower = s.toLowerCase();
+  var familyRename = {
+    'opsins': 'Vision receptors',
+    'opsins receptors': 'Vision receptors',
+    'class a orphans': 'Orphans',
+    'class c orphans': 'Orphans',
+    'class c orphans ': 'Orphans',
+    'peptide p518 receptors': 'QRFP receptors'
+  };
+  return familyRename[lower] || s;
+}
+
+function mapper20PreprocessClassicWheelData(data) {
+  if (!data || typeof data !== 'object') {
+    return data;
+  }
+  Object.keys(data).forEach(function(circleKey) {
+    var circle = data[circleKey];
+    if (!circle || typeof circle !== 'object') {
+      return;
+    }
+    Object.keys(circle).forEach(function(classKey) {
+      var fams = circle[classKey];
+      if (!fams || typeof fams !== 'object') {
+        return;
+      }
+      var newFams = {};
+      Object.keys(fams).forEach(function(oldFamKey) {
+        var newFamKey = mapper20ClassicWheelNormGroupKey(oldFamKey);
+        var receptors = fams[oldFamKey];
+        if (!receptors || typeof receptors !== 'object') {
+          return;
+        }
+        Object.keys(receptors).forEach(function(recName) {
+          var r = receptors[recName];
+          if (r && typeof r === 'object' && Object.prototype.hasOwnProperty.call(r, 'Receptor family')) {
+            r['Receptor family'] = newFamKey;
+          }
+        });
+        if (!newFams[newFamKey]) {
+          newFams[newFamKey] = {};
+        }
+        Object.keys(receptors).forEach(function(rk) {
+          newFams[newFamKey][rk] = receptors[rk];
+        });
+      });
+      circle[classKey] = newFams;
+    });
+  });
+  return data;
+}
+
+/** Classification-tree aligned class colours for rim badges (mapper numeric wheel shows class shorthand + pill). */
+var MAPPER20_CLASS_COLORS_WHEEL = {
+  'A': '#1f78b4',
+  'B1': '#33a02c',
+  'B2': '#6A3D9A',
+  'C': '#d62728',
+  'F': '#FF7F0E',
+  'T2': '#F7B6D2',
+  'Classless': '#9e9e9e'
+};
+
+function mapper20WheelBadgeNormKey(code) {
+  if (code === undefined || code === null) {
+    return '';
+  }
+  var s = String(code).trim();
+  if (!s || s.toLowerCase() === 'nan') {
+    return '';
+  }
+  return s;
+}
+
+function mapper20WheelClassDisplayShortLabel(code) {
+  var k = mapper20WheelBadgeNormKey(code);
+  if (!k) {
+    return '';
+  }
+  if (k === 'Classless') {
+    return 'U';
+  }
+  if (/^(A|B1|B2|C|F|T2)$/i.test(k)) {
+    return k.toUpperCase();
+  }
+  return k;
+}
+
+function mapper20WheelUiD3() {
+  return typeof d3v4 !== 'undefined' ? d3v4 : d3;
+}
+
+function mapper20MapperClassBadgeFill(classCode) {
+  /* Numeric mapper: tint pills with fixed class hue (data colours apply to wedges). */
+  var k = mapper20WheelBadgeNormKey(classCode);
+  return MAPPER20_CLASS_COLORS_WHEEL[k] || '#ffffff';
+}
+
+function mapper20AddClassBadgePillsAfterDraw(locationId) {
+  var d3pick = mapper20WheelUiD3();
+  var svgSel = d3pick.select('#' + locationId + '_svg');
+  if (!svgSel || svgSel.empty()) {
+    return;
+  }
+  var CLASSLESS_BADGE_DX = -15;
+
+  svgSel.selectAll('text')
+    .filter(function() {
+      var el = this;
+      var cls = (el.getAttribute && el.getAttribute('class')) ? el.getAttribute('class') : '';
+      /* datamapper: class ring labels use `GPCRome-text-{level}-highlight` only */
+      return /GPCRome-text-\d+-highlight/.test(cls) && cls.indexOf('GPCRome-family-label') === -1;
+    })
+    .each(function(d) {
+      try {
+        var txt = d3pick.select(this);
+        var rawClass = mapper20WheelBadgeNormKey(d);
+        if (!rawClass) {
+          rawClass = mapper20WheelBadgeNormKey(this.textContent);
+        }
+        if (!rawClass) {
+          return;
+        }
+        var classKey = mapper20WheelBadgeNormKey(rawClass);
+        txt.text(mapper20WheelClassDisplayShortLabel(rawClass));
+        txt.style('fill', '#000');
+
+        var fill = mapper20MapperClassBadgeFill(rawClass);
+        var fillOpacity;
+        var useTransparentBadge = typeof GPCRomes_styling !== 'undefined' && GPCRomes_styling && GPCRomes_styling.DataType === 'Text';
+        if (useTransparentBadge) {
+          fillOpacity = 0;
+          fill = 'none';
+        } else {
+          fillOpacity = 0.75;
+        }
+        var node = txt.node();
+        if (!node) {
+          return;
+        }
+        var bb = node.getBBox();
+        var padX = 3;
+        var padY = 1;
+        var g = node.parentNode;
+        if (!g || !g.insertBefore) {
+          return;
+        }
+        var rectNode = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rectNode.setAttribute('x', String(bb.x - padX));
+        rectNode.setAttribute('y', String(bb.y - padY));
+        rectNode.setAttribute('width', String(bb.width + padX * 2));
+        rectNode.setAttribute('height', String(bb.height + padY * 2));
+        rectNode.setAttribute('rx', '9');
+        rectNode.setAttribute('ry', '9');
+        rectNode.setAttribute('fill', fill);
+        rectNode.setAttribute('fill-opacity', String(fillOpacity));
+        rectNode.setAttribute('stroke', '#000');
+        rectNode.setAttribute('stroke-width', '0.75px');
+        g.insertBefore(rectNode, node);
+
+        if (classKey === 'Classless') {
+          var tPrev = txt.attr('transform') || '';
+          txt.attr('transform', (tPrev ? (tPrev + ' ') : '') + 'translate(' + CLASSLESS_BADGE_DX + ',0)');
+          rectNode.setAttribute('transform', 'translate(' + CLASSLESS_BADGE_DX + ',0)');
+        }
+      } catch (e) {
+        /* ignore pill layout errors */
+      }
+    });
+}
+
+function mapper20MapClasslessTitlesToUnclassified(locationId) {
+  var svgEl = document.getElementById(locationId + '_svg');
+  if (!svgEl || !svgEl.getElementsByTagName) {
+    return;
+  }
+  var titles = svgEl.getElementsByTagName('title');
+  for (var i = 0; i < titles.length; i++) {
+    var t = titles[i];
+    var txt = t.textContent != null ? t.textContent : '';
+    if (/\bClassless\b/.test(txt)) {
+      t.textContent = txt.replace(/\bClassless\b/g, 'Unclassified');
+    }
+  }
+}
+
+function mapper20DrawGPCRomeWithClassBadges(data, locationId, styling) {
+  DrawGPCRomeWheel(data, locationId, styling);
+  mapper20AddClassBadgePillsAfterDraw(locationId);
+  mapper20MapClasslessTitlesToUnclassified(locationId);
+}
+
+var GPCRome_WheelDict = {{ GPCRomeData|safe }};
+mapper20PreprocessClassicWheelData(GPCRome_WheelDict);
+/** Deep copy of empty wheel JSON; Apply clones this and merges user values without re-fetching. */
+var MAPPER20_GPCROME_BASE = JSON.parse(JSON.stringify(GPCRome_WheelDict));
+var PlotType = "{{ PlotType }}";
+var GPCRome_location = "GPCRome_plot";
+var GPCRomes_styling = {};
+
+function mapper20NormalizeGpcromeMergeKey(rawKey) {
+  var s = String(rawKey || '');
+  var i = s.indexOf('_');
+  return (i >= 0 ? s.slice(0, i) : s).toUpperCase();
+}
+
+/** Mirrors DataMapperHome.update_nested_GPCRome_data (mapper/views.py). Mutates structureDict. */
+function mapper20UpdateNestedGPCRomeData(structureDict, rawData) {
+  var normalizedRawData = {};
+  Object.keys(rawData || {}).forEach(function(key) {
+    var val = rawData[key];
+    if (val && typeof val === 'object' && Object.prototype.hasOwnProperty.call(val, 'Value1')) {
+      normalizedRawData[mapper20NormalizeGpcromeMergeKey(key)] = {
+        Data: val.Value1,
+        Color: val.Value2
+      };
+    }
+  });
+  function recursiveUpdate(d) {
+    if (d && typeof d === 'object') {
+      if (!Array.isArray(d)) {
+        if ('EntryName' in d && 'Data' in d) {
+          var entry = String(d.EntryName).toUpperCase();
+          if (Object.prototype.hasOwnProperty.call(normalizedRawData, entry)) {
+            d.Data = normalizedRawData[entry].Data;
+            var color = normalizedRawData[entry].Color;
+            if (color != null) {
+              d.Color = color;
+            }
+          }
+        }
+        Object.keys(d).forEach(function(k) {
+          recursiveUpdate(d[k]);
+        });
+      } else {
+        d.forEach(function(item) {
+          recursiveUpdate(item);
+        });
+      }
+    }
+  }
+  recursiveUpdate(structureDict);
+  return structureDict;
+}
+
+function mapper20NormalizeReceptorForWheel(rs) {
+  var receptor = mapper20ResolveEntry(rs);
+  if (!receptor || !MAPPER20_TREE_IDS[receptor]) {
+    return null;
+  }
+  return receptor;
+}
+
+function extractDataValues(obj) {
+  var values = [];
+  function findData(node) {
+    if (typeof node === "object" && node !== null) {
+      for (var key in node) {
+        if (!Object.prototype.hasOwnProperty.call(node, key)) continue;
+        var value = node[key];
+        if (value && typeof value === "object" && "Data" in value) {
+          var dataValue = Number(value.Data);
+          if (!isNaN(dataValue)) {
+            values.push(dataValue);
+          }
+        } else {
+          findData(value);
+        }
+      }
+    }
+  }
+  findData(obj);
+  return values;
+}
+
+function determineDecimalPlaces(minValue, maxValue) {
+  var allValues = [minValue, maxValue];
+  var maxDecimals = 0;
+  allValues.forEach(function(value) {
+    if (value == null) return;
+    var valueStr = Math.abs(value).toString();
+    if (valueStr.indexOf('e') !== -1) {
+      var parts = valueStr.split('e-');
+      if (parts.length === 2) {
+        var exp = parseInt(parts[1], 10);
+        maxDecimals = Math.max(maxDecimals, exp);
+      }
+    } else if (valueStr.indexOf('.') !== -1) {
+      var decimals = valueStr.split('.')[1].length;
+      maxDecimals = Math.max(maxDecimals, decimals);
+    }
+  });
+  return Math.min(maxDecimals, 6);
+}
+
+function mapper20RecalcNumericStyling() {
+  if (mapper20IsTextMode()) {
+    return;
+  }
+  var GPCRomeWheelValues = extractDataValues(GPCRome_WheelDict)
+    .filter(function(value) { return value !== null && value !== ''; });
+  var GPCRomeMin = GPCRomeWheelValues.length > 0 ? Math.min.apply(null, GPCRomeWheelValues) : null;
+  var GPCRomeMax = GPCRomeWheelValues.length > 0 ? Math.max.apply(null, GPCRomeWheelValues) : null;
+  var GPCRomeAvg = GPCRomeWheelValues.length > 0 ? (GPCRomeMin + GPCRomeMax) / 2 : null;
+  GPCRomes_styling.GPCRomeMin = GPCRomeMin;
+  GPCRomes_styling.GPCRomeMax = GPCRomeMax;
+  GPCRomes_styling.GPCRomeAvg = GPCRomeAvg;
+  GPCRomes_styling.LegendbarDigit = determineDecimalPlaces(GPCRomeMin, GPCRomeMax);
+}
+
+function updateGPCRome() {
+  d3.select("#" + GPCRome_location).select("svg").remove();
+  mapper20DrawGPCRomeWithClassBadges(GPCRome_WheelDict, GPCRome_location, GPCRomes_styling);
+}
+
+if (true) {
+  GPCRomes_styling = {
+    GPCRomeMin: null,
+    GPCRomeMax: null,
+    GPCRomeAvg: null,
+    LegendbarDigit: 2,
+    LegendbarLength: 200,
+    LegendbarFontsize: "11px",
+    FontStyle: "Arial",
+    FontsizeGlobal: "11px",
+    FontsizeClass: "20px",
+    DataType: "Numeric",
+    colorStart: "#e64b35",
+    colorAvg: "#FFFFFF",
+    colorEnd: "#3c5488",
+    ColorSetup: 'One',
+    showIcon: true,
+    LabelType: "Protein",
+    ShowLegend: true,
+    LegendLayout: { mode: 'row', columns: '1', sorted: 'Vertically' }
+  };
+  mapper20RecalcNumericStyling();
+  mapper20DrawGPCRomeWithClassBadges(GPCRome_WheelDict, GPCRome_location, GPCRomes_styling);
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  var labelButtons = document.querySelectorAll('.GPCRome-label-btn');
+  labelButtons.forEach(function(btn) {
+    if (btn.getAttribute('data-value') === GPCRomes_styling.LabelType) {
+      btn.classList.remove('btn-outline-primary');
+      btn.classList.add('btn-primary');
+    }
+    btn.addEventListener('click', function () {
+      var selectedValue = this.getAttribute('data-value');
+      GPCRomes_styling.LabelType = selectedValue;
+      updateGPCRome();
+      $('#mapper20-input-tbody .mapper20-in-receptor').each(function() {
+        var $ta = $(this);
+        try {
+          if ($ta.autocomplete && $ta.data('ui-autocomplete')) {
+            $ta.autocomplete('close');
+          }
+        } catch (e) {}
+      });
+      mapper20RefreshResolvedReceptorDisplaysInGrid();
+      labelButtons.forEach(function(b) {
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-outline-primary');
+      });
+      this.classList.remove('btn-outline-primary');
+      this.classList.add('btn-primary');
+    });
+  });
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+  var graphicalLegendOptions = document.querySelectorAll('.graphical-legend-option');
+  graphicalLegendOptions.forEach(function(btn) {
+    var iconValue = btn.getAttribute('data-icon') === 'true';
+    var legendValue = btn.getAttribute('data-legend') === 'true';
+    if (iconValue === GPCRomes_styling.showIcon && legendValue === GPCRomes_styling.ShowLegend) {
+      btn.classList.remove('btn-outline-primary');
+      btn.classList.add('btn-primary');
+    }
+    btn.addEventListener('click', function () {
+      GPCRomes_styling.showIcon = iconValue;
+      GPCRomes_styling.ShowLegend = legendValue;
+      updateGPCRome();
+      graphicalLegendOptions.forEach(function(b) {
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-outline-primary');
+      });
+      this.classList.remove('btn-outline-primary');
+      this.classList.add('btn-primary');
+    });
+  });
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+  var downloadBtn = document.querySelector('#DownloadDropdownToggle');
+  var downloadMenu = downloadBtn ? downloadBtn.nextElementSibling : null;
+  if (downloadBtn && downloadMenu) {
+    downloadBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      downloadMenu.style.display = (downloadMenu.style.display === 'block') ? 'none' : 'block';
+    });
+    document.addEventListener('click', function () {
+      downloadMenu.style.display = 'none';
+    });
+    downloadMenu.addEventListener('click', function (e) {
+      e.stopPropagation();
+    });
+  }
+});
+
+if (true) {
+  function UpdateGPCRomeColorPickers() {
+    if (mapper20IsTextMode()) {
+      return;
+    }
+    var selectedValue = $('#GPCRome_color_styling').val();
+    var colorPresets = {
+      "One": { setup: "One", colorStart: "#ffffff", colorAvg: "#ffffff", colorEnd: "#707070" },
+      "Two": { setup: "Two", colorStart: "#97a6c4", colorAvg: "#ffffff", colorEnd: "#384860" },
+      "Three_RWB": { setup: "Three", colorStart: "#a00000", colorAvg: "#ffffff", colorEnd: "#1a80bb" },
+      "Three_TWM": { setup: "Three", colorStart: "#298c8c", colorAvg: "#ffffff", colorEnd: "#800074" }
+    };
+    var preset = colorPresets[selectedValue];
+    if (preset) {
+      GPCRomes_styling.ColorSetup = preset.setup;
+      GPCRomes_styling.colorStart = preset.colorStart;
+      GPCRomes_styling.colorAvg = preset.colorAvg;
+      GPCRomes_styling.colorEnd = preset.colorEnd;
+      try {
+        $("#GPCRome_colorPicker_min").spectrum("set", preset.colorStart);
+        $("#GPCRome_colorPicker_avg").spectrum("set", preset.colorAvg);
+        $("#GPCRome_colorPicker_max").spectrum("set", preset.colorEnd);
+      } catch (eCol) {}
+    }
+    var showMin = GPCRomes_styling.ColorSetup !== 'One';
+    var showAvg = GPCRomes_styling.ColorSetup === 'Three';
+    document.getElementById("GPCRome_Color_min_container").style.visibility = showMin ? 'visible' : 'hidden';
+    document.getElementById("GPCRome_Color_avg_container").style.visibility = showAvg ? 'visible' : 'hidden';
+    document.getElementById("GPCRome_Color_max_container").style.visibility = 'visible';
+    document.getElementById("GPCRome_Color_min_label").style.visibility = showMin ? 'visible' : 'hidden';
+    document.getElementById("GPCRome_Color_avg_label").style.visibility = showAvg ? 'visible' : 'hidden';
+    updateGPCRome();
+  }
+
+  function updateGPCRomeVisualization() {
+    if (mapper20IsTextMode()) {
+      return;
+    }
+    var colorMin = $("#GPCRome_colorPicker_min").spectrum("get").toHexString();
+    var colorAvg = $("#GPCRome_colorPicker_avg").spectrum("get").toHexString();
+    var colorMax = $("#GPCRome_colorPicker_max").spectrum("get").toHexString();
+    GPCRomes_styling.colorStart = colorMin;
+    GPCRomes_styling.colorAvg = colorAvg;
+    GPCRomes_styling.colorEnd = colorMax;
+    updateGPCRome();
+  }
+
+  $(document).ready(function() {
+    function initializeGPCRomeColorPicker(elementId, start_color) {
+      $("#" + elementId).spectrum({
+        color: start_color,
+        showPalette: true,
+        showInput: true,
+        preferredFormat: "hex",
+        palette: [
+          ["#000", "#FF0000", "#00FF00", "#0000FF", "#FFFF00"],
+          ["#FF00FF", "#00FFFF", "#FFFFFF", "#C0C0C0", "#808080"],
+          ["#800000", "#808000", "#008000", "#800080", "#008080"],
+          ["#000080"]
+        ],
+        change: function() { updateGPCRomeVisualization(); },
+        move: function() { updateGPCRomeVisualization(); }
+      });
+    }
+    initializeGPCRomeColorPicker("GPCRome_colorPicker_min", GPCRomes_styling.colorStart);
+    initializeGPCRomeColorPicker("GPCRome_colorPicker_avg", GPCRomes_styling.colorAvg);
+    $("#GPCRome_colorPicker_avg").spectrum("disable");
+    initializeGPCRomeColorPicker("GPCRome_colorPicker_max", GPCRomes_styling.colorEnd);
+  });
+
+  $(document).ready(function () {
+    function formatColorScheme(option) {
+      if (!option.id) return option.text;
+      var colorSlots = {
+        "One": [null, null, "#707070"],
+        "Two": ["#97a6c4", null, "#384860"],
+        "Three_RWB": ["#a00000", "#ffffff", "#1a80bb"],
+        "Three_TWM": ["#298c8c", "#ffffff", "#800074"]
+      };
+      var colors = colorSlots[option.id];
+      if (colors) {
+        return $('<span style="display:flex; align-items:center;"><span style="min-width: 50px; display:inline-block;text-align: center; padding-right: 5px;">' + option.text + '</span>' +
+          colors.map(function(color) {
+            var bg = color || 'transparent';
+            var opacity = color ? '' : 'opacity:0;';
+            return '<span style="display:inline-block;width:14px;height:14px;margin-left:5px;border:1px solid #ccc;border-radius:2px;background:' + bg + ';' + opacity + '"></span>';
+          }).join('') + '</span>');
+      }
+      return option.text;
+    }
+    $('#GPCRome_color_styling').select2({
+      templateResult: formatColorScheme,
+      templateSelection: formatColorScheme,
+      width: 'resolve'
+    });
+    $('#GPCRome_color_styling').on('change', function () {
+      UpdateGPCRomeColorPickers();
+    });
+    UpdateGPCRomeColorPickers();
+  });
+  window.Mapper20UpdateNumericColorPanels = UpdateGPCRomeColorPickers;
+}
+
+function mapper20ScheduleLabelColorPanelRebuildSoon() {
+  if (!mapper20IsTextMode()) {
+    return;
+  }
+  window.clearTimeout(mapper20LabelPanelDebouncer);
+  mapper20LabelPanelDebouncer = window.setTimeout(function() {
+    mapper20LabelPanelDebouncer = null;
+    mapper20RebuildLabelColorCustomizePanel(false);
+  }, 260);
+}
+
+function mapper20CollectRows() {
+  var rows = [];
+  $('#mapper20-input-tbody tr').each(function() {
+    var $tr = $(this);
+    var r = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+    if (!r) {
+      var $inp = $tr.find('.mapper20-in-receptor');
+      r = mapper20NormalizeTypedReceptorInput($inp.val() || '');
+    }
+    if (!r) {
+      r = ($tr.data('mapper20UnmatchedRaw') || '').trim();
+    }
+    var v = $tr.find('.mapper20-in-value').val();
+    rows.push({ receptor_raw: r, value_raw: v });
+  });
+  return rows;
+}
+
+$(document).ready(function() {
+  mapper20InitLegendLayoutSelectUi();
+  mapper20AppendRow('', '');
+  mapper20ApplyChromeForInputMode();
+  mapper20SyncLegendLayoutUiFromStyling();
+  mapper20CaptureSnapshotForActiveMode();
+
+  $('#mapper20-mode-numeric-btn').on('click', function(e) {
+    e.preventDefault();
+    mapper20SetWheelInputMode('numeric');
+  });
+  $('#mapper20-mode-labels-btn').on('click', function(e) {
+    e.preventDefault();
+    mapper20SetWheelInputMode('text');
+  });
+
+  $('#mapper20-legend-layout-select').on('change', function() {
+    if (!mapper20IsTextMode()) {
+      return;
+    }
+    mapper20ApplyLegendLayoutSelectionFromDropdown();
+    updateGPCRome();
+  });
+
+  $('#mapper20-toggle-legend-sorting').on('click', function() {
+    if (!mapper20IsTextMode()) {
+      return;
+    }
+    if (!GPCRomes_styling.LegendLayout) {
+      GPCRomes_styling.LegendLayout = {};
+    }
+    var next = (GPCRomes_styling.LegendLayout.sorted === 'Horizontally') ? 'Vertically' : 'Horizontally';
+    GPCRomes_styling.LegendLayout.sorted = next;
+    $(this).text(next === 'Horizontally' ? 'Horizontally' : 'Vertically');
+    updateGPCRome();
+  });
+
+  $('#mapper20-input-tbody').on('input', '.mapper20-in-receptor', function() {
+    var $tr = $(this).closest('tr');
+    $tr.removeClass('mapper20-row-invalid mapper20-row-error');
+    $tr.removeData('mapper20UnmatchedRaw');
+    mapper20ClearCellHoverHint($tr.find('td.mapper20-receptor-cell'));
+    mapper20SyncReceptorClearBtn($tr);
+    mapper20EnsureTrailingBlankRow();
+  });
+
+  $('#mapper20-input-tbody').on('click', '.mapper20-receptor-clear', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    var $tr = $(this).closest('tr');
+    var $inp = $tr.find('.mapper20-in-receptor');
+    mapper20DestroyReceptorAutocomplete($inp);
+    $tr.find('.mapper20-receptor-entry').val('');
+    $tr.find('.mapper20-receptor-html-view').hide().empty();
+    $tr.removeClass('mapper20-row-invalid mapper20-row-error');
+    $tr.removeData('mapper20UnmatchedRaw');
+    mapper20ClearCellHoverHint($tr.find('td.mapper20-receptor-cell'));
+    $inp.val('').show().focus();
+    mapper20BindReceptorAutocomplete($inp);
+    mapper20SyncReceptorClearBtn($tr);
+    mapper20EnsureTrailingBlankRow();
+  });
+
+  $('#mapper20-input-tbody').on('input', '.mapper20-in-value', function() {
+    var $tr = $(this).closest('tr');
+    mapper20SyncValueCellHint($tr);
+    mapper20SyncRowSwatch($tr);
+    if (mapper20IsTextMode()) {
+      mapper20ScheduleLabelColorPanelRebuildSoon();
+    }
+    mapper20EnsureTrailingBlankRow();
+  });
+
+  $('#mapper20-input-tbody').on('paste', '.mapper20-in-value', function(e) {
+    if (mapper20IsTextMode()) {
+      return;
+    }
+    var ev = e.originalEvent || e;
+    var text = ev.clipboardData ? ev.clipboardData.getData('text/plain') : '';
+    if (text != null && (text.indexOf('\t') !== -1 || /\r|\n/.test(text))) {
+      return;
+    }
+    var take = text == null ? '' : String(text);
+    take = mapper20TrimmedValueFromRowRaw(take.replace(/\r\n/g, '\n').split('\n')[0] || '');
+    if (!take || !/[,.]/.test(take)) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    var normalized = mapper20NormalizeLocalizedNumberString(take);
+    var insertMe = mapper20NumericStringAcceptable(normalized) ? normalized : take;
+    var el = this;
+    var rawVal = $(el).val();
+    rawVal = rawVal != null ? String(rawVal) : '';
+    var start = typeof el.selectionStart === 'number' ? el.selectionStart : rawVal.length;
+    var end = typeof el.selectionEnd === 'number' ? el.selectionEnd : start;
+    var newVal = rawVal.slice(0, start) + insertMe + rawVal.slice(end);
+    $(el).val(newVal).trigger('input');
+    var pos = start + insertMe.length;
+    if (typeof el.setSelectionRange === 'function') {
+      window.requestAnimationFrame(function() {
+        try {
+          el.setSelectionRange(pos, pos);
+        } catch (err) {}
+      });
+    }
+  });
+
+  $('#mapper20-input-tbody').on('blur', '.mapper20-in-value', function() {
+    var $inp = $(this);
+    var $tr = $inp.closest('tr');
+    var raw = mapper20TrimmedValueFromRowRaw($inp.val());
+    if (!mapper20IsTextMode() && raw && /[,.]/.test(raw)) {
+      var norm = mapper20NormalizeLocalizedNumberString(raw);
+      if (norm !== raw && mapper20NumericStringAcceptable(norm)) {
+        $inp.val(norm);
+      }
+    }
+    mapper20SyncValueCellHint($tr);
+    mapper20SyncRowSwatch($tr);
+    mapper20ScheduleRebuildPlot();
+  });
+
+  $('#mapper20-input-tbody').on('blur', '.mapper20-in-receptor', function() {
+    mapper20ScheduleRebuildPlot();
+  });
+
+  $('#mapper20-input-tbody').on('click', '.mapper20-receptor-html-view', function(e) {
+    e.preventDefault();
+    mapper20BeginEditReceptor($(this).closest('tr'));
+  });
+
+  $('#mapper20-input-tbody').on('keydown', '.mapper20-receptor-html-view', function(e) {
+    if (e.which === 13 || e.which === 32) {
+      e.preventDefault();
+      mapper20BeginEditReceptor($(this).closest('tr'));
+    }
+  });
+
+  $('#mapper20-clear-rows').on('click', function() {
+    mapper20ReceptorTallPlaceholderIntro = true;
+    mapper20DestroyRowReceptorWidgets();
+    $('#mapper20-input-tbody').empty();
+    $('#mapper20-wheel-errors').empty();
+    if (mapper20IsTextMode()) {
+      MAPPER20_LABEL_COLORS = {};
+      MAPPER20_LABEL_ENABLED = {};
+    }
+    mapper20AppendRow('', '');
+  });
+
+  $('#mapper20-input-table').on('paste', function(e) {
+    var ev = e.originalEvent || e;
+    var text = ev.clipboardData.getData('text/plain');
+    if (!text) {
+      return;
+    }
+
+    var lines = mapper20NormalizePastedLines(text);
+    var contentLines = lines.filter(function(line) {
+      return String(line).trim() !== '';
+    });
+    if (!contentLines.length) {
+      return;
+    }
+
+    var hasTab = text.indexOf('\t') !== -1;
+    var hasNewline = text.indexOf('\n') !== -1 || text.indexOf('\r') !== -1;
+    var hasSemiGrid = mapper20PasteLooksSemicolonCsvGrid(contentLines, hasTab);
+    if (!hasTab && !hasNewline && !hasSemiGrid) {
+      return;
+    }
+
+    var dualColumn = hasTab || hasSemiGrid;
+    if (!dualColumn && !hasNewline) {
+      return;
+    }
+
+    var anchor = mapper20PasteAnchorFromEvent(e);
+    var startIdx = anchor.$tr && anchor.$tr.length ? anchor.$tr.index() : -1;
+    var maxRows = MAPPER20_MAX_ROWS;
+    e.preventDefault();
+
+    function finishPasteBatch() {
+      mapper20ReceptorTallPlaceholderIntro = false;
+      mapper20EnsureTrailingBlankRow();
+    }
+
+    if (!dualColumn) {
+      var colSingle = anchor.col || 'value';
+      if (startIdx < 0) {
+        var curCountSingle = $('#mapper20-input-tbody tr').length;
+        if (curCountSingle + contentLines.length > maxRows) {
+          alert('Cannot paste: would exceed ' + maxRows + ' rows.');
+          return;
+        }
+        contentLines.forEach(function(cellLine) {
+          var cell = String(cellLine).trim();
+          if (colSingle === 'receptor') {
+            mapper20AppendRowFromPaste(cell, '');
+          } else {
+            mapper20AppendRow('', cell, true);
+          }
+        });
+        finishPasteBatch();
+        return;
+      }
+      if (startIdx + contentLines.length > maxRows) {
+        alert('Cannot paste: would exceed ' + maxRows + ' rows.');
+        return;
+      }
+      while ($('#mapper20-input-tbody tr').length < startIdx + contentLines.length) {
+        mapper20AppendRow('', '', true);
+      }
+      for (var si = 0; si < contentLines.length; si++) {
+        var cellOne = String(contentLines[si]).trim();
+        var $trSi = $('#mapper20-input-tbody tr').eq(startIdx + si);
+        if (colSingle === 'receptor') {
+          mapper20SetReceptorRawOnRow($trSi, cellOne);
+        } else {
+          mapper20SetValueOnRow($trSi, cellOne);
+        }
+      }
+      finishPasteBatch();
+      return;
+    }
+
+    if (startIdx < 0) {
+      var curCountDc = $('#mapper20-input-tbody tr').length;
+      if (curCountDc + contentLines.length > maxRows) {
+        alert('Cannot paste: would exceed ' + maxRows + ' rows.');
+        return;
+      }
+      contentLines.forEach(function(line0) {
+        var sp = mapper20SplitPasteLineIntoReceptorAndValue(line0);
+        if (!sp.rawR && !sp.valCell) {
+          return;
+        }
+        mapper20AppendRowFromPaste(sp.rawR, sp.valCell);
+      });
+      finishPasteBatch();
+      return;
+    }
+    if (startIdx + contentLines.length > maxRows) {
+      alert('Cannot paste: would exceed ' + maxRows + ' rows.');
+      return;
+    }
+    while ($('#mapper20-input-tbody tr').length < startIdx + contentLines.length) {
+      mapper20AppendRow('', '', true);
+    }
+    for (var ji = 0; ji < contentLines.length; ji++) {
+      var sp2 = mapper20SplitPasteLineIntoReceptorAndValue(contentLines[ji]);
+      var $trJj = $('#mapper20-input-tbody tr').eq(startIdx + ji);
+      mapper20SetReceptorRawOnRow($trJj, sp2.rawR);
+      mapper20SetValueOnRow($trJj, sp2.valCell);
+    }
+    finishPasteBatch();
+  });
+
+  if (typeof window.mapper20InitGpcromePickerModal === 'function') {
+    window.mapper20InitGpcromePickerModal({
+      pickerRows: $.isArray(MAPPER20_GPCROME_PICKER_ROWS) ? MAPPER20_GPCROME_PICKER_ROWS : [],
+      maxRows: MAPPER20_MAX_ROWS,
+      onAdd: function(entryIds) {
+        if (!entryIds || !entryIds.length) {
+          return;
+        }
+
+        function findFirstEmptyRow() {
+          var $hit = $([]);
+          $('#mapper20-input-tbody tr').each(function() {
+            if (mapper20RowIsContentEmpty($(this))) {
+              $hit = $(this);
+              return false;
+            }
+          });
+          return $hit;
+        }
+
+        function tbodyAtOrOverCap() {
+          return $('#mapper20-input-tbody tr').length >= MAPPER20_MAX_ROWS;
+        }
+
+        var added = 0;
+        for (var ix = 0; ix < entryIds.length; ix++) {
+          var id = entryIds[ix];
+          if (tbodyAtOrOverCap() && !findFirstEmptyRow().length) {
+            alert('Stopped at ' + MAPPER20_MAX_ROWS + ' rows. Added ' + added + ' receptor(s); remaining selection was skipped.');
+            break;
+          }
+          var $tr = findFirstEmptyRow();
+          if (!$tr.length) {
+            mapper20AppendRow('', '', true);
+            $tr = $('#mapper20-input-tbody tr').last();
+          }
+          mapper20SetReceptorResolvedUI($tr, id);
+          mapper20SyncValueCellHint($tr);
+          mapper20SyncRowSwatch($tr);
+          added++;
+        }
+        mapper20EnsureTrailingBlankRow();
+      }
+    });
+  }
+});
+</script>
+{% endblock %}

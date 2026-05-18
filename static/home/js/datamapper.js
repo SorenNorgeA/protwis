@@ -61,7 +61,7 @@ function draw_tree(data, options) {
 
     var tree = d3.layout.tree()
         .size([360, diameter / 2])
-        .separation(function (a, b) { return (a.parent === b.parent ? 1 : 2) / a.depth; });
+        .separation(function (a, b) { return (a.parent === b.parent ? 1 : 2) / Math.max(a.depth, 1); });
 
     var diagonal = d3.svg.diagonal.radial()
         .projection(function (d) { return [d.y, d.x / 180 * Math.PI]; });
@@ -390,24 +390,37 @@ function DrawCircles(location, data, Tree_colors, circles_styling, circle_stylin
                     var value = data[x][unit];
                     var minValue = minMaxValues[unit].min;
                     var maxValue = minMaxValues[unit].max;
-                    var styling = circle_styling_dict[unit] || "Two";
-
-                    var colorScale;
-                    if (styling === "One") {
-                        colorScale = d3.scale.linear()
-                            .domain([minValue, maxValue])
-                            .range(["#FFFFFF", Tree_colors[unit][1]]);
-                    } else if (styling === "Three") {
-                        colorScale = d3.scale.linear()
-                            .domain([minValue, (minValue + maxValue) / 2, maxValue])
-                            .range([Tree_colors[unit][0], "#FFFFFF", Tree_colors[unit][1]]);
+                    if (!(isFinite(value) && isFinite(minValue) && isFinite(maxValue))) {
+                        fillColor = Tree_colors[unit][0];
                     } else {
-                        colorScale = d3.scale.linear()
-                            .domain([minValue, maxValue])
-                            .range(Tree_colors[unit]);
-                    }
+                        var styling = circle_styling_dict[unit] || "Two";
+                        var colorScale;
 
-                    fillColor = gradient ? colorScale(value) : Tree_colors[unit][0];
+                        if (minValue === maxValue) {
+                            var eps = 1e-9 * (Math.abs(minValue) || 1);
+                            minValue = minValue - eps;
+                            maxValue = maxValue + eps;
+                        }
+
+                        if (styling === "One") {
+                            colorScale = d3.scale.linear()
+                                .domain([minValue, maxValue])
+                                .range(["#FFFFFF", Tree_colors[unit][1]]);
+                        } else if (styling === "Three") {
+                            colorScale = d3.scale.linear()
+                                .domain([minValue, (minValue + maxValue) / 2, maxValue])
+                                .range([Tree_colors[unit][0], "#FFFFFF", Tree_colors[unit][1]]);
+                        } else {
+                            colorScale = d3.scale.linear()
+                                .domain([minValue, maxValue])
+                                .range(Tree_colors[unit]);
+                        }
+
+                        fillColor = gradient ? colorScale(value) : Tree_colors[unit][0];
+                        if (!gradient && fillColor === undefined) {
+                            fillColor = Tree_colors[unit][0];
+                        }
+                    }
                 }
             } else if (mode === "Text") {
                 if (data[x] && "ColorValue" in data[x]) {
@@ -424,8 +437,9 @@ function DrawCircles(location, data, Tree_colors, circles_styling, circle_stylin
                 .attr("transform", transform);
         }
     }
-    // === Adjust viewBox after adding outer rings ===
-    if (mode === "Numeric") {
+    // === Optional viewBox tweak after stacking data circles ===
+    // Legacy math mixed scaled group bbox with pixel translate → invalid viewBoxes / SVG NaNs on some trees.
+    if (mode === "Numeric" && circles_styling && !circles_styling.skipNumericViewBoxAdjust) {
         const elSVG = svg.select('svg');
         const g = elSVG.select('g');
 
@@ -433,7 +447,7 @@ function DrawCircles(location, data, Tree_colors, circles_styling, circle_stylin
             const bbox = g.node().getBBox();
             const match = g.attr("transform")?.match(/translate\(([^,]+),([^)]+)\)/);
 
-            if (match) {
+            if (match && bbox && isFinite(bbox.width) && isFinite(bbox.height)) {
                 const tx = parseFloat(match[1]);
                 const ty = parseFloat(match[2]);
                 const padding = 20;
@@ -443,9 +457,11 @@ function DrawCircles(location, data, Tree_colors, circles_styling, circle_stylin
                 const viewBoxWidth = bbox.width + padding * 2;
                 const viewBoxHeight = bbox.height + padding * 2;
 
-                elSVG
-                    .attr("viewBox", `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`)
-                    .attr("preserveAspectRatio", "xMidYMid meet");
+                if (isFinite(viewBoxX) && isFinite(viewBoxY) && isFinite(viewBoxWidth) && viewBoxWidth > 0 && isFinite(viewBoxHeight) && viewBoxHeight > 0) {
+                    elSVG
+                        .attr("viewBox", `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`)
+                        .attr("preserveAspectRatio", "xMidYMid meet");
+                }
             }
         }
     }
@@ -2931,7 +2947,8 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
     const FontsizeGlobal = GPCRome_styling.FontsizeGlobal || "11px";
     const FontsizeClass = GPCRome_styling.FontsizeClass || "20px";
     const FontStyle = GPCRome_styling.Fontstyle || "Arial";
-    const DataType = GPCRome_styling.DataType || "Numeric";
+    const dataTypeRaw = GPCRome_styling.DataType != null ? String(GPCRome_styling.DataType) : "";
+    const DataType = dataTypeRaw.trim().toLowerCase() === "text" ? "Text" : "Numeric";
     const ColorSetup = GPCRome_styling.ColorSetup || "One";
     const MinValue = GPCRome_styling.GPCRomeMin || 0;
     const MaxValue = GPCRome_styling.GPCRomeMax || 1;
@@ -3733,8 +3750,9 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                 // Clean up measuring element
                 tempText.remove();
                 // 
-                const legendBBox = svg.select(".legend-text-categories").node()?.getBBox();
-                if (legendBBox) {
+                const legendBBox =
+                    sortedItems.length > 0 ? svg.select(".legend-text-categories").node()?.getBBox() : null;
+                if (legendBBox && sortedItems.length > 0) {
                     const centerOffsetX = (dimensions.width - legendBBox.width) / 2 - legendBBox.x;
                     svg.select(".legend-text-categories")
                         .attr("transform", `translate(${centerOffsetX}, 0)`);
@@ -3848,8 +3866,9 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                 });
 
                 // Center the legend
-                const legendBBox = svg.select(".legend-text-categories").node()?.getBBox();
-                if (legendBBox) {
+                const legendBBox =
+                    sortedItems.length > 0 ? svg.select(".legend-text-categories").node()?.getBBox() : null;
+                if (legendBBox && sortedItems.length > 0) {
                     const centerOffsetX = (dimensions.width + 50 - legendBBox.width) / 2 - legendBBox.x;
                     svg.select(".legend-text-categories")
                         .attr("transform", `translate(${centerOffsetX}, 0)`);
@@ -3859,12 +3878,46 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
             }
         }
     }
-    
+
+    const stylingSaysText =
+        String(GPCRome_styling && GPCRome_styling.DataType != null ? GPCRome_styling.DataType : "")
+            .trim()
+            .toLowerCase() === "text";
+    const textWheelRender = stylingSaysText || DataType === "Text";
+
     // Add padding and update height to match content
     const padding = 10;
-    const newHeight = dimensions.height + AddBottomHeight;
+    const vbOuterW = dimensions.width + 2 * padding;
+    const artboardH =
+        dimensions && typeof dimensions.height === "number" && dimensions.height > 0 ? dimensions.height : 1000;
+
+    let addBottom = Number.isFinite(AddBottomHeight) ? AddBottomHeight : 0;
+    addBottom = Math.max(addBottom, 0);
+
+    /*
+     * Categorical / Text wheels: degenerate bbox + CSS `height:auto` on `#GPCRome_plot svg`
+     * (Mapper template) amplify a short viewBox into a ~40px-tall viewport. Clamp both the SVG
+     * height attribute and viewBox outer height against the styling object (rerenders can race const DataType).
+     */
+    if (textWheelRender) {
+        addBottom = Math.max(addBottom, 60);
+    }
+
+    let newHeight = artboardH + addBottom;
+    if (textWheelRender) {
+        newHeight = Math.max(newHeight, artboardH + 60, 1040);
+    }
+
+    let vbOuterH = newHeight + 2 * padding;
+    if (textWheelRender) {
+        vbOuterH = Math.max(vbOuterH, Math.round(vbOuterW * 0.96));
+        if (vbOuterH > newHeight + 2 * padding) {
+            newHeight = vbOuterH - 2 * padding;
+        }
+    }
 
     svg
-    .attr("height", newHeight)  // Increase the actual height of the SVG
-    .attr("viewBox", `-${padding} -${padding} ${dimensions.width + 2 * padding} ${newHeight + 2 * padding}`);  // ViewBox matches new size
+        .attr("data-gpcrome-datatype", textWheelRender ? "text" : "numeric")
+        .attr("height", newHeight)
+        .attr("viewBox", `-${padding} -${padding} ${vbOuterW} ${vbOuterH}`);
 }

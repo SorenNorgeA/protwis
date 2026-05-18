@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from django.http import HttpResponse, HttpResponseBadRequest
+from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.conf import settings
 from django.db.models import Q
 from django.views.generic import TemplateView
@@ -526,6 +526,215 @@ class DataMapperHome(TemplateView):
         return structure_dict
 
     @staticmethod
+    def build_gpcrome_receptor_normalization_maps():
+        """Build the same lookup tables as the Excel DataMapperHome GPCRome / Tree branch."""
+        all_proteins = Protein.objects.filter(
+            species_id=1,
+            parent_id__isnull=True,
+            accession__isnull=False,
+            family_id__slug__startswith='0',
+        ).values_list('entry_name', flat=True).distinct()
+
+        proteins_gpcrome_tree = set(
+            Protein.objects.filter(
+                species_id=1,
+                parent_id__isnull=True,
+                accession__isnull=False,
+                family_id__slug__startswith='0',
+            ).exclude(
+                family_id__slug__startswith='007',
+            ).exclude(
+                family_id__slug__startswith='008',
+            ).values_list('entry_name', flat=True).distinct()
+        )
+
+        proteins = Protein.objects.prefetch_related('genes').filter(entry_name__in=all_proteins)
+        entry_to_gene = {
+            protein.entry_name: next((g.name for g in protein.genes.all() if g.position == 0), None)
+            for protein in proteins
+        }
+        gene_to_entry = {v.upper(): k for k, v in entry_to_gene.items() if v}
+        entry_name_upper_to_entry = {k.upper(): k for k in entry_to_gene.keys()}
+        entry_name_no_species_to_entry = {
+            k.split('_')[0].upper(): k for k in entry_to_gene.keys()
+        }
+        iuphar_name_to_entry = {}
+        for p in Protein.objects.filter(entry_name__in=proteins_gpcrome_tree).only('entry_name', 'name'):
+            if p.name:
+                plain = re.sub(r'<[^>]+>', '', p.name).strip()
+                if plain:
+                    iuphar_name_to_entry[plain.upper()] = p.entry_name
+        return {
+            'proteins_gpcrome_tree': proteins_gpcrome_tree,
+            'gene_to_entry': gene_to_entry,
+            'entry_name_upper_to_entry': entry_name_upper_to_entry,
+            'entry_name_no_species_to_entry': entry_name_no_species_to_entry,
+            'entry_to_gene': entry_to_gene,
+            'iuphar_name_to_entry': iuphar_name_to_entry,
+        }
+
+    @staticmethod
+    def normalize_receptor_input_for_gpcrome(receptor_raw, maps):
+        if receptor_raw is None or receptor_raw == '':
+            return None
+        receptor = str(receptor_raw).strip().upper()
+        if not receptor:
+            return None
+        gene_to_entry = maps['gene_to_entry']
+        entry_name_upper_to_entry = maps['entry_name_upper_to_entry']
+        entry_name_no_species_to_entry = maps['entry_name_no_species_to_entry']
+        if receptor in gene_to_entry:
+            return gene_to_entry[receptor]
+        if receptor in entry_name_upper_to_entry:
+            return entry_name_upper_to_entry[receptor]
+        if receptor in entry_name_no_species_to_entry:
+            return entry_name_no_species_to_entry[receptor]
+        iuphar_map = maps.get('iuphar_name_to_entry') or {}
+        if receptor in iuphar_map:
+            return iuphar_map[receptor]
+        return None
+
+    @staticmethod
+    def gpcrome_receptor_select2_options(maps=None):
+        if maps is None:
+            maps = DataMapperHome.build_gpcrome_receptor_normalization_maps()
+        entry_to_gene = maps['entry_to_gene']
+        tree = sorted(maps['proteins_gpcrome_tree'])
+        name_by_entry = {
+            p['entry_name']: p['name']
+            for p in Protein.objects.filter(entry_name__in=tree).values('entry_name', 'name')
+        }
+        options = []
+        for entry_name in tree:
+            gene = entry_to_gene.get(entry_name) or ''
+            raw_name = name_by_entry.get(entry_name) or ''
+            plain_name = re.sub(r'<[^>]+>', '', raw_name).strip() if raw_name else ''
+            base = entry_name.split('_')[0].upper() if '_' in entry_name else entry_name.upper()
+            parts = [plain_name, gene, base]
+            label = ' | '.join([x for x in parts if x])
+            if not label:
+                label = entry_name
+            search_parts = [
+                entry_name,
+                entry_name.upper(),
+                base,
+                gene.upper() if gene else '',
+                plain_name.upper() if plain_name else '',
+            ]
+            search_text = ' '.join([x for x in search_parts if x]).upper()
+            options.append({
+                'id': entry_name,
+                'text': label,
+                'search_text': search_text,
+                'name_plain': plain_name,
+                'name_html': raw_name if raw_name else plain_name,
+                'gene': gene,
+                'uniprot': base,
+            })
+        return options
+
+    @staticmethod
+    def gpcrome_receptor_client_resolve_map(maps=None):
+        """Uppercased lookup keys -> canonical entry_name (same rules as normalize where possible)."""
+        if maps is None:
+            maps = DataMapperHome.build_gpcrome_receptor_normalization_maps()
+        tree = maps['proteins_gpcrome_tree']
+        out = {}
+        for en in tree:
+            out[en.upper()] = en
+            if '_' in en:
+                out[en.split('_')[0].upper()] = en
+        for gene_upper, en in maps['gene_to_entry'].items():
+            if en in tree:
+                out[gene_upper] = en
+        for name_upper, en in (maps.get('iuphar_name_to_entry') or {}).items():
+            if en in tree:
+                out[name_upper] = en
+        return out
+
+    @staticmethod
+    def _gpcrome_strip_markup(s):
+        if not s:
+            return ''
+        return re.sub(r'<[^>]+>', '', str(s)).strip()
+
+    # Same lineage idea as Drugs browser (target__family__parent__...) — prefetch enough FK hops
+    # that in-memory traversal matches Protein.get_protein_class / get_protein_family without new queries.
+    _GPCROME_FAM_PARENT_CHAIN = 'family__' + '__'.join(['parent'] * 14)
+
+    @staticmethod
+    def _gpcrome_class_display_name_after_family_traversal(protein_family):
+        """Traversal copy of Protein.get_protein_class; uses cached FK links from select_related()."""
+        if protein_family is None:
+            return ''
+        tmp = protein_family
+        while tmp.parent is not None and tmp.parent.parent is not None:
+            tmp = tmp.parent
+        return tmp.name if tmp.name else ''
+
+    @staticmethod
+    def _gpcrome_receptor_family_display_name_after_traversal(protein_family):
+        """Traversal copy of Protein.get_protein_family."""
+        if protein_family is None:
+            return ''
+        tmp = protein_family
+        while (
+            tmp.parent is not None
+            and tmp.parent.parent is not None
+            and tmp.parent.parent.parent is not None
+        ):
+            tmp = tmp.parent
+        return tmp.name if tmp.name else ''
+
+    @staticmethod
+    def gpcrome_receptor_picker_table_rows(maps=None):
+        """Plain JSON rows for GPCR picker (wheel receptor set). Single batched Protein query."""
+        if maps is None:
+            maps = DataMapperHome.build_gpcrome_receptor_normalization_maps()
+        entry_to_gene = maps['entry_to_gene']
+        tree = sorted(maps['proteins_gpcrome_tree'])
+        if not tree:
+            return []
+
+        qs = Protein.objects.filter(entry_name__in=tree).select_related(
+            DataMapperHome._GPCROME_FAM_PARENT_CHAIN
+        )
+        by_entry = {p.entry_name: p for p in qs}
+
+        rows = []
+        for entry_name in tree:
+            p = by_entry.get(entry_name)
+            if not p:
+                continue
+            gene = entry_to_gene.get(entry_name) or ''
+            raw_name = p.name or ''
+            plain_name = DataMapperHome._gpcrome_strip_markup(raw_name)
+
+            rfam = p.family
+            family = DataMapperHome._gpcrome_strip_markup(
+                DataMapperHome._gpcrome_receptor_family_display_name_after_traversal(rfam)
+            )
+            prot_class = DataMapperHome._gpcrome_strip_markup(
+                DataMapperHome._gpcrome_class_display_name_after_family_traversal(rfam)
+            )
+
+            entry_short = p.entry_short()
+            gpcrdb_link = 'https://gpcrdb.org/protein/{}/'.format(entry_name)
+            uniprot_link = 'https://www.uniprot.org/uniprot/{}'.format(entry_short) if entry_short else ''
+            rows.append({
+                'id': entry_name,
+                'name_html': raw_name if raw_name else plain_name,
+                'name_plain': plain_name or entry_short,
+                'gene': gene or '',
+                'uniprot': entry_short,
+                'uniprot_link': uniprot_link,
+                'family': family or '',
+                'class': prot_class or '',
+                'gpcrdb_link': gpcrdb_link,
+            })
+        return rows
+
+    @staticmethod
     def generate_tree_plot(input_data): #ADD AN INPUT FILTER DICTIONARY
         ### TREE SECTION
         tree = PhylogeneticTreeGenerator()
@@ -602,10 +811,16 @@ class DataMapperHome(TemplateView):
         master_dict['children'].append(class_cl_dict)
 
         updated_data = {key.replace('_human', ''): value for key, value in input_data.items()}
-        circles = {key.replace('_human', '').upper(): {k: v for k, v in value.items()} for key, value in input_data.items()}
-        master_dict = DataMapperHome.keep_by_names(master_dict, updated_data)
+        circles = {
+            key.replace('_human', '').upper(): {k: v for k, v in value.items()}
+            for key, value in input_data.items()
+        }
 
-        if len(master_dict['children']) == 1:
+        # Empty payloads: Mapper 2.0 loads the full skeleton client-side — do not prune the tree yet.
+        if input_data:
+            master_dict = DataMapperHome.keep_by_names(master_dict, updated_data)
+
+        if isinstance(master_dict, dict) and master_dict.get('children') is not None and len(master_dict['children']) == 1:
             master_dict = master_dict['children'][0]
             general_options['depth'] = 3
             general_options['branch_length'] = {1: 'Alicarboxylic acid',
@@ -886,37 +1101,9 @@ class DataMapperHome(TemplateView):
                         # Fetch protein data for processing 1 (Cluster, List, and Heatmap) #
                         all_proteins = Protein.objects.filter(species_id=1, parent_id__isnull=True, accession__isnull=False,family_id__slug__startswith='0').values_list('entry_name', flat=True).distinct()
 
-                        # Fetch protein data for processing 2 (GPCRome wheel and Tree plot) #
-                        Proteins_GPCRomeTree = Protein.objects.filter(
-                                species_id=1,
-                                parent_id__isnull=True,
-                                accession__isnull=False,
-                                family_id__slug__startswith='0'
-                            ).exclude(
-                                family_id__slug__startswith='007'
-                            ).exclude(
-                                family_id__slug__startswith='008'
-                            ).values_list('entry_name', flat=True).distinct()
-
-                        # Fetch proteins with prefetch on genes
-                        proteins = Protein.objects.prefetch_related('genes').filter(entry_name__in=all_proteins)
-
-                        # Create mapping from entry_name to gene name (position == 0 only)
-                        entry_to_gene = {
-                            protein.entry_name: next((g.name for g in protein.genes.all() if g.position == 0), None)
-                            for protein in proteins
-                        }
-
-                        # Reverse gene → entry_name mapping
-                        gene_to_entry = {v.upper(): k for k, v in entry_to_gene.items() if v}
-
-                        # entry_name → entry_name, matching uppercased
-                        entry_name_upper_to_entry = {k.upper(): k for k in entry_to_gene.keys()}
-
-                        # stripped (non-species-specific) → entry_name
-                        entry_name_no_species_to_entry = {
-                            k.split('_')[0].upper(): k for k in entry_to_gene.keys()
-                        }
+                        # GPCRome wheel / Tree: shared normalization maps (same as build_gpcrome_receptor_normalization_maps)
+                        gpcrome_maps = DataMapperHome.build_gpcrome_receptor_normalization_maps()
+                        Proteins_GPCRomeTree = gpcrome_maps['proteins_gpcrome_tree']
 
                         # Load excel file (workbook) and get sheet names #
                         sheet_names = workbook.sheetnames
@@ -959,25 +1146,7 @@ class DataMapperHome(TemplateView):
                                 return bool(re.match(hex_pattern, color))
 
                             def normalize_receptor_input(receptor_raw):
-                                if not receptor_raw:
-                                    return None
-
-                                receptor = receptor_raw.strip().upper()
-
-                                # Gene name match
-                                if receptor in gene_to_entry:
-                                    return gene_to_entry[receptor]
-
-                                # Full UniProt-style match
-                                if receptor in entry_name_upper_to_entry:
-                                    return entry_name_upper_to_entry[receptor]
-
-                                # Fallback: stripped version without species suffix
-                                if receptor in entry_name_no_species_to_entry:
-                                    return entry_name_no_species_to_entry[receptor]
-
-                                # No match
-                                return None
+                                return DataMapperHome.normalize_receptor_input_for_gpcrome(receptor_raw, gpcrome_maps)
 
                             # For each sheet in the workbook #
                             for sheet_name in sheet_names:
@@ -1770,3 +1939,57 @@ class HeatmapRender(TemplateView):
 
         except json.JSONDecodeError:
             return HttpResponse("Invalid JSON data")
+
+
+class MapperLandingPageView(TemplateView):
+    template_name = 'mapper/Mapper_landingPage.html'
+
+
+class MapperGPCRomeWheelView(TemplateView):
+    template_name = 'mapper/Mapper_GPCRomeWheel.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        base = DataMapperHome.GenerateGPCRomeDataStructure(data_type="Classic")
+        structure = deepcopy(base["Data"])
+        merged = DataMapperHome.update_nested_GPCRome_data(structure, {})
+        context['GPCRomeData'] = json.dumps(merged)
+        context['PlotType'] = 'Numeric'
+        maps = DataMapperHome.build_gpcrome_receptor_normalization_maps()
+        context['receptor_select2_json'] = json.dumps(
+            DataMapperHome.gpcrome_receptor_select2_options(maps=maps)
+        )
+        context['gpcrome_resolve_json'] = json.dumps(
+            DataMapperHome.gpcrome_receptor_client_resolve_map(maps=maps)
+        )
+        context['gpcrome_picker_rows_json'] = json.dumps(
+            DataMapperHome.gpcrome_receptor_picker_table_rows(maps=maps)
+        )
+        return context
+
+
+class MapperTreeView(TemplateView):
+    template_name = 'mapper/Mapper_Tree.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        master_dict, general_options, circles, receptors, genes = DataMapperHome.generate_tree_plot({})
+        context['tree'] = json.dumps(master_dict)
+        context['tree_options'] = json.dumps(general_options)
+        context['circles'] = json.dumps(circles if circles else {})
+        context['Receptor_dict'] = json.dumps(receptors if receptors else {})
+        context['Entrez_dict'] = json.dumps(genes if genes else {})
+        context['PlotType'] = 'Numeric'
+        context['Data'] = json.dumps({})
+        maps = DataMapperHome.build_gpcrome_receptor_normalization_maps()
+        context['receptor_select2_json'] = json.dumps(
+            DataMapperHome.gpcrome_receptor_select2_options(maps=maps)
+        )
+        context['gpcrome_resolve_json'] = json.dumps(
+            DataMapperHome.gpcrome_receptor_client_resolve_map(maps=maps)
+        )
+        context['gpcrome_picker_rows_json'] = json.dumps(
+            DataMapperHome.gpcrome_receptor_picker_table_rows(maps=maps)
+        )
+        return context
+

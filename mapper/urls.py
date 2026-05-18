@@ -3,6 +3,9 @@ from django.views.decorators.cache import cache_page
 from . import views
 
 urlpatterns = [
+    url(r'^MapperLandingPage/$', views.MapperLandingPageView.as_view(), name='MapperLandingPage'),
+    url(r'^MapperGPCRomeWheel/$', views.MapperGPCRomeWheelView.as_view(), name='MapperGPCRomeWheel'),
+    url(r'^MapperTree/$', views.MapperTreeView.as_view(), name='MapperTree'),
     url(r'^DataMapperHome(?P<page>\w+)/$', views.DataMapperHome.as_view(), name='DataMapperHome'),
     url(r'^GPCRome', views.GPCRomeRender.as_view(), name='DataMapperGPCRome'),
     url(r'^Tree', views.TreeRender.as_view(), name='DataMapperTree'),
