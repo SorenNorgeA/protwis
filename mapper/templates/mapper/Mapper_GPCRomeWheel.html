@@ -62,6 +62,10 @@
   width: max-content;
   max-width: 100%;
 }
+#mapper20-paste-zone {
+  padding-left: 14px;
+  overflow: visible;
+}
 /* Header: intrinsic width — back btn + tight title side-by-side (no wide empty “title column”) */
 .mapper20-wheel-top-row {
   display: flex;
@@ -69,6 +73,7 @@
   align-items: center;
   column-gap: 10px;
   row-gap: 4px;
+  position: relative;
   width: auto;
   max-width: 100%;
   box-sizing: border-box;
@@ -76,17 +81,21 @@
   min-height: 28px;
 }
 .mapper20-wheel-top-left {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
   flex: 0 1 auto;
   min-width: 0;
   text-align: left;
 }
 .mapper20-wheel-page-title {
-  flex: 0 1 auto;
+  flex: 1 1 100%;
   min-width: 0;
   margin: 0;
   padding: 0;
   align-self: center;
-  text-align: left;
+  text-align: center;
   white-space: nowrap;
   font-size: 14px;
   font-weight: 600;
@@ -94,6 +103,9 @@
   color: #1a2b3c;
 }
 .mapper20-wheel-top-left a.btn.mapper20-wheel-back-btn {
+  color: #fff;
+  background-color: #337ab7;
+  border-color: #2e6da4;
   font-size: 11px;
   padding: 2px 8px;
   line-height: 1.35;
@@ -102,12 +114,28 @@
   white-space: nowrap;
   text-align: left;
 }
+.mapper20-wheel-top-left a.btn.mapper20-wheel-back-btn:hover,
+.mapper20-wheel-top-left a.btn.mapper20-wheel-back-btn:focus {
+  color: #fff;
+  background-color: #286090;
+  border-color: #204d74;
+}
+.mapper20-wheel-back-btn .glyphicon-new-window {
+  transform: scaleX(-1);
+}
 .mapper20-wheel-toolbar-stack {
   display: flex;
   flex-direction: column;
   gap: 6px;
   margin-bottom: 8px;
-  width: auto;
+  width: max-content;
+  max-width: 100%;
+}
+.mapper20-wheel-toolbar-grid {
+  display: flex;
+  flex-direction: column;
+  row-gap: 6px;
+  width: 265px;
   max-width: 100%;
 }
 .mapper20-wheel-toolbar-stack .mapper20-wheel-toolbar {
@@ -118,13 +146,74 @@
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   margin-bottom: 8px;
 }
 .mapper20-wheel-toolbar .btn {
-  font-size: 11px;
-  padding: 2px 8px;
+  font-size: 12px;
+  padding: 4px 10px;
   line-height: 1.35;
+}
+.mapper20-wheel-toolbar .btn-primary,
+.mapper20-wheel-toolbar .btn-default {
+  color: #fff;
+  background-color: #337ab7;
+  border-color: #2e6da4;
+}
+.mapper20-wheel-toolbar .btn-primary:hover,
+.mapper20-wheel-toolbar .btn-primary:focus,
+.mapper20-wheel-toolbar .btn-default:hover,
+.mapper20-wheel-toolbar .btn-default:focus {
+  color: #fff;
+  background-color: #286090;
+  border-color: #204d74;
+}
+.mapper20-wheel-toolbar .btn-group[aria-label="Input mode"] .btn {
+  min-width: 58px;
+}
+.mapper20-wheel-toolbar #mapper20-clear-rows:not(.mapper20-clear-clean):hover {
+  color: #fff;
+  background-color: #a94442;
+  border-color: #843534;
+}
+.mapper20-wheel-toolbar #mapper20-clear-rows:focus,
+.mapper20-wheel-toolbar #mapper20-clear-rows:active,
+.mapper20-wheel-toolbar #mapper20-clear-rows.mapper20-clear-clean,
+.mapper20-wheel-toolbar #mapper20-clear-rows.mapper20-clear-clean:hover,
+.mapper20-wheel-toolbar #mapper20-clear-rows.mapper20-clear-clean:focus {
+  color: #fff;
+  background-color: #337ab7;
+  border-color: #2e6da4;
+  outline: none;
+}
+.mapper20-wheel-toolbar #mapper20-howto-btn {
+  color: #fff;
+  background-color: #f0ad4e;
+  border-color: #eea236;
+  font-weight: 700;
+  padding-left: 7px;
+  padding-right: 7px;
+}
+.mapper20-wheel-toolbar #mapper20-howto-btn:hover,
+.mapper20-wheel-toolbar #mapper20-howto-btn:focus {
+  color: #fff;
+  background-color: #ec971f;
+  border-color: #d58512;
+}
+.mapper20-howto-mark {
+  display: inline-flex;
+  position: relative;
+  top: -1px;
+  align-items: center;
+  justify-content: center;
+  width: 11px;
+  height: 11px;
+  margin-left: 3px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 8px;
+  line-height: 1;
+  font-weight: 700;
 }
 .mapper20-howto-modal .modal-body { font-size: 13px; color: #333; line-height: 1.5; }
 .mapper20-howto-modal .modal-body p:last-child { margin-bottom: 0; }
@@ -145,13 +234,25 @@
   word-wrap: break-word;
   word-break: break-word;
 }
-.mapper20-wheel-left .mapper20-input-table th:nth-child(1),
-.mapper20-wheel-left .mapper20-input-table td:nth-child(1) {
-  width: 64%;
+.mapper20-wheel-left .mapper20-input-table th.mapper20-th-remove,
+.mapper20-wheel-left .mapper20-input-table td.mapper20-remove-cell {
+  position: relative;
+  width: 0;
+  max-width: 0;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  overflow: visible;
+  text-align: center;
+  vertical-align: middle !important;
 }
-.mapper20-wheel-left .mapper20-input-table th:nth-child(2),
-.mapper20-wheel-left .mapper20-input-table td:nth-child(2) {
-  width: 36%;
+.mapper20-wheel-left .mapper20-input-table th.mapper20-th-receptor,
+.mapper20-wheel-left .mapper20-input-table td.mapper20-receptor-cell {
+  width: 146px;
+}
+.mapper20-wheel-left .mapper20-input-table th.mapper20-th-value,
+.mapper20-wheel-left .mapper20-input-table td.mapper20-value-cell {
+  width: 82px;
 }
 .mapper20-wheel-left .mapper20-input-table td.mapper20-receptor-cell,
 .mapper20-wheel-left .mapper20-input-table td.mapper20-value-cell {
@@ -219,6 +320,54 @@
 }
 .mapper20-wheel-left .mapper20-input-table tbody td.mapper20-value-cell {
   vertical-align: middle;
+}
+.mapper20-remove-row {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(169, 68, 66, 0.35);
+  border-radius: 50%;
+  background: #fff;
+  color: #a94442;
+  font-size: 14px;
+  line-height: 14px;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(26, 43, 60, 0.12);
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  transform: translateY(-50%);
+}
+.mapper20-remove-row:hover,
+.mapper20-remove-row:focus {
+  color: #fff;
+  border-color: #a94442;
+  background: #a94442;
+  outline: none;
+}
+.mapper20-remove-cell.is-remove-hidden .mapper20-remove-row {
+  visibility: hidden;
+  pointer-events: none;
+}
+.mapper20-wheel-left .mapper20-input-table th.mapper20-sortable-head {
+  cursor: pointer;
+  position: relative;
+  padding-right: 18px;
+  user-select: none;
+}
+.mapper20-wheel-left .mapper20-input-table th.mapper20-sortable-head:focus {
+  outline: thin dotted #333;
+  outline-offset: -2px;
+}
+.mapper20-sort-indicator {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #666;
+  font-size: 10px;
+  line-height: 1;
 }
 .mapper20-wheel-errors { margin-top: 8px; font-size: 10px; max-height: 160px; overflow: auto; color: #a94442; }
 .mapper20-wheel-errors:empty { display: none; }
@@ -364,20 +513,20 @@
 
 /* ------- Text mode: swatch column + widen grid ------- */
 .mapper20-wheel-left .mapper20-input-table.mapper20-text-mode {
-  width: 268px;
+  width: 292px;
 }
-.mapper20-wheel-left .mapper20-input-table.mapper20-text-mode th:nth-child(1),
-.mapper20-wheel-left .mapper20-input-table.mapper20-text-mode td:nth-child(1) {
-  width: 52%;
+.mapper20-wheel-left .mapper20-input-table.mapper20-text-mode th.mapper20-th-receptor,
+.mapper20-wheel-left .mapper20-input-table.mapper20-text-mode td.mapper20-receptor-cell {
+  width: 140px;
 }
-.mapper20-wheel-left .mapper20-input-table.mapper20-text-mode th:nth-child(2),
-.mapper20-wheel-left .mapper20-input-table.mapper20-text-mode td:nth-child(2) {
-  width: 35%;
+.mapper20-wheel-left .mapper20-input-table.mapper20-text-mode th.mapper20-th-value,
+.mapper20-wheel-left .mapper20-input-table.mapper20-text-mode td.mapper20-value-cell {
+  width: 108px;
 }
 .mapper20-wheel-left .mapper20-input-table.mapper20-text-mode th.mapper20-th-swatch,
 .mapper20-wheel-left .mapper20-input-table.mapper20-text-mode td.mapper20-swatch-cell {
-  width: 28px;
-  max-width: 28px;
+  width: 44px;
+  max-width: 44px;
   text-align: center;
   vertical-align: middle !important;
   padding: 2px !important;
@@ -386,7 +535,8 @@
 .mapper20-wheel-left .mapper20-input-table:not(.mapper20-text-mode) td.mapper20-swatch-cell {
   display: none;
 }
-.mapper20-label-swatch {
+.mapper20-label-swatch,
+.mapper20-swatch-cell .mapper20-row-swatch-replacer.sp-replacer {
   display: inline-block;
   width: 18px;
   height: 18px;
@@ -395,6 +545,32 @@
   box-sizing: border-box;
   vertical-align: middle;
   background-color: transparent;
+}
+.mapper20-label-swatch.mapper20-row-color-picker {
+  padding: 0;
+  color: transparent;
+  font-size: 0;
+  cursor: pointer;
+}
+.mapper20-swatch-cell .mapper20-row-swatch-replacer.sp-replacer {
+  margin: 0;
+  padding: 0 !important;
+  overflow: hidden;
+}
+.mapper20-swatch-cell .mapper20-row-swatch-replacer .sp-preview {
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0;
+  border: 0;
+}
+.mapper20-swatch-cell .mapper20-row-swatch-replacer .sp-preview-inner {
+  border-radius: 2px;
+}
+.mapper20-swatch-cell .mapper20-row-swatch-replacer .sp-dd {
+  display: none;
+}
+.mapper20-row-swatch-sp-container.sp-container {
+  z-index: 10060 !important;
 }
 
 /* Sidebar dropdown beside toolbar buttons: align top of panel with top of toggle */
@@ -537,28 +713,38 @@
     <div class="mapper20-wheel-left">
       <div class="mapper20-wheel-top-row">
         <div class="mapper20-wheel-top-left">
-          <a href="{% url 'MapperLandingPage' %}" class="btn btn-default btn-xs mapper20-wheel-back-btn">&larr; Data Mapper 2.0</a>
+          <a href="{% url 'MapperLandingPage' %}" class="btn btn-default btn-xs mapper20-wheel-back-btn"><span class="glyphicon glyphicon-new-window" aria-hidden="true"></span> Back</a>
         </div>
         <h2 class="mapper20-wheel-page-title">GPCRome wheel</h2>
       </div>
       <div class="mapper20-wheel-toolbar-stack">
-        <div class="mapper20-wheel-toolbar" aria-label="Mapper tools primary">
-          <button type="button" class="btn btn-default btn-xs" data-toggle="modal" data-target="#mapper20-howto-modal">How to</button>
-          <div class="btn-group btn-group-xs" role="group" aria-label="Input mode">
-            <button type="button" class="btn btn-default btn-xs active" id="mapper20-mode-numeric-btn" aria-pressed="true">Numeric</button>
-            <button type="button" class="btn btn-default btn-xs" id="mapper20-mode-labels-btn" aria-pressed="false">Text</button>
+        <div class="mapper20-wheel-toolbar-grid">
+          <div class="mapper20-wheel-toolbar" aria-label="Mapper tools primary">
+            <button type="button" class="btn btn-default btn-xs" id="mapper20-howto-btn" data-toggle="modal" data-target="#mapper20-howto-modal" title="How to use the mapper">
+              How to<span class="mapper20-howto-mark" aria-hidden="true">?</span>
+            </button>
+            <div class="btn-group btn-group-xs" role="group" aria-label="Input mode">
+              <button type="button" class="btn btn-default btn-xs active" id="mapper20-mode-numeric-btn" aria-pressed="true">Numeric</button>
+              <button type="button" class="btn btn-default btn-xs" id="mapper20-mode-labels-btn" aria-pressed="false">Text</button>
+            </div>
+            <button type="button" class="btn btn-default btn-xs" id="mapper20-demo-rows">Demo</button>
           </div>
-        </div>
-        <div class="mapper20-wheel-toolbar" aria-label="Table actions">
-          <button type="button" class="btn btn-primary btn-xs" id="mapper20-open-gpcrome-picker" data-toggle="modal" data-target="#mapper20-gpcrome-picker-modal">Select from table</button>
-          <button type="button" class="btn btn-default btn-xs" id="mapper20-clear-rows">Clear table</button>
+          <div class="mapper20-wheel-toolbar" aria-label="Table actions">
+            <button type="button" class="btn btn-primary btn-xs" id="mapper20-open-gpcrome-picker" data-toggle="modal" data-target="#mapper20-gpcrome-picker-modal">Select from table</button>
+            <button type="button" class="btn btn-default btn-xs" id="mapper20-clear-rows">Clear table</button>
+          </div>
         </div>
       </div>
       {% csrf_token %}
       <div class="table-responsive" id="mapper20-paste-zone">
         <table class="table table-bordered table-condensed mapper20-input-table" id="mapper20-input-table">
           <thead>
-            <tr><th>Receptor</th><th class="mapper20-th-value">Value</th><th class="mapper20-th-swatch" title="Label colour">&nbsp;</th></tr>
+            <tr>
+              <th class="mapper20-th-remove" aria-label="Remove row"></th>
+              <th class="mapper20-sortable-head" data-mapper20-sort-col="receptor" tabindex="0" role="button" aria-sort="none">Receptor <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
+              <th class="mapper20-th-value mapper20-sortable-head" data-mapper20-sort-col="value" tabindex="0" role="button" aria-sort="none">Value <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
+              <th class="mapper20-th-swatch" title="Label colour">Color</th>
+            </tr>
           </thead>
           <tbody id="mapper20-input-tbody"></tbody>
         </table>
@@ -833,6 +1019,32 @@ var MAPPER20_MODE_SNAPSHOTS = {
   numeric: null,
   text: null
 };
+var MAPPER20_SORT_STATE = {
+  column: null,
+  dir: 'asc'
+};
+var MAPPER20_DEMO_ROWS = {
+  '5HT1A': { numeric: 1, text: 'Aminergic' },
+  '5HT1B': { numeric: 2, text: 'Aminergic' },
+  '5HT1D': { numeric: 3, text: 'Aminergic' },
+  '5HT1E': { numeric: 4, text: 'Aminergic' },
+  '5HT1F': { numeric: 5, text: 'Aminergic' },
+  '5HT2A': { numeric: 6, text: 'Aminergic' },
+  '5HT2B': { numeric: 7, text: 'Aminergic' },
+  '5HT2C': { numeric: 8, text: 'Aminergic' },
+  'ACKR1': { numeric: 9, text: 'Chemokine' },
+  'ACKR2': { numeric: 10, text: 'Chemokine' },
+  'ACKR3': { numeric: 11, text: 'Chemokine' },
+  'ACKR4': { numeric: 12, text: 'Chemokine' },
+  'ACM1': { numeric: 13, text: 'Cholinergic' },
+  'ACM2': { numeric: 14, text: 'Cholinergic' },
+  'ACM3': { numeric: 15, text: 'Cholinergic' },
+  'ADA1A': { numeric: 16, text: 'Adrenergic' },
+  'ADA1B': { numeric: 17, text: 'Adrenergic' },
+  'ADA1D': { numeric: 18, text: 'Adrenergic' },
+  'ADRB1': { numeric: 19, text: 'Adrenergic' },
+  'ADRB2': { numeric: 20, text: 'Adrenergic' }
+};
 
 function mapper20IsTextMode() {
   return mapper20WheelInputMode === 'text';
@@ -875,6 +1087,130 @@ function mapper20SerializeDomRows() {
     rows.push({ entry: entry, unmatched: unmatchedStr, ta: ta, value: val });
   });
   return rows;
+}
+
+function mapper20NaturalSortCompare(a, b) {
+  var collator = mapper20NaturalSortCompare._collator;
+  if (!collator) {
+    collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+    mapper20NaturalSortCompare._collator = collator;
+  }
+  return collator.compare(mapper20NormalizeSortText(a), mapper20NormalizeSortText(b));
+}
+
+function mapper20NormalizeSortText(value) {
+  var s = value == null ? '' : String(value);
+  if (/[&<]/.test(s)) {
+    var txt = document.createElement('textarea');
+    txt.innerHTML = s.replace(/<[^>]*>/g, '');
+    s = txt.value || s;
+  }
+  var greekMap = {
+    'α': 'a', 'Α': 'a',
+    'β': 'b', 'Β': 'b',
+    'γ': 'g', 'Γ': 'g',
+    'δ': 'd', 'Δ': 'd',
+    'ε': 'e', 'Ε': 'e',
+    'ζ': 'z', 'Ζ': 'z',
+    'η': 'h', 'Η': 'h',
+    'θ': 't', 'Θ': 't',
+    'ι': 'i', 'Ι': 'i',
+    'κ': 'k', 'Κ': 'k',
+    'λ': 'l', 'Λ': 'l',
+    'μ': 'm', 'Μ': 'm',
+    'ν': 'n', 'Ν': 'n',
+    'ξ': 'x', 'Ξ': 'x',
+    'ο': 'o', 'Ο': 'o',
+    'π': 'p', 'Π': 'p',
+    'ρ': 'r', 'Ρ': 'r',
+    'σ': 's', 'ς': 's', 'Σ': 's',
+    'τ': 't', 'Τ': 't',
+    'υ': 'u', 'Υ': 'u',
+    'φ': 'f', 'Φ': 'f',
+    'χ': 'c', 'Χ': 'c',
+    'ψ': 'p', 'Ψ': 'p',
+    'ω': 'o', 'Ω': 'o'
+  };
+  return s.replace(/[αΑβΒγΓδΔεΕζΖηΗθΘιΙκΚλΛμΜνΝξΞοΟπΠρΡσςΣτΤυΥφΦχΧψΨωΩ]/g, function(ch) {
+    return greekMap[ch] || ch;
+  });
+}
+
+function mapper20SortHeaderLabel(column) {
+  if (column === 'value') {
+    return mapper20IsTextMode() ? 'Label' : 'Value';
+  }
+  return 'Receptor';
+}
+
+function mapper20UpdateSortHeaders() {
+  $('#mapper20-input-table th.mapper20-sortable-head').each(function() {
+    var $th = $(this);
+    var col = $th.attr('data-mapper20-sort-col');
+    var active = MAPPER20_SORT_STATE.column === col;
+    var dir = active ? MAPPER20_SORT_STATE.dir : null;
+    $th.attr('aria-sort', active ? (dir === 'desc' ? 'descending' : 'ascending') : 'none');
+    $th.contents().filter(function() {
+      return this.nodeType === 3;
+    }).remove();
+    $th.prepend(document.createTextNode(mapper20SortHeaderLabel(col) + ' '));
+    $th.find('.mapper20-sort-indicator').text(active ? (dir === 'desc' ? '▼' : '▲') : '↕');
+  });
+}
+
+function mapper20RowSortKeys($tr, ix) {
+  var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+  var unmatched = $tr.data('mapper20UnmatchedRaw');
+  var unmatchedStr = unmatched != null ? String(unmatched) : '';
+  var ta = mapper20NormalizeTypedReceptorInput($tr.find('.mapper20-in-receptor').val() || '');
+  var val = ($tr.find('.mapper20-in-value').val() || '');
+  var displayText = ($tr.find('.mapper20-receptor-html-view:visible').text() || '').replace(/\s+/g, ' ').trim();
+  var meta = entry && MAPPER20_ENTRY_META ? (MAPPER20_ENTRY_META[entry] || {}) : {};
+  var receptorSort = displayText || meta.gene || meta.name_plain || entry || unmatchedStr || ta;
+  return {
+    row: { entry: entry, unmatched: unmatchedStr, ta: ta, value: val },
+    receptorSort: receptorSort,
+    valueSort: mapper20TrimmedValueFromRowRaw(val),
+    originalIndex: ix
+  };
+}
+
+function mapper20SortSerializedRows(column, explicitDir) {
+  column = column === 'value' ? 'value' : 'receptor';
+  if (explicitDir === 'asc' || explicitDir === 'desc') {
+    MAPPER20_SORT_STATE.column = column;
+    MAPPER20_SORT_STATE.dir = explicitDir;
+  } else if (MAPPER20_SORT_STATE.column === column) {
+    MAPPER20_SORT_STATE.dir = MAPPER20_SORT_STATE.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    MAPPER20_SORT_STATE.column = column;
+    MAPPER20_SORT_STATE.dir = 'asc';
+  }
+
+  var rows = [];
+  $('#mapper20-input-tbody tr').each(function(ix) {
+    var $tr = $(this);
+    if (mapper20RowIsContentEmpty($tr)) {
+      return;
+    }
+    rows.push(mapper20RowSortKeys($tr, ix));
+  });
+  rows.sort(function(a, b) {
+    var primary = column === 'value' ? 'valueSort' : 'receptorSort';
+    var secondary = column === 'value' ? 'receptorSort' : 'valueSort';
+    var c = mapper20NaturalSortCompare(a[primary], b[primary]);
+    if (c !== 0) {
+      return MAPPER20_SORT_STATE.dir === 'desc' ? -c : c;
+    }
+    c = mapper20NaturalSortCompare(a[secondary], b[secondary]);
+    if (c !== 0) {
+      return c;
+    }
+    return a.originalIndex - b.originalIndex;
+  });
+  mapper20RestoreRowsFromSerialized(rows.map(function(x) { return x.row; }));
+  mapper20CaptureSnapshotForActiveMode();
+  mapper20UpdateSortHeaders();
 }
 
 function mapper20DestroyLabelColorSpectrumWidgets() {
@@ -966,6 +1302,256 @@ function mapper20EnsureMapsForDistinctLabels(sortedLabels) {
   });
 }
 
+function mapper20SetRowPickerVisual($rowPicker, hex, skipSpectrumSet) {
+  if (!$rowPicker || !$rowPicker.length || !hex) {
+    return;
+  }
+  $rowPicker.val(hex);
+  $rowPicker.css('background-color', hex);
+  $rowPicker.next('.mapper20-row-swatch-replacer').find('.sp-preview-inner').css('background-color', hex);
+  if (!skipSpectrumSet && $rowPicker.data('spectrum')) {
+    try {
+      $rowPicker.spectrum('set', hex);
+      $rowPicker.spectrum('enable').css('opacity', '1');
+    } catch (eRowSet) {}
+  }
+}
+
+function mapper20UpdateWheelLabelColorInPlace(lbl, nextHex) {
+  if (!lbl || !nextHex || !GPCRome_WheelDict) {
+    return;
+  }
+  function walk(node) {
+    if (!node || typeof node !== 'object') {
+      return;
+    }
+    if (!Array.isArray(node) && Object.prototype.hasOwnProperty.call(node, 'Data')) {
+      if (mapper20TrimmedValueFromRowRaw(node.Data) === lbl) {
+        node.Color = nextHex;
+      }
+    }
+    Object.keys(node).forEach(function(k) {
+      walk(node[k]);
+    });
+  }
+  walk(GPCRome_WheelDict);
+}
+
+function mapper20CollectDisplayLabelsForTextValue(lbl) {
+  var labels = {};
+  var labelType = GPCRomes_styling && GPCRomes_styling.LabelType ? GPCRomes_styling.LabelType : 'Protein';
+  function walk(node, keyName) {
+    if (!node || typeof node !== 'object') {
+      return;
+    }
+    if (!Array.isArray(node) && Object.prototype.hasOwnProperty.call(node, 'Data')) {
+      if (mapper20TrimmedValueFromRowRaw(node.Data) === lbl) {
+        if (labelType === 'Uniprot') {
+          labels[String(node.EntryName || keyName || '')] = true;
+        } else if (labelType === 'Entrez') {
+          labels[String(node.Entrez || keyName || '')] = true;
+        } else {
+          labels[String(keyName || '')] = true;
+        }
+      }
+    }
+    Object.keys(node).forEach(function(k) {
+      walk(node[k], k);
+    });
+  }
+  walk(GPCRome_WheelDict, '');
+  return labels;
+}
+
+function mapper20RecolorExistingWheelTextLabel(lbl, nextHex) {
+  var svg = d3v4.select('#' + GPCRome_location + '_svg');
+  if (!svg || svg.empty()) {
+    return false;
+  }
+  var labelSet = mapper20CollectDisplayLabelsForTextValue(lbl);
+  var changed = false;
+  svg.selectAll('path[class^="large-hollow-pie-"], path[class*=" large-hollow-pie-"]')
+    .filter(function(d) {
+      return d && Object.prototype.hasOwnProperty.call(labelSet, String(d.data || ''));
+    })
+    .style('fill', function() {
+      changed = true;
+      return nextHex;
+    })
+    .style('stroke', 'black');
+  return changed;
+}
+
+function mapper20ApplyLabelColor(lbl, nextHex, sourceInput) {
+  lbl = mapper20TrimmedValueFromRowRaw(lbl);
+  if (!lbl || !nextHex) {
+    return;
+  }
+  MAPPER20_LABEL_COLORS[lbl] = nextHex;
+  MAPPER20_LABEL_ENABLED[lbl] = true;
+  $('.mapper20-lcat-spectrum').each(function() {
+    var $inp = $(this);
+    if ($inp[0] === sourceInput || $inp.attr('data-mapper20-label') !== lbl || !$inp.data('spectrum')) {
+      return;
+    }
+    try {
+      $inp.spectrum('set', nextHex);
+      $inp.spectrum('enable').css('opacity', '1');
+    } catch (ePanel) {}
+  });
+  $('#mapper20-input-tbody .mapper20-row-color-picker').each(function() {
+    var $rowPicker = $(this);
+    var rowLbl = $rowPicker.attr('data-mapper20-label') || mapper20TrimmedValueFromRowRaw($rowPicker.closest('tr').find('.mapper20-in-value').val());
+    if (rowLbl !== lbl) {
+      return;
+    }
+    $rowPicker.attr('data-mapper20-label', lbl);
+    mapper20SetRowPickerVisual($rowPicker, nextHex, $rowPicker[0] === sourceInput);
+  });
+  mapper20UpdateWheelLabelColorInPlace(lbl, nextHex);
+  if (!mapper20RecolorExistingWheelTextLabel(lbl, nextHex)) {
+    updateGPCRome();
+  }
+  mapper20ScheduleRebuildPlot();
+}
+
+function mapper20DestroyRowColorSpectrum($sw) {
+  if (!$sw || !$sw.length || !$sw.data('spectrum')) {
+    return;
+  }
+  try {
+    $sw.spectrum('destroy');
+  } catch (eDestroy) {}
+}
+
+function mapper20ProtectRowColorPickerFromClose($sw) {
+  if (!$sw || !$sw.length || !$sw.data('spectrum')) {
+    return;
+  }
+  var events = 'mousedown.mapper20RowColor mouseup.mapper20RowColor click.mapper20RowColor touchstart.mapper20RowColor touchend.mapper20RowColor pointerdown.mapper20RowColor pointerup.mapper20RowColor';
+  function stopPickerEvent(e) {
+    e.stopPropagation();
+  }
+  try {
+    $sw.spectrum('container').off(events).on(events, stopPickerEvent);
+  } catch (eContainer) {}
+  $('.mapper20-wheel-left')
+    .off(events, '.mapper20-row-swatch-sp-container, .mapper20-row-swatch-replacer')
+    .on(events, '.mapper20-row-swatch-sp-container, .mapper20-row-swatch-replacer', stopPickerEvent);
+}
+
+function mapper20InstallRowColorClosePolicy($sw) {
+  if (!$sw || !$sw.length || !$sw.data('spectrum')) {
+    return;
+  }
+  var downEvent = 'mousedown.mapper20RowColorPolicy touchstart.mapper20RowColorPolicy pointerdown.mapper20RowColorPolicy';
+  var pickerId = String($sw.data('spectrum') || Math.floor(Math.random() * 1000000));
+  var ns = '.mapper20RowColorPolicy' + pickerId;
+
+  $sw.off(downEvent).on(downEvent, function() {
+    var $replacer = $sw.next('.mapper20-row-swatch-replacer');
+    if ($replacer.hasClass('sp-active')) {
+      $sw.data('mapper20AllowSpectrumClose', true);
+    } else {
+      $sw.data('mapper20AllowSpectrumClose', false);
+    }
+  });
+
+  $(document).off('mousedown' + ns + ' touchstart' + ns + ' pointerdown' + ns)
+    .on('mousedown' + ns + ' touchstart' + ns + ' pointerdown' + ns, function(e) {
+      var $target = $(e.target);
+      var $container = $();
+      try {
+        $container = $sw.spectrum('container');
+      } catch (eContainer) {}
+      if (
+        $target.closest('.mapper20-row-swatch-sp-container').length ||
+        ($container && $container.length && $target.closest($container).length) ||
+        $target.closest($sw.next('.mapper20-row-swatch-replacer')).length
+      ) {
+        return;
+      }
+      $sw.data('mapper20AllowSpectrumClose', true);
+    });
+}
+
+function mapper20MaybeReopenRowColorPicker($sw) {
+  if (!$sw || !$sw.length || !$sw.data('spectrum')) {
+    return;
+  }
+  if ($sw.data('mapper20AllowSpectrumClose') === true || !mapper20IsTextMode()) {
+    $sw.removeData('mapper20AllowSpectrumClose');
+    return;
+  }
+  window.setTimeout(function() {
+    if (!$sw.length || !$sw.closest('body').length || !$sw.data('spectrum')) {
+      return;
+    }
+    try {
+      $sw.spectrum('show');
+      mapper20ProtectRowColorPickerFromClose($sw);
+    } catch (eShow) {}
+  }, 0);
+}
+
+function mapper20EnsureRowColorSpectrum($sw, lbl, hex) {
+  if (!$sw || !$sw.length || typeof $sw.spectrum !== 'function') {
+    return;
+  }
+  $sw.attr('data-mapper20-label', lbl);
+  if (!$sw.data('spectrum')) {
+    $sw.spectrum({
+      color: hex,
+      showPalette: true,
+      showInput: true,
+      showButtons: false,
+      preferredFormat: 'hex',
+      appendTo: '.mapper20-wheel-left',
+      containerClassName: 'mapper20-lcat-sp-container mapper20-row-swatch-sp-container',
+      replacerClassName: 'mapper20-lcat-replacer mapper20-row-swatch-replacer',
+      palette: [
+        ['#000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00'],
+        ['#FF00FF', '#00FFFF', '#FFFFFF', '#C0C0C0', '#808080'],
+        ['#800000', '#808000', '#008000', '#800080', '#008080'],
+        ['#000080']
+      ],
+      show: function() {
+        $sw.data('mapper20AllowSpectrumClose', false);
+        mapper20RowColorPickerOpenCount += 1;
+        mapper20ProtectRowColorPickerFromClose($sw);
+      },
+      hide: function() {
+        var allowClose = $sw.data('mapper20AllowSpectrumClose') === true || !mapper20IsTextMode();
+        mapper20RowColorPickerOpenCount = Math.max(0, mapper20RowColorPickerOpenCount - 1);
+        mapper20MaybeReopenRowColorPicker($sw);
+        if (allowClose && mapper20RowColorPickerOpenCount === 0 && mapper20RowColorPickerPendingRebuild) {
+          mapper20RowColorPickerPendingRebuild = false;
+          mapper20RebuildPlotImmediate();
+        }
+      },
+      change: function(c) {
+        var activeLabel = mapper20TrimmedValueFromRowRaw($sw.closest('tr').find('.mapper20-in-value').val());
+        var nextHex = c && c.toHexString ? c.toHexString() : (c && c.toRgbString ? c.toRgbString() : null);
+        mapper20ApplyLabelColor(activeLabel, nextHex, $sw[0]);
+      },
+      move: function(c) {
+        var activeLabel = mapper20TrimmedValueFromRowRaw($sw.closest('tr').find('.mapper20-in-value').val());
+        var nextHex = c && c.toHexString ? c.toHexString() : (c && c.toRgbString ? c.toRgbString() : null);
+        mapper20ApplyLabelColor(activeLabel, nextHex, $sw[0]);
+      }
+    });
+    mapper20ProtectRowColorPickerFromClose($sw);
+    mapper20InstallRowColorClosePolicy($sw);
+  } else {
+    try {
+      $sw.spectrum('set', hex);
+      $sw.spectrum('enable').css('opacity', '1');
+      mapper20ProtectRowColorPickerFromClose($sw);
+      mapper20InstallRowColorClosePolicy($sw);
+    } catch (eSet) {}
+  }
+}
+
 function mapper20SyncRowSwatch($tr) {
   if (!$tr || !$tr.length) {
     return;
@@ -975,16 +1561,22 @@ function mapper20SyncRowSwatch($tr) {
     return;
   }
   if (!mapper20IsTextMode()) {
+    mapper20DestroyRowColorSpectrum($sw);
+    $sw.removeAttr('data-mapper20-label');
     $sw.css('background-color', 'transparent');
     return;
   }
   var lbl = mapper20TrimmedValueFromRowRaw($tr.find('.mapper20-in-value').val());
   if (!lbl) {
+    mapper20DestroyRowColorSpectrum($sw);
+    $sw.removeAttr('data-mapper20-label');
     $sw.css('background-color', '#f5f5f5');
     return;
   }
-  var hex = MAPPER20_LABEL_COLORS[lbl];
-  $sw.css('background-color', hex || mapper20DefaultHexForLabelKey(lbl));
+  mapper20EnsureMapsForDistinctLabels([lbl]);
+  var hex = MAPPER20_LABEL_COLORS[lbl] || mapper20DefaultHexForLabelKey(lbl);
+  mapper20SetRowPickerVisual($sw, hex, true);
+  mapper20EnsureRowColorSpectrum($sw, lbl, hex);
 }
 
 function mapper20RefreshAllLabelSwatches() {
@@ -1067,6 +1659,13 @@ function mapper20CloneRowsDeep(rows) {
   return mapper20CloneObj(rows || []);
 }
 
+function mapper20RowsWithBlankValues(rows) {
+  return mapper20CloneRowsDeep(rows).map(function(row) {
+    row.value = '';
+    return row;
+  });
+}
+
 function mapper20EnsureOppositeModeSeed(targetMode) {
   if (MAPPER20_MODE_SNAPSHOTS[targetMode] != null) {
     return;
@@ -1074,7 +1673,7 @@ function mapper20EnsureOppositeModeSeed(targetMode) {
   if (targetMode === 'text') {
     var baseSnap = MAPPER20_MODE_SNAPSHOTS.numeric || { rows: [] };
     MAPPER20_MODE_SNAPSHOTS.text = {
-      rows: mapper20CloneRowsDeep(baseSnap.rows),
+      rows: mapper20RowsWithBlankValues(baseSnap.rows),
       receptorTallPlaceholderIntro: baseSnap.receptorTallPlaceholderIntro,
       labelColors: {},
       labelEnabled: {},
@@ -1089,7 +1688,7 @@ function mapper20EnsureOppositeModeSeed(targetMode) {
     var tSnap = MAPPER20_MODE_SNAPSHOTS.text || { rows: [] };
     var n0 = MAPPER20_MODE_SNAPSHOTS.numeric || {};
     MAPPER20_MODE_SNAPSHOTS.numeric = {
-      rows: mapper20CloneRowsDeep(tSnap.rows),
+      rows: mapper20RowsWithBlankValues(tSnap.rows),
       receptorTallPlaceholderIntro: tSnap.receptorTallPlaceholderIntro,
       colorSchemeSelect: n0.colorSchemeSelect || ($('#GPCRome_color_styling').val() || 'One'),
       stylingNums: n0.stylingNums ? mapper20CloneObj(n0.stylingNums) : null,
@@ -1163,7 +1762,6 @@ function mapper20RestoreRowsFromSerialized(rows) {
 function mapper20ApplyChromeForInputMode() {
   var text = mapper20IsTextMode();
   $('#mapper20-input-table').toggleClass('mapper20-text-mode', text);
-  $('.mapper20-th-value').text(text ? 'Label' : 'Value');
   $('#mapper20-datalabels-wrap').toggleClass('mapper20-hide-when-numeric', !text);
   var $cw = $('.mapper20-colors-panel-wrap');
   $cw.toggleClass('mapper20-colors-show-numeric', !text);
@@ -1179,6 +1777,7 @@ function mapper20ApplyChromeForInputMode() {
     .toggleClass('btn-default', !text)
     .toggleClass('active', text)
     .attr('aria-pressed', text ? 'true' : 'false');
+  mapper20UpdateSortHeaders();
 }
 
 function mapper20GraphicalLegendSyncActiveButtons() {
@@ -1394,7 +1993,10 @@ function mapper20RebuildLabelColorCustomizePanel(forceRedrawWheel) {
     MAPPER20_LABEL_COLORS[lbl] = hex;
     var en = MAPPER20_LABEL_ENABLED[lbl] !== false;
 
-    var $spe = $('<input type="text">').addClass('mapper20-lcat-spectrum form-control input-sm').attr('id', pickerId);
+    var $spe = $('<input type="text">')
+      .addClass('mapper20-lcat-spectrum form-control input-sm')
+      .attr('id', pickerId)
+      .attr('data-mapper20-label', lbl);
     grid.append($('<div class="color-item">').append(
       $('<input type="checkbox">').attr('id', chkId).prop('checked', !!en),
       $('<label>').attr('for', chkId).addClass('color-label').text(lbl),
@@ -1434,9 +2036,7 @@ function mapper20RebuildLabelColorCustomizePanel(forceRedrawWheel) {
         } else if (c && c.toRgbString) {
           nextHex = c.toRgbString();
         }
-        MAPPER20_LABEL_COLORS[lbl] = nextHex || hex;
-        mapper20RefreshAllLabelSwatches();
-        mapper20ScheduleRebuildPlot();
+        mapper20ApplyLabelColor(lbl, nextHex || hex, $spe[0]);
       },
       move: function(c) {
         if (MAPPER20_LABEL_ENABLED[lbl] === false) {
@@ -1448,9 +2048,7 @@ function mapper20RebuildLabelColorCustomizePanel(forceRedrawWheel) {
         } else if (c && c.toRgbString) {
           nextHex = c.toRgbString();
         }
-        MAPPER20_LABEL_COLORS[lbl] = nextHex || hex;
-        mapper20RefreshAllLabelSwatches();
-        mapper20ScheduleRebuildPlot();
+        mapper20ApplyLabelColor(lbl, nextHex || hex, $spe[0]);
       }
     });
 
@@ -1593,8 +2191,14 @@ var mapper20PlotDebounceMs = 200;
 var mapper20PlotRebuildTimer = null;
 var mapper20RestoringDomRows = false;
 var mapper20LabelPanelDebouncer = null;
+var mapper20RowColorPickerOpenCount = 0;
+var mapper20RowColorPickerPendingRebuild = false;
 
 function mapper20ScheduleRebuildPlot() {
+  if (mapper20RowColorPickerOpenCount > 0) {
+    mapper20RowColorPickerPendingRebuild = true;
+    return;
+  }
   window.clearTimeout(mapper20PlotRebuildTimer);
   mapper20PlotRebuildTimer = window.setTimeout(function() {
     mapper20PlotRebuildTimer = null;
@@ -1603,6 +2207,10 @@ function mapper20ScheduleRebuildPlot() {
 }
 
 function mapper20RebuildPlotImmediate() {
+  if (mapper20RowColorPickerOpenCount > 0) {
+    mapper20RowColorPickerPendingRebuild = true;
+    return;
+  }
   window.clearTimeout(mapper20PlotRebuildTimer);
   mapper20PlotRebuildTimer = null;
   mapper20RebuildPlotFromTableInternal();
@@ -2014,6 +2622,15 @@ function mapper20SyncReceptorTextareaHeights() {
   });
 }
 
+function mapper20CompactReceptorRowsAfterInput() {
+  if (!mapper20ReceptorTallPlaceholderIntro) {
+    return;
+  }
+  mapper20ReceptorTallPlaceholderIntro = false;
+  mapper20SyncFirstRowReceptorPlaceholder();
+  mapper20SyncReceptorTextareaHeights();
+}
+
 function mapper20FilterReceptorsLocal(term, limit) {
   var t = (term || '').trim().toUpperCase();
   if (!t) {
@@ -2109,6 +2726,7 @@ function mapper20SetReceptorResolvedUI($tr, entryId) {
     mapper20SyncReceptorClearBtn($tr);
     return;
   }
+  mapper20CompactReceptorRowsAfterInput();
   $hid.val(sid);
   $view.html(mapper20ResolvedReceptorDisplayHtml(sid));
   $inp.val('');
@@ -2116,6 +2734,77 @@ function mapper20SetReceptorResolvedUI($tr, entryId) {
   $view.show();
   mapper20BindReceptorAutocomplete($inp);
   mapper20SyncReceptorClearBtn($tr);
+}
+
+function mapper20FocusValueCellForRow($tr) {
+  if (!$tr || !$tr.length) {
+    return;
+  }
+  window.setTimeout(function() {
+    var $value = $tr.find('.mapper20-in-value');
+    if (!$value.length) {
+      return;
+    }
+    $value.focus();
+    if ($value[0] && typeof $value[0].select === 'function') {
+      $value[0].select();
+    }
+  }, 0);
+}
+
+function mapper20RowHasReceptorContent($tr) {
+  if (!$tr || !$tr.length) {
+    return false;
+  }
+  var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+  var typed = mapper20NormalizeTypedReceptorInput($tr.find('.mapper20-in-receptor').val() || '');
+  var unmatched = $tr.data('mapper20UnmatchedRaw');
+  var unmatchedStr = unmatched != null ? String(unmatched).trim() : '';
+  var viewText = ($tr.find('.mapper20-receptor-html-view:visible').text() || '').replace(/\s+/g, ' ').trim();
+  return !!(entry || typed || unmatchedStr || viewText);
+}
+
+function mapper20FocusReceptorCellForRow($tr) {
+  if (!$tr || !$tr.length) {
+    return;
+  }
+  window.setTimeout(function() {
+    var $inp = $tr.find('.mapper20-in-receptor');
+    var $view = $tr.find('.mapper20-receptor-html-view:visible');
+    var $target = $inp.is(':visible') ? $inp : $view;
+    if (!$target.length) {
+      return;
+    }
+    $target.focus();
+    if ($target[0] && typeof $target[0].select === 'function') {
+      $target[0].select();
+    }
+  }, 0);
+}
+
+function mapper20FocusNextTableCellFrom($source) {
+  var $tr = $source.closest('#mapper20-input-tbody tr');
+  if (!$tr.length) {
+    return;
+  }
+  if ($source.closest('.mapper20-in-receptor, .mapper20-receptor-html-view').length) {
+    mapper20FocusValueCellForRow($tr);
+    return;
+  }
+  if (!$source.closest('.mapper20-in-value').length) {
+    return;
+  }
+  mapper20EnsureTrailingBlankRow();
+  var $next = $tr.next('tr');
+  if (!$next.length) {
+    mapper20AppendRow('', '', true);
+    $next = $('#mapper20-input-tbody tr').last();
+  }
+  if (mapper20RowHasReceptorContent($next)) {
+    mapper20FocusValueCellForRow($next);
+  } else {
+    mapper20FocusReceptorCellForRow($next);
+  }
 }
 
 function mapper20BeginEditReceptor($tr) {
@@ -2170,6 +2859,7 @@ function mapper20BindReceptorAutocomplete($inp) {
       $tr.removeData('mapper20UnmatchedRaw');
       mapper20SetReceptorResolvedUI($tr, ui.item.value);
       mapper20EnsureTrailingBlankRow();
+      mapper20FocusValueCellForRow($tr);
       return false;
     },
     open: function() {
@@ -2213,10 +2903,14 @@ function mapper20DestroyRowReceptorWidgets() {
   $('#mapper20-input-tbody .mapper20-in-receptor').each(function() {
     mapper20DestroyReceptorAutocomplete($(this));
   });
+  $('#mapper20-input-tbody .mapper20-row-color-picker').each(function() {
+    mapper20DestroyRowColorSpectrum($(this));
+  });
 }
 
 function mapper20DestroyRowReceptorWidgetForTr($tr) {
   mapper20DestroyReceptorAutocomplete($tr.find('.mapper20-in-receptor'));
+  mapper20DestroyRowColorSpectrum($tr.find('.mapper20-row-color-picker'));
 }
 
 function mapper20ApplyCanonicalToRowSelect($tr, entryId) {
@@ -2296,9 +2990,18 @@ function mapper20EnsureTrailingBlankRow() {
 
   mapper20SyncFirstRowReceptorPlaceholder();
   mapper20SyncReceptorTextareaHeights();
+  mapper20SyncRemoveRowButtons();
   if (!mapper20RestoringDomRows) {
     mapper20ScheduleRebuildPlot();
   }
+}
+
+function mapper20SyncRemoveRowButtons() {
+  $('#mapper20-input-tbody tr').each(function() {
+    var $tr = $(this);
+    var hide = mapper20RowIsContentEmpty($tr);
+    $tr.find('td.mapper20-remove-cell').toggleClass('is-remove-hidden', hide);
+  });
 }
 
 function mapper20AppendRow(receptorText, value, skipTrailingEnsure) {
@@ -2306,11 +3009,16 @@ function mapper20AppendRow(receptorText, value, skipTrailingEnsure) {
     skipTrailingEnsure = false;
   }
   var tr = $('<tr>');
+  tr.append(
+    $('<td class="mapper20-remove-cell is-remove-hidden">').append(
+      $('<button type="button" class="mapper20-remove-row" aria-label="Remove row" title="Remove row">&times;</button>')
+    )
+  );
   var $tdR = $('<td class="mapper20-receptor-cell">');
   var $inp = mapper20CreateReceptorCell($tdR);
   tr.append($tdR);
   tr.append($('<td class="mapper20-value-cell">').append($('<input type="text" class="form-control input-sm mapper20-in-value" autocomplete="off">').val(value != null ? value : '')));
-  tr.append($('<td class="mapper20-swatch-cell">').append('<span class="mapper20-label-swatch" aria-hidden="true"></span>'));
+  tr.append($('<td class="mapper20-swatch-cell">').append('<input type="text" class="mapper20-label-swatch mapper20-row-color-picker" aria-label="Label colour">'));
   $('#mapper20-input-tbody').append(tr);
   mapper20BindReceptorAutocomplete($inp);
   var rt = receptorText != null ? String(receptorText).trim() : '';
@@ -2336,6 +3044,7 @@ function mapper20AppendRow(receptorText, value, skipTrailingEnsure) {
   mapper20SyncReceptorClearBtn($tr);
   mapper20SyncRowSwatch($tr);
   mapper20SyncValueCellHint($tr);
+  mapper20SyncRemoveRowButtons();
   if (!skipTrailingEnsure) {
     mapper20EnsureTrailingBlankRow();
   }
@@ -2346,6 +3055,27 @@ function mapper20AppendRowFromPaste(rawR, valCell) {
   var $tr = $('#mapper20-input-tbody tr').last();
   mapper20SetReceptorRawOnRow($tr, rawR);
   mapper20EnsureTrailingBlankRow();
+}
+
+function mapper20FillDemoRows() {
+  mapper20ReceptorTallPlaceholderIntro = false;
+  mapper20DestroyRowReceptorWidgets();
+  $('#mapper20-input-tbody').empty();
+  $('#mapper20-wheel-errors').empty();
+  if (mapper20IsTextMode()) {
+    MAPPER20_LABEL_COLORS = {};
+    MAPPER20_LABEL_ENABLED = {};
+  }
+  Object.keys(MAPPER20_DEMO_ROWS).forEach(function(receptor) {
+    var row = MAPPER20_DEMO_ROWS[receptor] || {};
+    var value = mapper20IsTextMode() ? row.text : row.numeric;
+    mapper20AppendRow(receptor, value, true);
+  });
+  mapper20EnsureTrailingBlankRow();
+  mapper20RefreshAllLabelSwatches();
+  mapper20RebuildLabelColorCustomizePanel(false);
+  mapper20CaptureSnapshotForActiveMode();
+  mapper20RebuildPlotImmediate();
 }
 
 function mapper20SetValueCellRawOnRow($tr, valCell) {
@@ -2383,6 +3113,7 @@ function mapper20SetReceptorRawOnRow($tr, rawR) {
     mapper20SyncReceptorClearBtn($tr);
     return;
   }
+  mapper20CompactReceptorRowsAfterInput();
   if (resolved || knownId) {
     mapper20EnsureReceptorInputCanonical($inp, resolved || rawR);
     $tr.removeClass('mapper20-row-invalid');
@@ -2506,17 +3237,6 @@ function mapper20PreprocessClassicWheelData(data) {
   return data;
 }
 
-/** Classification-tree aligned class colours for rim badges (mapper numeric wheel shows class shorthand + pill). */
-var MAPPER20_CLASS_COLORS_WHEEL = {
-  'A': '#1f78b4',
-  'B1': '#33a02c',
-  'B2': '#6A3D9A',
-  'C': '#d62728',
-  'F': '#FF7F0E',
-  'T2': '#F7B6D2',
-  'Classless': '#9e9e9e'
-};
-
 function mapper20WheelBadgeNormKey(code) {
   if (code === undefined || code === null) {
     return '';
@@ -2547,9 +3267,8 @@ function mapper20WheelUiD3() {
 }
 
 function mapper20MapperClassBadgeFill(classCode) {
-  /* Numeric mapper: tint pills with fixed class hue (data colours apply to wedges). */
-  var k = mapper20WheelBadgeNormKey(classCode);
-  return MAPPER20_CLASS_COLORS_WHEEL[k] || '#ffffff';
+  /* Class badges stay neutral; Numeric/Text data colours should be the only coloured accents. */
+  return '#ffffff';
 }
 
 function mapper20AddClassBadgePillsAfterDraw(locationId) {
@@ -2582,14 +3301,7 @@ function mapper20AddClassBadgePillsAfterDraw(locationId) {
         txt.style('fill', '#000');
 
         var fill = mapper20MapperClassBadgeFill(rawClass);
-        var fillOpacity;
-        var useTransparentBadge = typeof GPCRomes_styling !== 'undefined' && GPCRomes_styling && GPCRomes_styling.DataType === 'Text';
-        if (useTransparentBadge) {
-          fillOpacity = 0;
-          fill = 'none';
-        } else {
-          fillOpacity = 0.75;
-        }
+        var fillOpacity = 1;
         var node = txt.node();
         if (!node) {
           return;
@@ -2764,6 +3476,106 @@ function mapper20RecalcNumericStyling() {
   GPCRomes_styling.LegendbarDigit = determineDecimalPlaces(GPCRomeMin, GPCRomeMax);
 }
 
+function mapper20CollectDisplayLabelsForNumericValues() {
+  var values = {};
+  var labelType = GPCRomes_styling && GPCRomes_styling.LabelType ? GPCRomes_styling.LabelType : 'Protein';
+  function walk(node, keyName) {
+    if (!node || typeof node !== 'object') {
+      return;
+    }
+    if (!Array.isArray(node) && Object.prototype.hasOwnProperty.call(node, 'Data')) {
+      var num = Number(node.Data);
+      if (!isNaN(num)) {
+        var label;
+        if (labelType === 'Uniprot') {
+          label = String(node.EntryName || keyName || '');
+        } else if (labelType === 'Entrez') {
+          label = String(node.Entrez || keyName || '');
+        } else {
+          label = String(keyName || '');
+        }
+        values[label] = num;
+      }
+    }
+    Object.keys(node).forEach(function(k) {
+      walk(node[k], k);
+    });
+  }
+  walk(GPCRome_WheelDict, '');
+  return values;
+}
+
+function mapper20NumericColorScaleForCurrentStyling() {
+  var minValue = GPCRomes_styling.GPCRomeMin || 0;
+  var maxValue = GPCRomes_styling.GPCRomeMax || 1;
+  var avgValue = GPCRomes_styling.GPCRomeAvg || 0.5;
+  var colorMin = GPCRomes_styling.colorStart || '#FFFFFF';
+  var colorMax = GPCRomes_styling.colorEnd || '#000000';
+  var colorAvg = '#FFFFFF';
+  if (minValue === maxValue) {
+    var eps = 1e-9 * (Math.abs(minValue) || 1);
+    minValue -= eps;
+    maxValue += eps;
+  }
+  if (GPCRomes_styling.ColorSetup === 'Two') {
+    return d3v4.scaleLinear().domain([minValue, maxValue]).range([colorMin, colorMax]);
+  }
+  if (GPCRomes_styling.ColorSetup === 'Three') {
+    return d3v4.scaleLinear().domain([minValue, avgValue, maxValue]).range([colorMin, colorAvg, colorMax]);
+  }
+  return d3v4.scaleLinear().domain([minValue, maxValue]).range([colorAvg, colorMax]);
+}
+
+function mapper20UpdateNumericLegendGradientInPlace() {
+  var gradient = d3v4.select('#gradient-bar-' + GPCRome_location);
+  if (!gradient || gradient.empty()) {
+    return;
+  }
+  var colorMin = GPCRomes_styling.colorStart || '#FFFFFF';
+  var colorMax = GPCRomes_styling.colorEnd || '#000000';
+  gradient.selectAll('stop').remove();
+  if (GPCRomes_styling.ColorSetup === 'Three') {
+    gradient.append('stop').attr('offset', '0%').attr('stop-color', colorMin);
+    gradient.append('stop').attr('offset', '50%').attr('stop-color', '#FFFFFF');
+    gradient.append('stop').attr('offset', '100%').attr('stop-color', colorMax);
+  } else if (GPCRomes_styling.ColorSetup === 'Two') {
+    gradient.append('stop').attr('offset', '0%').attr('stop-color', colorMin);
+    gradient.append('stop').attr('offset', '100%').attr('stop-color', colorMax);
+  } else {
+    gradient.append('stop').attr('offset', '0%').attr('stop-color', '#FFFFFF');
+    gradient.append('stop').attr('offset', '100%').attr('stop-color', colorMax);
+  }
+}
+
+function mapper20RecolorExistingWheelNumericValues() {
+  if (mapper20IsTextMode()) {
+    return false;
+  }
+  var svg = d3v4.select('#' + GPCRome_location + '_svg');
+  if (!svg || svg.empty()) {
+    return false;
+  }
+  var valuesByLabel = mapper20CollectDisplayLabelsForNumericValues();
+  var colorScale = mapper20NumericColorScaleForCurrentStyling();
+  var changed = false;
+  svg.selectAll('path[class^="large-hollow-pie-"], path[class*=" large-hollow-pie-"]')
+    .style('fill', function(d) {
+      if (!d || !Object.prototype.hasOwnProperty.call(valuesByLabel, String(d.data || ''))) {
+        return d3v4.select(this).style('fill') || '#ffffff';
+      }
+      changed = true;
+      return colorScale(valuesByLabel[String(d.data || '')]);
+    })
+    .style('stroke', function(d) {
+      if (!d || !Object.prototype.hasOwnProperty.call(valuesByLabel, String(d.data || ''))) {
+        return d3v4.select(this).style('stroke') || 'black';
+      }
+      return 'black';
+    });
+  mapper20UpdateNumericLegendGradientInPlace();
+  return changed;
+}
+
 function updateGPCRome() {
   d3.select("#" + GPCRome_location).select("svg").remove();
   mapper20DrawGPCRomeWithClassBadges(GPCRome_WheelDict, GPCRome_location, GPCRomes_styling);
@@ -2895,7 +3707,9 @@ if (true) {
     document.getElementById("GPCRome_Color_max_container").style.visibility = 'visible';
     document.getElementById("GPCRome_Color_min_label").style.visibility = showMin ? 'visible' : 'hidden';
     document.getElementById("GPCRome_Color_avg_label").style.visibility = showAvg ? 'visible' : 'hidden';
-    updateGPCRome();
+    if (!mapper20RecolorExistingWheelNumericValues()) {
+      updateGPCRome();
+    }
   }
 
   function updateGPCRomeVisualization() {
@@ -2908,7 +3722,9 @@ if (true) {
     GPCRomes_styling.colorStart = colorMin;
     GPCRomes_styling.colorAvg = colorAvg;
     GPCRomes_styling.colorEnd = colorMax;
-    updateGPCRome();
+    if (!mapper20RecolorExistingWheelNumericValues()) {
+      updateGPCRome();
+    }
   }
 
   $(document).ready(function() {
@@ -3035,6 +3851,9 @@ $(document).ready(function() {
 
   $('#mapper20-input-tbody').on('input', '.mapper20-in-receptor', function() {
     var $tr = $(this).closest('tr');
+    if (mapper20NormalizeTypedReceptorInput($(this).val() || '')) {
+      mapper20CompactReceptorRowsAfterInput();
+    }
     $tr.removeClass('mapper20-row-invalid mapper20-row-error');
     $tr.removeData('mapper20UnmatchedRaw');
     mapper20ClearCellHoverHint($tr.find('td.mapper20-receptor-cell'));
@@ -3056,6 +3875,18 @@ $(document).ready(function() {
     $inp.val('').show().focus();
     mapper20BindReceptorAutocomplete($inp);
     mapper20SyncReceptorClearBtn($tr);
+    mapper20EnsureTrailingBlankRow();
+  });
+
+  $('#mapper20-input-tbody').on('click', '.mapper20-remove-row', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    var $tr = $(this).closest('tr');
+    if (!$tr.length || mapper20RowIsContentEmpty($tr)) {
+      return;
+    }
+    mapper20DestroyRowReceptorWidgetForTr($tr);
+    $tr.remove();
     mapper20EnsureTrailingBlankRow();
   });
 
@@ -3135,7 +3966,23 @@ $(document).ready(function() {
     }
   });
 
+  $('#mapper20-input-tbody').on('keydown', '.mapper20-in-receptor, .mapper20-receptor-html-view, .mapper20-in-value', function(e) {
+    if (e.which !== 9 || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) {
+      return;
+    }
+    var $target = $(this);
+    if ($target.hasClass('mapper20-in-receptor') && $target.data('ui-autocomplete')) {
+      var $menu = $target.autocomplete('widget');
+      if ($menu && $menu.is(':visible') && $menu.find('.ui-state-focus, .ui-state-active').length) {
+        return;
+      }
+    }
+    e.preventDefault();
+    mapper20FocusNextTableCellFrom($target);
+  });
+
   $('#mapper20-clear-rows').on('click', function() {
+    var $clearButton = $(this);
     mapper20ReceptorTallPlaceholderIntro = true;
     mapper20DestroyRowReceptorWidgets();
     $('#mapper20-input-tbody').empty();
@@ -3145,9 +3992,32 @@ $(document).ready(function() {
       MAPPER20_LABEL_ENABLED = {};
     }
     mapper20AppendRow('', '');
+    $clearButton.addClass('mapper20-clear-clean').blur();
+  });
+
+  $('#mapper20-input-table').on('input change', '.mapper20-receptor-input, .mapper20-value-input, .mapper20-row-color-picker', function() {
+    $('#mapper20-clear-rows').removeClass('mapper20-clear-clean');
+  });
+
+  $('#mapper20-input-table').on('click', 'th.mapper20-sortable-head', function() {
+    mapper20SortSerializedRows($(this).attr('data-mapper20-sort-col'));
+  });
+
+  $('#mapper20-input-table').on('keydown', 'th.mapper20-sortable-head', function(e) {
+    if (e.which === 13 || e.which === 32) {
+      e.preventDefault();
+      mapper20SortSerializedRows($(this).attr('data-mapper20-sort-col'));
+    }
+  });
+
+  $('#mapper20-demo-rows').on('click', function(e) {
+    e.preventDefault();
+    $('#mapper20-clear-rows').removeClass('mapper20-clear-clean');
+    mapper20FillDemoRows();
   });
 
   $('#mapper20-input-table').on('paste', function(e) {
+    $('#mapper20-clear-rows').removeClass('mapper20-clear-clean');
     var ev = e.originalEvent || e;
     var text = ev.clipboardData.getData('text/plain');
     if (!text) {

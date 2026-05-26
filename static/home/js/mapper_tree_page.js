@@ -7,6 +7,7 @@
 
   var DEBOUNCE_MS = 140;
   var redrawTimer;
+  var suppressRedraw = false;
 
   var ORIG_SKEL = null;
   var ORIG_OPTS = null;
@@ -25,6 +26,32 @@
   var MAPPER_TREE_MAX_ROWS = 500;
   /** Mapper tree page uses circular layout only (no curved/straight dendrogram UI). */
   var MAPPER_TREE_LAYOUT = 'Tree - Circular';
+  var MAPPER_TREE_RADIAL_LEAF_LABEL_GAP_BASE = 10;
+  var MAPPER_TREE_DEMO_ROWS = [
+    { receptor: '5HT1A', numeric: [1, 73, -10.1, -25, 1], text: 'Serotonergic' },
+    { receptor: '5HT1B', numeric: [2, 72, -10, -24, 2], text: 'Serotonergic' },
+    { receptor: '5HT1D', numeric: [3, 71, -9.9, -23, 3], text: 'Serotonergic' },
+    { receptor: '5HT1E', numeric: [4, 70, -9.8, -22, 4], text: 'Serotonergic' },
+    { receptor: '5HT1F', numeric: [5, 69, -9.7, -21, 5], text: 'Serotonergic' },
+    { receptor: '5HT2A', numeric: [6, 68, -9.6, -20, 6], text: 'Serotonergic' },
+    { receptor: '5HT2B', numeric: [7, 67, -9.5, -19, 7], text: 'Serotonergic' },
+    { receptor: '5HT2C', numeric: [8, 66, -9.4, -18, 8], text: 'Serotonergic' },
+    { receptor: 'ACKR1', numeric: [13, 61, -8.9, -13, 13], text: 'Chemokine' },
+    { receptor: 'ACKR2', numeric: [14, 60, -8.8, -12, 14], text: 'Chemokine' },
+    { receptor: 'ACKR3', numeric: [15, 59, -8.7, -11, 15], text: 'Chemokine' },
+    { receptor: 'ACKR4', numeric: [16, 58, -8.6, -10, 16], text: 'Chemokine' },
+    { receptor: 'ACM1', numeric: [17, 57, -8.5, -9, 17], text: 'Cholinergic' },
+    { receptor: 'ACM2', numeric: [18, 56, -8.4, -8, 18], text: 'Cholinergic' },
+    { receptor: 'ACM3', numeric: [19, 55, -8.3, -7, 19], text: 'Cholinergic' },
+    { receptor: 'ADA1A', numeric: [23, 51, -7.9, -3, 23], text: 'Adrenergic' },
+    { receptor: 'ADA1B', numeric: [24, 50, -7.8, -2, 24], text: 'Adrenergic' },
+    { receptor: 'ADA1D', numeric: [25, 49, -7.7, -1, 25], text: 'Adrenergic' },
+    { receptor: 'ADRB1', numeric: [29, 45, -7.3, 3, 29], text: 'Adrenergic' },
+    { receptor: 'ADRB2', numeric: [30, 44, -7.2, 4, 30], text: 'Adrenergic' },
+    { receptor: 'ADGRA1', numeric: [31, 43, -7.1, 5, 31], text: 'Adhesion' },
+    { receptor: 'ADGRA2', numeric: [32, 42, -7.0, 6, 32], text: 'Adhesion' },
+    { receptor: 'ADGRA3', numeric: [33, 41, -6.9, 7, 33], text: 'Adhesion' }
+  ];
 
   var Tree_circles;
   var Tree_colors;
@@ -139,8 +166,12 @@
       window.mapperTreeStemLabelDicts.UniProt[stemU] = [uni];
 
       var iuphar = '';
-      if (meta.name_plain) {
+      if (meta.name_html) {
+        iuphar = meta.name_html;
+      } else if (meta.name_plain) {
         iuphar = meta.name_plain;
+      } else if (item.name_html) {
+        iuphar = String(item.name_html);
       } else if (item.text) {
         iuphar = String(item.text);
       }
@@ -154,7 +185,7 @@
       }
 
       var rd = ServerReceptorDict[uni];
-      if (rd && rd.length) {
+      if (!meta.name_html && rd && rd.length) {
         window.mapperTreeStemLabelDicts.IUPHAR[stemU] = rd;
       }
       var eg = ServerGeneDict[uni];
@@ -178,8 +209,11 @@
       var uni = mapperFallbackUniprotFromEntry(id, meta);
       var stemKey = mapperTreeStemKeyUpper(id);
       function row() {
+        var proteinHtml = meta.name_html || item.name_html || '';
+        var proteinPlain = (meta.name_plain || item.name_plain || item.text || id).trim();
         return {
-          Protein: (meta.name_plain || item.text || id).trim(),
+          Protein: proteinPlain,
+          ProteinHtml: proteinHtml || $('<span/>').text(proteinPlain).html(),
           Gene: (meta.gene || '').trim(),
           UniProt: uni || stemKey || ''
         };
@@ -382,6 +416,23 @@
     return m ? parseInt(m[1], 10) : 12;
   }
 
+  function mapperTreeRadialLeafLabelGap() {
+    var circleSize = Number(styling_circles && styling_circles.circle_size);
+    return MAPPER_TREE_RADIAL_LEAF_LABEL_GAP_BASE + (isFinite(circleSize) ? circleSize : 3);
+  }
+
+  function mapperTreeSyncCircleSizingFromUi() {
+    var csEl = $('#mapper-tree-circle-size-slider');
+    if (csEl.length) {
+      styling_circles.circle_size = 3 + 1 * Number(csEl.val());
+    }
+    var spEl = $('#mapper-tree-circle-spacer-slider');
+    if (spEl.length) {
+      styling_circles.circle_spacer =
+        styling_circles.circle_size * (2 + 0.5 * Number(spEl.val())) + 1;
+    }
+  }
+
   function mapperTreeActiveLeafDropdownVal() {
     var $b = $('.mapper-tree-leaf-btn.btn-primary');
     var dv = ($b.attr('data-value') || '').trim();
@@ -438,6 +489,84 @@
     host.append(wrap);
   }
 
+  function mapperTreeFitFinalSvgViewBox() {
+    var svgNode = d3.select('#tree_plot svg').node();
+    if (!svgNode) {
+      return;
+    }
+    var bbox;
+    try {
+      bbox = svgNode.getBBox();
+    } catch (err) {
+      return;
+    }
+    if (!bbox || !isFinite(bbox.x) || !isFinite(bbox.y) || !isFinite(bbox.width) || !isFinite(bbox.height) || bbox.width <= 0 || bbox.height <= 0) {
+      return;
+    }
+    var pad = 28;
+    var minX = bbox.x - pad;
+    var minY = bbox.y - pad;
+    var vbWidth = bbox.width + pad * 2;
+    var vbHeight = bbox.height + pad * 2;
+    d3.select(svgNode)
+      .attr('viewBox', minX + ' ' + minY + ' ' + vbWidth + ' ' + vbHeight)
+      .attr('preserveAspectRatio', 'xMidYMid meet');
+  }
+
+  function mapperTreeSetCircleStarterFromLeafLabels() {
+    var maxOuterEdge = 0;
+    var labelGap = 3;
+    var circleSize = Number(styling_circles && styling_circles.circle_size);
+    var circleSpacer = Number(styling_circles && styling_circles.circle_spacer);
+    if (!(isFinite(circleSize) && circleSize > 0)) {
+      circleSize = 3;
+    }
+    if (!(isFinite(circleSpacer) && circleSpacer > 0)) {
+      circleSpacer = 10;
+    }
+    d3.select('#tree_plot').selectAll('g.node[id]').each(function (d) {
+      if (!d || d.depth !== window.tree_options_draw.depth) {
+        return;
+      }
+      var textNode = d3.select(this).select('text').node();
+      if (!textNode) {
+        return;
+      }
+      var bbox;
+      var matrix;
+      try {
+        bbox = textNode.getBBox();
+        var transform = textNode.transform && textNode.transform.baseVal
+          ? textNode.transform.baseVal.consolidate()
+          : null;
+        matrix = transform ? transform.matrix : null;
+      } catch (err) {
+        return;
+      }
+      if (!bbox || !isFinite(bbox.x) || !isFinite(bbox.width)) {
+        return;
+      }
+      var corners = [
+        { x: bbox.x, y: bbox.y },
+        { x: bbox.x + bbox.width, y: bbox.y },
+        { x: bbox.x, y: bbox.y + bbox.height },
+        { x: bbox.x + bbox.width, y: bbox.y + bbox.height }
+      ];
+      corners.forEach(function (corner) {
+        var x = corner.x;
+        if (matrix) {
+          x = matrix.a * corner.x + matrix.c * corner.y + matrix.e;
+        }
+        if (isFinite(x)) {
+          maxOuterEdge = Math.max(maxOuterEdge, x);
+        }
+      });
+    });
+    if (maxOuterEdge > 0) {
+      styling_circles.starter = Math.max(1, maxOuterEdge + circleSize + labelGap - (2 * circleSpacer));
+    }
+  }
+
   function mapperTreeRedrawNow() {
     if (!ORIG_SKEL || !ORIG_OPTS || typeof window.mapperClassificationRedraw !== 'function') {
       mapperTreeShowPlaceholderPlot('empty');
@@ -492,13 +621,19 @@
     window.TREE_UI.layout = MAPPER_TREE_LAYOUT;
 
     var fontMerge = mergedFontSizesFromDom();
+    mapperTreeSyncCircleSizingFromUi();
+    if (window.console && typeof window.console.log === 'function') {
+      window.console.log('[MapperTree] leaf gap inputs', {
+        radialLeafLabelGapBase: MAPPER_TREE_RADIAL_LEAF_LABEL_GAP_BASE,
+        stylingCircleSize: styling_circles.circle_size,
+        computedRadialLeafLabelGap: mapperTreeRadialLeafLabelGap(),
+        stylingCircleSpacer: styling_circles.circle_spacer
+      });
+    }
     var baseOptsIn = $.extend(deepClone(ORIG_OPTS), {
       fontSize: fontMerge,
       fontFamily: ORIG_OPTS.fontFamily || 'Palatino',
-      radialLeafLabelGap:
-        ORIG_OPTS.radialLeafLabelGap != null && isFinite(Number(ORIG_OPTS.radialLeafLabelGap))
-          ? Number(ORIG_OPTS.radialLeafLabelGap)
-          : 18,
+      radialLeafLabelGap: mapperTreeRadialLeafLabelGap(),
       leafEndDotRadius:
         ORIG_OPTS.leafEndDotRadius != null && isFinite(Number(ORIG_OPTS.leafEndDotRadius))
           ? Number(ORIG_OPTS.leafEndDotRadius)
@@ -520,16 +655,7 @@
     styling_circles.starter =
       (maxLeafNodeLength_scaler || 10) * parsePxFromFontSize(fontMerge.receptor || '12px');
 
-    /** Circle size / spacer from Mapper-specific sliders */
-    var csEl = $('#mapper-tree-circle-size-slider');
-    if (csEl.length) {
-      styling_circles.circle_size = 3 + 1 * Number(csEl.val());
-    }
-    var spEl = $('#mapper-tree-circle-spacer-slider');
-    if (spEl.length) {
-      styling_circles.circle_spacer =
-        styling_circles.circle_size * (2 + 0.5 * Number(spEl.val())) + 1;
-    }
+    /** Circle size / spacer already synced before tree draw so label gap uses the same effective size. */
 
     var dictStem = mapperTreeActiveStemDict(btnVal);
 
@@ -539,6 +665,7 @@
       dictStem,
       styling_circles
     );
+    mapperTreeSetCircleStarterFromLeafLabels();
 
     DrawCircles('tree_plot', Tree_circles, Tree_colors, styling_circles, Tree_circle_styling_dict);
 
@@ -558,11 +685,15 @@
         );
       }
     }
+    mapperTreeFitFinalSvgViewBox();
   }
 
   window.mapperTreeRedrawNow = mapperTreeRedrawNow;
 
   function mapperTreeScheduleRedraw() {
+    if (suppressRedraw) {
+      return;
+    }
     window.clearTimeout(redrawTimer);
     redrawTimer = window.setTimeout(mapperTreeRedrawNow, DEBOUNCE_MS);
   }
@@ -582,8 +713,85 @@
     mapperTreeScheduleRedraw();
   }
 
+  function mapperTreeDestroyRowColorSpectrum($picker) {
+    if (!$picker || !$picker.length || !$.fn.spectrum) {
+      return;
+    }
+    try {
+      if ($picker.data('spectrum.id') != null || $picker.hasClass('sp-replaced')) {
+        $picker.spectrum('destroy');
+      }
+    } catch (e2) {}
+  }
+
+  function mapperTreeApplyLabelColor(label, color, $activePicker) {
+    var key = String(label || '').trim();
+    if (!key || !color) {
+      return;
+    }
+    window.MAPPER20_LABEL_COLORS[key] = color;
+    $('#mapper-tree-input-tbody tr').each(function () {
+      var $tr = $(this);
+      if (($tr.find('.mapper-tree-inner').val() || '').trim() !== key) {
+        return;
+      }
+      var $sw = $tr.find('.mapper20-row-color-picker');
+      $sw.val(color).css('background-color', color);
+      if ($activePicker && $activePicker.length && $sw[0] === $activePicker[0]) {
+        return;
+      }
+      if ($.fn.spectrum && ($sw.data('spectrum.id') != null || $sw.hasClass('sp-replaced'))) {
+        try {
+          $sw.spectrum('set', color);
+        } catch (e3) {}
+      }
+    });
+    mapperTreeScheduleRedraw();
+  }
+
+  function mapperTreeEnsureRowColorSpectrum($picker, label, color) {
+    if (!$picker.length || !$.fn.spectrum) {
+      $picker.css('background-color', color || '#f5f5f5');
+      return;
+    }
+    var currentLabel = $picker.attr('data-mapper-tree-label') || '';
+    if ($picker.data('spectrum.id') != null || $picker.hasClass('sp-replaced')) {
+      if (currentLabel === label) {
+        $picker.spectrum('set', color || '#f5f5f5');
+        return;
+      }
+      mapperTreeDestroyRowColorSpectrum($picker);
+    }
+    $picker.attr('data-mapper-tree-label', label || '');
+    $picker.val(color || '#f5f5f5').css('background-color', color || '#f5f5f5');
+    $picker.spectrum({
+      color: color || '#f5f5f5',
+      preferredFormat: 'hex',
+      showInput: true,
+      showPalette: true,
+      showSelectionPalette: true,
+      clickoutFiresChange: true,
+      containerClassName: 'mapper20-row-color-spectrum',
+      replacerClassName: 'mapper20-row-swatch-replacer',
+      palette: [
+        ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd'],
+        ['#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'],
+        ['#000000', '#666666', '#aaaaaa', '#ffffff']
+      ],
+      move: function (tiny) {
+        mapperTreeApplyLabelColor(label, tiny ? tiny.toHexString() : color, $picker);
+      },
+      change: function (tiny) {
+        mapperTreeApplyLabelColor(label, tiny ? tiny.toHexString() : color, $picker);
+      }
+    });
+  }
+
   function mapperTreeRefreshInnerSwatches() {
     if (!mapperTreeIsTextMode()) {
+      $('#mapper-tree-input-tbody .mapper20-row-color-picker').each(function () {
+        mapperTreeDestroyRowColorSpectrum($(this));
+      });
       $('#mapper-tree-input-tbody .mapper20-label-swatch').css('background-color', 'transparent');
       return;
     }
@@ -591,11 +799,13 @@
       var $sw = $(this).find('.mapper20-label-swatch');
       var inner = (($(this).find('.mapper-tree-inner').val() || '') + '').trim();
       if (!inner) {
+        mapperTreeDestroyRowColorSpectrum($sw);
         $sw.css('background-color', '#f5f5f5');
         return;
       }
       var hex = window.MAPPER20_LABEL_COLORS[inner] || mapperTreeDefaultHexForLabelKey(inner);
       $sw.css('background-color', hex);
+      mapperTreeEnsureRowColorSpectrum($sw, inner, hex);
     });
   }
 
@@ -621,6 +831,33 @@
     $tr.find('.mapper20-receptor-input-wrap').toggleClass('is-empty', !has);
   }
 
+  function mapperTreeFocusInnerCell($tr) {
+    window.setTimeout(function () {
+      var $inner = $tr.find('.mapper-tree-inner:visible').first();
+      if ($inner.length) {
+        $inner.focus().select();
+      }
+    }, 0);
+  }
+
+  function mapperTreeSyncRemoveButtons() {
+    $('#mapper-tree-input-tbody tr').each(function () {
+      var $tr = $(this);
+      $tr.find('.mapper20-remove-cell').toggleClass('is-remove-hidden', mapperTreeRowBlank($tr));
+    });
+  }
+
+  function mapperTreeCompactReceptorRowsAfterInput() {
+    var hasContent = false;
+    $('#mapper-tree-input-tbody tr').each(function () {
+      if (!mapperTreeRowBlank($(this))) {
+        hasContent = true;
+        return false;
+      }
+    });
+    $('#mapper-tree-input-table').toggleClass('mapper20-receptors-compact', hasContent);
+  }
+
   function mapperTreeSetResolved($tr, id) {
     var sid = id != null ? String(id).trim() : '';
     var $inp = $tr.find('.mapper20-in-receptor');
@@ -633,6 +870,8 @@
       $inp.val('').show();
       mapperTreeBindAc($inp);
       mapperTreeSyncClearBtn($tr);
+      mapperTreeSyncRemoveButtons();
+      mapperTreeCompactReceptorRowsAfterInput();
       mapperTreeScheduleRedraw();
       return;
     }
@@ -644,6 +883,11 @@
     $tr.removeClass('mapper20-row-invalid');
     $tr.removeData('mapper20UnmatchedRaw');
     mapperTreeSyncClearBtn($tr);
+    mapperTreeSyncRemoveButtons();
+    mapperTreeCompactReceptorRowsAfterInput();
+    if (!suppressRedraw) {
+      mapperTreeFocusInnerCell($tr);
+    }
     mapperTreeScheduleRedraw();
   }
 
@@ -771,18 +1015,27 @@
     var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
     var inner = (($tr.find('.mapper-tree-inner').val() || '') + '').trim();
     var typed = (($tr.find('.mapper20-in-receptor').val() || '') + '').trim();
+    var unmatched = ($tr.data('mapper20UnmatchedRaw') || '') + '';
     var outerHas = ['.mapper-tree-o1', '.mapper-tree-o2', '.mapper-tree-o3', '.mapper-tree-o4'].some(function (sel) {
       return (($tr.find(sel).val() || '') + '').trim() !== '';
     });
-    return !entry && !inner && !typed && !outerHas;
+    return !entry && !inner && !typed && !String(unmatched).trim() && !outerHas;
   }
 
   function mapperTreeDestroyRowAc($tr) {
     mapperTreeDestroyAc($tr.find('.mapper20-in-receptor'));
+    $tr.find('.mapper20-row-color-picker').each(function () {
+      mapperTreeDestroyRowColorSpectrum($(this));
+    });
   }
 
   function mapperTreeAppendRow(skipTrail) {
     var tr = $('<tr>');
+    tr.append(
+      $('<td class="mapper20-remove-cell is-remove-hidden">').append(
+        $('<button type="button" class="mapper20-remove-row" aria-label="Remove row">&times;</button>')
+      )
+    );
     var $tdR = $('<td class="mapper20-receptor-cell">');
     var $inp = mapperTreeCreateReceptorTd($tdR);
     tr.append($tdR);
@@ -798,10 +1051,15 @@
         )
       );
     });
-    tr.append($('<td class="mapper20-swatch-cell">').append('<span class="mapper20-label-swatch"></span>'));
+    tr.append(
+      $('<td class="mapper20-swatch-cell">').append(
+        '<input type="text" class="mapper20-label-swatch mapper20-row-color-picker" readonly="readonly" aria-label="Label color">'
+      )
+    );
     $('#mapper-tree-input-tbody').append(tr);
     mapperTreeBindAc($inp);
     mapperTreeSyncClearBtn(tr);
+    mapperTreeSyncRemoveButtons();
     if (!skipTrail) {
       mapperTreeEnsureTrailingBlankRow();
     }
@@ -826,6 +1084,7 @@
     if (!mapperTreeRowBlank($lastOne) && $tb.children().length < MAPPER_TREE_MAX_ROWS) {
       mapperTreeAppendRow(true);
     }
+    mapperTreeSyncRemoveButtons();
   }
 
   function mapperTreePasteSplit(line) {
@@ -841,6 +1100,256 @@
       return { r: line.slice(0, si).trim(), rest: line.slice(si + 1).split(';').map(function (x) { return x.trim(); }) };
     }
     return { r: (parts[0] || '').trim(), rest: [] };
+  }
+
+  function mapperTreeNormalizeSortText(value) {
+    var text = $('<div/>').html(String(value || '')).text();
+    return text
+      .replace(/α|Α/g, 'a')
+      .replace(/β|Β/g, 'b')
+      .replace(/γ|Γ/g, 'g')
+      .replace(/δ|Δ/g, 'd')
+      .replace(/κ|Κ/g, 'k')
+      .replace(/μ|Μ/g, 'm')
+      .replace(/&[a-z]+;/gi, '')
+      .replace(/<[^>]*>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  }
+
+  function mapperTreeNaturalCompare(a, b) {
+    if (!mapperTreeNaturalCompare.collator && window.Intl && Intl.Collator) {
+      mapperTreeNaturalCompare.collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+    }
+    if (mapperTreeNaturalCompare.collator) {
+      return mapperTreeNaturalCompare.collator.compare(a, b);
+    }
+    return a < b ? -1 : a > b ? 1 : 0;
+  }
+
+  var mapperTreeSortState = { col: null, dir: 'asc' };
+
+  function mapperTreeUpdateSortHeaders() {
+    $('#mapper-tree-input-table th.mapper20-sortable-head').each(function () {
+      var $th = $(this);
+      var col = $th.attr('data-mapper-tree-sort-col');
+      var active = mapperTreeSortState.col === col;
+      var dir = active ? mapperTreeSortState.dir : null;
+      $th.attr('aria-sort', active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none');
+      $th.find('.mapper20-sort-indicator').text(active ? (dir === 'asc' ? '↑' : '↓') : '↕');
+    });
+  }
+
+  function mapperTreeSerializeRows() {
+    var rows = [];
+    $('#mapper-tree-input-tbody tr').each(function () {
+      var $tr = $(this);
+      rows.push({
+        entry: ($tr.find('.mapper20-receptor-entry').val() || '').trim(),
+        receptorText: (($tr.find('.mapper20-in-receptor').val() || '') + '').trim(),
+        unmatched: ($tr.data('mapper20UnmatchedRaw') || '') + '',
+        invalid: $tr.hasClass('mapper20-row-invalid'),
+        inner: (($tr.find('.mapper-tree-inner').val() || '') + '').trim(),
+        o1: (($tr.find('.mapper-tree-o1').val() || '') + '').trim(),
+        o2: (($tr.find('.mapper-tree-o2').val() || '') + '').trim(),
+        o3: (($tr.find('.mapper-tree-o3').val() || '') + '').trim(),
+        o4: (($tr.find('.mapper-tree-o4').val() || '') + '').trim()
+      });
+    });
+    return rows;
+  }
+
+  function mapperTreeRowHasContent(row) {
+    return !!(
+      row.entry ||
+      row.receptorText ||
+      String(row.unmatched || '').trim() ||
+      row.inner ||
+      row.o1 ||
+      row.o2 ||
+      row.o3 ||
+      row.o4
+    );
+  }
+
+  function mapperTreeSortKey(row, col) {
+    if (col === 'inner') {
+      var num = mapperTreeParseNumLoose(row.inner);
+      return num == null ? mapperTreeNormalizeSortText(row.inner) : num;
+    }
+    if (row.entry) {
+      return mapperTreeNormalizeSortText(mapperTreeResolvedDisplay(row.entry));
+    }
+    return mapperTreeNormalizeSortText(row.receptorText || row.unmatched || '');
+  }
+
+  function mapperTreePopulateRow($tr, row) {
+    if (row.entry) {
+      mapperTreeSetResolved($tr, row.entry);
+    } else {
+      var $inp = $tr.find('.mapper20-in-receptor');
+      $inp.val(row.receptorText || row.unmatched || '');
+      if (row.unmatched) {
+        $tr.data('mapper20UnmatchedRaw', row.unmatched);
+      }
+      $tr.toggleClass('mapper20-row-invalid', !!row.invalid);
+      mapperTreeSyncClearBtn($tr);
+    }
+    $tr.find('.mapper-tree-inner').val(row.inner || '');
+    $tr.find('.mapper-tree-o1').val(row.o1 || '');
+    $tr.find('.mapper-tree-o2').val(row.o2 || '');
+    $tr.find('.mapper-tree-o3').val(row.o3 || '');
+    $tr.find('.mapper-tree-o4').val(row.o4 || '');
+  }
+
+  function mapperTreeApplySerializedRows(rows) {
+    suppressRedraw = true;
+    mapperTreeDestroyAllRows();
+    $('#mapper-tree-input-tbody').empty();
+    rows.forEach(function (row) {
+      mapperTreeAppendRow(true);
+      mapperTreePopulateRow($('#mapper-tree-input-tbody tr').last(), row);
+    });
+    mapperTreeEnsureTrailingBlankRow();
+    mapperTreeRefreshInnerSwatches();
+    mapperTreeCompactReceptorRowsAfterInput();
+    mapperTreeUpdateSortHeaders();
+    suppressRedraw = false;
+  }
+
+  function mapperTreeSortSerializedRows(col) {
+    if (mapperTreeSortState.col === col) {
+      mapperTreeSortState.dir = mapperTreeSortState.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      mapperTreeSortState.col = col;
+      mapperTreeSortState.dir = 'asc';
+    }
+    var rows = mapperTreeSerializeRows();
+    var filled = rows.filter(mapperTreeRowHasContent);
+    filled.sort(function (a, b) {
+      var ak = mapperTreeSortKey(a, col);
+      var bk = mapperTreeSortKey(b, col);
+      var cmp;
+      if (typeof ak === 'number' && typeof bk === 'number') {
+        cmp = ak - bk;
+      } else {
+        cmp = mapperTreeNaturalCompare(String(ak), String(bk));
+      }
+      return mapperTreeSortState.dir === 'desc' ? -cmp : cmp;
+    });
+    mapperTreeApplySerializedRows(filled);
+  }
+
+  function mapperTreeDestroyAllRows() {
+    $('#mapper-tree-input-tbody tr').each(function () {
+      mapperTreeDestroyRowAc($(this));
+    });
+  }
+
+  function mapperTreeFocusReceptorCell($tr) {
+    var $inp = $tr.find('.mapper20-in-receptor:visible').first();
+    if ($inp.length) {
+      $inp.focus();
+      return;
+    }
+    $tr.find('.mapper20-receptor-html-view:visible').first().focus();
+  }
+
+  function mapperTreeFocusableCellsForRow($tr) {
+    var selectors = ['.mapper20-in-receptor:visible', '.mapper20-receptor-html-view:visible', '.mapper-tree-inner:visible'];
+    if (!mapperTreeIsTextMode()) {
+      selectors.push('.mapper-tree-o1:visible', '.mapper-tree-o2:visible', '.mapper-tree-o3:visible', '.mapper-tree-o4:visible');
+    }
+    return $tr.find(selectors.join(','));
+  }
+
+  function mapperTreeFocusNextTableCellFrom($target) {
+    var $tr = $target.closest('tr');
+    var $cells = mapperTreeFocusableCellsForRow($tr);
+    var idx = $cells.index($target);
+    if (idx > -1 && idx < $cells.length - 1) {
+      $cells.eq(idx + 1).focus().select();
+      return;
+    }
+    var $next = $tr.next('tr');
+    if (!$next.length) {
+      mapperTreeEnsureTrailingBlankRow();
+      $next = $tr.next('tr');
+    }
+    if (!$next.length) {
+      return;
+    }
+    if (mapperTreeRowBlank($next)) {
+      mapperTreeFocusReceptorCell($next);
+    } else {
+      mapperTreeFocusInnerCell($next);
+    }
+  }
+
+  function mapperTreeFindBlankRow() {
+    var $hit = $();
+    $('#mapper-tree-input-tbody tr').each(function () {
+      if (mapperTreeRowBlank($(this))) {
+        $hit = $(this);
+        return false;
+      }
+    });
+    return $hit;
+  }
+
+  function mapperTreeSetDemoReceptor($tr, receptor) {
+    var raw = String(receptor || '').trim();
+    var resolved = null;
+    if (raw && window.mapper20ResolveEntry) {
+      resolved = window.mapper20ResolveEntry(raw);
+    }
+    if (!resolved && raw && window.MAPPER20_RESOLVE) {
+      resolved = window.MAPPER20_RESOLVE[raw.toUpperCase()] || null;
+    }
+    if (resolved) {
+      mapperTreeSetResolved($tr, resolved);
+      return;
+    }
+    $tr.find('.mapper20-in-receptor').val(raw);
+    $tr.find('.mapper20-receptor-entry').val('');
+    $tr.removeData('mapper20UnmatchedRaw');
+    $tr.removeClass('mapper20-row-invalid');
+    mapperTreeSyncClearBtn($tr);
+  }
+
+  function mapperTreeFillDemoRows() {
+    var textMode = mapperTreeIsTextMode();
+    suppressRedraw = true;
+    mapperTreeDestroyAllRows();
+    $('#mapper-tree-input-tbody').empty();
+    $('#mapper-tree-messages').empty();
+    MAPPER_TREE_DEMO_ROWS.forEach(function (row) {
+      mapperTreeAppendRow(true);
+      var $tr = $('#mapper-tree-input-tbody tr').last();
+      mapperTreeSetDemoReceptor($tr, row.receptor);
+      if (textMode) {
+        $tr.find('.mapper-tree-inner').val(row.text || '');
+        $tr.find('.mapper-tree-o1, .mapper-tree-o2, .mapper-tree-o3, .mapper-tree-o4').val('');
+        if (row.text && !window.MAPPER20_LABEL_COLORS[row.text]) {
+          window.MAPPER20_LABEL_COLORS[row.text] = mapperTreeDefaultHexForLabelKey(row.text);
+        }
+      } else {
+        var values = row.numeric || [];
+        $tr.find('.mapper-tree-inner').val(values[0] != null ? values[0] : '');
+        $tr.find('.mapper-tree-o1').val(values[1] != null ? values[1] : '');
+        $tr.find('.mapper-tree-o2').val(values[2] != null ? values[2] : '');
+        $tr.find('.mapper-tree-o3').val(values[3] != null ? values[3] : '');
+        $tr.find('.mapper-tree-o4').val(values[4] != null ? values[4] : '');
+      }
+    });
+    suppressRedraw = false;
+    mapperTreeEnsureTrailingBlankRow();
+    mapperTreeRefreshInnerSwatches();
+    mapperTreeSyncRemoveButtons();
+    mapperTreeCompactReceptorRowsAfterInput();
+    $('#mapper-tree-clear-rows').removeClass('mapper20-clear-clean');
+    mapperTreeRedrawNow();
   }
 
   function mapperBoot() {
@@ -944,6 +1453,7 @@
     mapperTreeAppendRow();
     mapperTreeSetInputMode('numeric');
     mapperTreeSyncLeafLabelUi('IUPHAR');
+    mapperTreeUpdateSortHeaders();
 
     /** Legend toggle */
     $('#legendToggleBtn')
@@ -991,22 +1501,32 @@
         mapperTreeScheduleRedraw();
       });
 
-    $(document).on(
+    $(document).off(
+      'input.mapperTree blur.mapperTree change.mapperTree',
+      '#mapper-tree-input-tbody input, #mapper-tree-input-tbody textarea'
+    ).on(
       'input.mapperTree blur.mapperTree change.mapperTree',
       '#mapper-tree-input-tbody input, #mapper-tree-input-tbody textarea',
       function () {
+        $('#mapper-tree-clear-rows').removeClass('mapper20-clear-clean');
         mapperTreeEnsureTrailingBlankRow();
         mapperTreeRefreshInnerSwatches();
+        mapperTreeSyncRemoveButtons();
+        mapperTreeCompactReceptorRowsAfterInput();
         mapperTreeScheduleRedraw();
       }
     );
 
-    $('.mapper-tree-clear-btn')
+    $('#mapper-tree-clear-rows')
       .off('click.mapperTree')
       .on('click.mapperTree', function () {
+        var $clearButton = $(this);
+        mapperTreeDestroyAllRows();
         $('#mapper-tree-input-tbody').empty();
         $('#mapper-tree-messages').empty();
         mapperTreeAppendRow();
+        mapperTreeCompactReceptorRowsAfterInput();
+        $clearButton.addClass('mapper20-clear-clean').blur();
         mapperTreeRedrawNow();
       });
 
@@ -1019,6 +1539,60 @@
       .off('click.mapperTree')
       .on('click.mapperTree', function () {
         mapperTreeSetInputMode('text');
+      });
+
+    $('#mapper-tree-demo-rows')
+      .off('click.mapperTree')
+      .on('click.mapperTree', function (eDemo) {
+        eDemo.preventDefault();
+        mapperTreeFillDemoRows();
+      });
+
+    $('#mapper-tree-input-table')
+      .off('click.mapperTreeRemove', '.mapper20-remove-row')
+      .on('click.mapperTreeRemove', '.mapper20-remove-row', function () {
+        var $trRemove = $(this).closest('tr');
+        if (mapperTreeRowBlank($trRemove) && $trRemove.is(':last-child')) {
+          return;
+        }
+        mapperTreeDestroyRowAc($trRemove);
+        $trRemove.remove();
+        $('#mapper-tree-clear-rows').removeClass('mapper20-clear-clean');
+        mapperTreeEnsureTrailingBlankRow();
+        mapperTreeRefreshInnerSwatches();
+        mapperTreeCompactReceptorRowsAfterInput();
+        mapperTreeScheduleRedraw();
+      });
+
+    $('#mapper-tree-input-table')
+      .off('click.mapperTreeSort', 'th.mapper20-sortable-head')
+      .on('click.mapperTreeSort', 'th.mapper20-sortable-head', function () {
+        mapperTreeSortSerializedRows($(this).attr('data-mapper-tree-sort-col'));
+      });
+
+    $('#mapper-tree-input-table')
+      .off('keydown.mapperTreeSort', 'th.mapper20-sortable-head')
+      .on('keydown.mapperTreeSort', 'th.mapper20-sortable-head', function (eSort) {
+        if (eSort.which === 13 || eSort.which === 32) {
+          eSort.preventDefault();
+          mapperTreeSortSerializedRows($(this).attr('data-mapper-tree-sort-col'));
+        }
+      });
+
+    $('#mapper-tree-input-table')
+      .off('keydown.mapperTreeTab', '.mapper20-in-receptor, .mapper20-receptor-html-view, .mapper-tree-inner, .mapper-tree-o1, .mapper-tree-o2, .mapper-tree-o3, .mapper-tree-o4')
+      .on('keydown.mapperTreeTab', '.mapper20-in-receptor, .mapper20-receptor-html-view, .mapper-tree-inner, .mapper-tree-o1, .mapper-tree-o2, .mapper-tree-o3, .mapper-tree-o4', function (eTab) {
+        if (eTab.which !== 9 || eTab.shiftKey) {
+          return;
+        }
+        if ($(this).hasClass('mapper20-in-receptor') && $(this).data('ui-autocomplete')) {
+          var $menu = $(this).autocomplete('widget');
+          if ($menu && $menu.is(':visible') && $menu.find('.ui-state-focus, .ui-state-active').length) {
+            return;
+          }
+        }
+        eTab.preventDefault();
+        mapperTreeFocusNextTableCellFrom($(this));
       });
 
     $('.mapper-tree-leaf-btn').on('click.mapperTreeLeaf', function (eX) {
@@ -1040,12 +1614,17 @@
           return;
         }
         ePz.preventDefault();
+        $('#mapper-tree-clear-rows').removeClass('mapper20-clear-clean');
+        suppressRedraw = true;
         textPz.split(/\r?\n/).forEach(function (ln) {
           if (!ln.trim()) {
             return;
           }
-          mapperTreeAppendRow(true);
-          var $trPZ = $('#mapper-tree-input-tbody tr').last();
+          var $trPZ = mapperTreeFindBlankRow();
+          if (!$trPZ.length) {
+            mapperTreeAppendRow(true);
+            $trPZ = $('#mapper-tree-input-tbody tr').last();
+          }
           var ps = mapperTreePasteSplit(ln);
           mapperTreeDestroyAc($trPZ.find('.mapper20-in-receptor'));
           $trPZ.find('.mapper20-receptor-input-wrap .mapper20-in-receptor').remove();
@@ -1086,7 +1665,10 @@
             mapperTreeSetResolved($trPZ, window.MAPPER20_RESOLVE[upU]);
           }
         });
+        suppressRedraw = false;
         mapperTreeEnsureTrailingBlankRow();
+        mapperTreeSyncRemoveButtons();
+        mapperTreeCompactReceptorRowsAfterInput();
         mapperTreeScheduleRedraw();
       }
     );
@@ -1096,29 +1678,24 @@
         pickerRows: $.isArray(window.MAPPER20_GPCROME_PICKER_ROWS) ? window.MAPPER20_GPCROME_PICKER_ROWS : [],
         maxRows: MAPPER_TREE_MAX_ROWS,
         onAdd: function (entryIds) {
-          function findBlank() {
-            var $hit = $();
-            $('#mapper-tree-input-tbody tr').each(function () {
-              if (mapperTreeRowBlank($(this))) {
-                $hit = $(this);
-                return false;
-              }
-            });
-            return $hit;
-          }
+          suppressRedraw = true;
           for (var ix = 0; ix < (entryIds || []).length; ix++) {
             var idPz = entryIds[ix];
-            if ($('#mapper-tree-input-tbody tr').length >= MAPPER_TREE_MAX_ROWS && !findBlank().length) {
+            if ($('#mapper-tree-input-tbody tr').length >= MAPPER_TREE_MAX_ROWS && !mapperTreeFindBlankRow().length) {
               break;
             }
-            var $rowPz = findBlank();
+            var $rowPz = mapperTreeFindBlankRow();
             if (!$rowPz.length) {
               mapperTreeAppendRow(true);
               $rowPz = $('#mapper-tree-input-tbody tr').last();
             }
             mapperTreeSetResolved($rowPz, idPz);
           }
+          suppressRedraw = false;
+          $('#mapper-tree-clear-rows').removeClass('mapper20-clear-clean');
           mapperTreeEnsureTrailingBlankRow();
+          mapperTreeCompactReceptorRowsAfterInput();
+          mapperTreeScheduleRedraw();
         }
       });
     }
@@ -1137,7 +1714,7 @@
           var hidEv = ($trEv.find('.mapper20-receptor-entry').val() || '').trim();
           $(this).hide().empty();
           var $inp2 = $(
-            '<textarea class="form-control input-sm mapper20-in-receptor" rows="1" autocomplete="off" spellcheck="false">'
+            '<textarea class="form-control input-sm mapper20-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>'
           );
           var metaEv = hidEv && window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[hidEv];
           $inp2.val((metaEv && metaEv.name_plain) || '');
@@ -1147,6 +1724,8 @@
           mapperTreeBindAc($inp2);
           $inp2.show().focus();
           mapperTreeSyncClearBtn($trEv);
+          mapperTreeSyncRemoveButtons();
+          mapperTreeCompactReceptorRowsAfterInput();
         }
       );
   }

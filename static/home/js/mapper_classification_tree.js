@@ -40,12 +40,7 @@ function custom_update_tree_data(root) {
         // If this is the class node (child of root), shorten the label
         if (parent && parent.name === "" && node.name) {
             node.name = node.name.split(" (")[0];
-            // For plots where depth-1 nodes are class symbols (A, B1, ...), show "Class X"
-            // to match the desired display naming.
-            const key = String(node.name).trim();
-            if (CLASS_COLORS[key] && !/^Class\s+/i.test(key)) {
-                node.name = "Class " + key;
-            }
+            node.name = String(node.name).replace(/^Class\s+/i, '').trim();
         }
 
         // If this is a receptor-family node (children are all leaves), shorten label a bit
@@ -61,6 +56,73 @@ function custom_update_tree_data(root) {
 
     walk(root, 0, null);
     return root;
+}
+
+function custom_tree_plain_label(label) {
+    var wrapper = document.createElement("span");
+    wrapper.innerHTML = custom_decodeHtmlEntities(String(label || ""));
+    return (wrapper.textContent || wrapper.innerText || "").replace(/\s+/g, " ").trim();
+}
+
+function custom_tree_branch_spacing_factor(depth, maxDepth, options) {
+    var map = options && options.depthSpacingFactors ? options.depthSpacingFactors : null;
+    if (map && map[depth] != null && isFinite(Number(map[depth]))) {
+        return Number(map[depth]);
+    }
+    if (maxDepth >= 4) {
+        if (depth === 1) { return 0.3; }
+        if (depth === 2) { return 1.5; }
+        if (depth === 3) { return 0.9; }
+    }
+    if (maxDepth === 3) {
+        if (depth === 1) { return 0.9; }
+        if (depth === 2) { return 0.85; }
+    }
+    if (maxDepth === 2) {
+        return 1.05;
+    }
+    return 1.15;
+}
+
+function custom_tree_branch_min_gap(depth, maxDepth, options) {
+    var map = options && options.depthMinGaps ? options.depthMinGaps : null;
+    if (map && map[depth] != null && isFinite(Number(map[depth]))) {
+        return Number(map[depth]);
+    }
+    if (maxDepth >= 4) {
+        if (depth === 1) { return 28; }
+        if (depth === 2) { return 30; }
+        if (depth === 3) { return 32; }
+    }
+    if (maxDepth === 3) {
+        if (depth === 1) { return 34; }
+        if (depth === 2) { return 30; }
+    }
+    if (maxDepth === 2) {
+        return 46;
+    }
+    return 36;
+}
+
+function custom_tree_class_key(label) {
+    var key = String(label || "").split(" (")[0].replace(/^Class\s+/i, '').trim();
+    return CLASS_COLORS[key] ? key : "";
+}
+
+function custom_tree_first_ring_radius(maxDepth, options) {
+    if (options && options.firstRingRadius != null && isFinite(Number(options.firstRingRadius))) {
+        return Number(options.firstRingRadius);
+    }
+    if (maxDepth >= 4) {
+        return 78;
+    }
+    if (maxDepth === 3) {
+        return 74;
+    }
+    if (maxDepth === 2) {
+        return 62;
+    }
+    return 50;
 }
 
 // ------------------------------
@@ -200,7 +262,8 @@ function custom_compute_branch_lengths(root, maxDepth) {
         if (!node) return;
         if (depth > 0 && depth < maxDepth && node.name) {
             const cur = longest[depth] || "";
-            if (String(node.name).length > cur.length) longest[depth] = String(node.name);
+            const label = custom_tree_plain_label(node.name);
+            if (label.length > cur.length) longest[depth] = label;
         }
         if (node.children) node.children.forEach(ch => walk(ch, depth + 1));
     }
@@ -234,10 +297,7 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
 
     // Leaf label radial gap (pixels): room for stem dot + first data circle stacked along the tangent.
     var leaf_label_offset = isFinite(Number(options.radialLeafLabelGap)) ? Number(options.radialLeafLabelGap) : 18;
-
-    // Scale factor to push intermediate branches closer to outer edge
-    // Higher values push branches further out (closer to leaves)
-    var intermediate_branch_scale = 1.7; // Scale intermediate branches outward
+    var leafLabelGapDebugCount = 0;
 
     // Calculate branch offsets (sorted numerically)
     const depthKeys = Object.keys(options.branch_length || {}).map(k => parseInt(k, 10)).filter(n => !isNaN(n)).sort((a,b) => a-b);
@@ -247,7 +307,7 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
 
         // First ring should start right after the center badge
         if (k === 1) {
-            branches[k] = (options.centerBadgeR || 32) + (options.centerBadgePadding || 18) + (options.firstRingExtra || 0);
+            branches[k] = custom_tree_first_ring_radius(options.depth, options) + (options.firstRingExtra || 0);
             branch_offset = branches[k];
             continue;
         }
@@ -262,8 +322,12 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
                 base_offset = custom_string_pixlen(options.branch_length[k] || "", k, options);
             }
         }
-        // Apply scaling to intermediate branches to push them outward
-        branch_offset = branch_offset + (base_offset * intermediate_branch_scale);
+        var scaledOffset = base_offset * custom_tree_branch_spacing_factor(k, options.depth, options);
+        var minGap = custom_tree_branch_min_gap(k, options.depth, options);
+        if (!(isFinite(scaledOffset) && scaledOffset > 0)) {
+            scaledOffset = 0;
+        }
+        branch_offset = branch_offset + Math.max(minGap, scaledOffset);
         branches[k] = branch_offset;
     }
     // Increase leaf_offset to give more space for labels (prevent overlap)
@@ -274,7 +338,7 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
     // When options.depth === 1, the loop above skips k===depth so we never set branches[1],
     // which previously put leaves too close to the center badge. Ensure a sane leaf radius.
     if (options.depth === 1) {
-        const base = (options.centerBadgeR || 32) + (options.centerBadgePadding || 18) + (options.firstRingExtra || 0);
+        const base = custom_tree_first_ring_radius(options.depth, options) + (options.firstRingExtra || 0);
         branches[1] = base + adjusted_leaf_offset;
     }
 
@@ -439,17 +503,34 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
             // Label offsets (no dots/circles on this page)
             var labelOffset = d.depth === options.depth ? leaf_label_offset : 6;
             if (d.depth === options.depth) {
+                if (leafLabelGapDebugCount < 5 && window.console && typeof window.console.log === "function") {
+                    window.console.log("[MapperTree] leaf label gap", {
+                        label: d.name,
+                        depth: d.depth,
+                        leafRadius: d.y,
+                        leafEndDotRadius: options.leafEndDotRadius,
+                        radialLeafLabelGap: options.radialLeafLabelGap,
+                        appliedLabelOffset: labelOffset,
+                        dotEdgeToLabelStart: labelOffset - (Number(options.leafEndDotRadius) || 0),
+                        side: d.x < 181 ? "right" : "left"
+                    });
+                    leafLabelGapDebugCount += 1;
+                }
                 return d.x < 181 ? `translate(${labelOffset})` : `rotate(180)translate(-${labelOffset})`;
             } else {
-                // Internal label offset. Push selected internal labels outward (text + pill together).
+                // Internal label offset only moves the label boxes/text, not the branch geometry.
+                // Tweak these options to push specific hierarchy labels outward along their branch.
                 var innerOffset = 12;
-                // Depth 1 is Chemotype only for class-lifted plots (layer1Type === "chemotype").
-                // If there is no Family level (depth=2 tree), Chemotype is also the last internal ring,
-                // so we use an if/else to avoid applying both adjustments.
-                if (d.depth === 1 && options.layer1Type === "chemotype" && !options.chemotypeCollapsed) {
-                    innerOffset = innerOffset - (options.chemotypeLabelExtra || 0);
+                var classLabelOut = Number(options.classLabelOut || 0);
+                var chemotypeLabelOut = Number(options.chemotypeLabelOut || 0);
+                var familyLabelOut = Number(options.familyLabelOut || 0);
+                if (d.depth === 1) {
+                    innerOffset = innerOffset - (isFinite(classLabelOut) ? classLabelOut : 0);
+                    innerOffset = innerOffset - (isFinite(chemotypeLabelOut) ? chemotypeLabelOut : 0);
+                } else if (d.depth === 2 && options.depth >= 3) {
+                    innerOffset = innerOffset - (isFinite(chemotypeLabelOut) ? chemotypeLabelOut : 0);
                 } else if (d.depth === (options.depth - 1)) {
-                    innerOffset = innerOffset - (options.familyLabelExtra || 0);
+                    innerOffset = innerOffset - (isFinite(familyLabelOut) ? familyLabelOut : 0);
                 }
                 // innerOffset can be negative; avoid invalid "translate(--8)" by
                 // computing the final signed translate value as a number.
@@ -471,7 +552,9 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
         })
         .each(function (d) {
             // Leaves and some internal labels may contain entities/tags (e.g. &kappa;, GABA<sub>B</sub>).
-            if (d.depth > 0 && d.name && (d.depth === options.depth || /[<&]/.test(String(d.name)))) {
+            if (d.depth === options.depth && d._labelHtml) {
+                this.innerHTML = custom_formatTextWithHTML(d._labelHtml);
+            } else if (d.depth > 0 && d.name && (d.depth === options.depth || /[<&]/.test(String(d.name)))) {
                 this.innerHTML = custom_formatTextWithHTML(d.name);
             }
             custom_adjust_leaf_label_baseline(this, d, options);
@@ -670,6 +753,9 @@ function custom_wrap(text, width) {
         return;
     }
     text.each(function () {
+        if (this.__data__ && this.__data__._labelHtml) {
+            return;
+        }
         var text = d3.select(this),
             words = text.text().split(/\s+/).reverse(),
             word,
@@ -1394,6 +1480,16 @@ function applyTreeColors(root, stacked_meta, options) {
         return root;
     }
     if (mode === "class") {
+        if (options && options.forceClassColor) {
+            var forcedKey = custom_tree_class_key(options.forceClassColor);
+            var forcedClassColor = CLASS_COLORS[forcedKey] || "#333";
+            (function walkForcedClass(n) {
+                if (!n) return;
+                n.color = forcedClassColor;
+                if (n.children) n.children.forEach(walkForcedClass);
+            })(root);
+            return root;
+        }
         if (stacked_meta && stacked_meta.length) {
             var hit = stacked_meta.find(function(x) { return (x.label || '').toLowerCase() === 'class'; });
             if (hit && hit.value) {
@@ -1440,7 +1536,13 @@ function applyLeafLabels(root, labelType) {
             var key = originalName.toUpperCase();
             var labels = (window.tree_leaf_label_lookup && window.tree_leaf_label_lookup[key]) || {};
             node._leafKey = key || originalName;
-            node.name = labels[selectedType] || originalName;
+            if (selectedType === "Protein") {
+                node._labelHtml = labels.ProteinHtml || "";
+                node.name = labels.Protein || custom_tree_plain_label(node._labelHtml) || originalName;
+            } else {
+                node._labelHtml = "";
+                node.name = labels[selectedType] || originalName;
+            }
             return;
         }
         children.forEach(walk);
@@ -1457,6 +1559,17 @@ window.mapperClassificationRedraw = function(td, optsBase, layoutLabel) {
     var tree_data = JSON.parse(JSON.stringify(td));
     var tree_options = JSON.parse(JSON.stringify(optsBase || {}));
     tree_options.anchor = tree_options.anchor || 'tree_plot';
+    if (tree_data) {
+        var rootClassKey = custom_tree_class_key(tree_data.name);
+        if (rootClassKey) {
+            tree_options.forceClassColor = rootClassKey;
+        } else if (tree_data.name === "" && tree_data.children && tree_data.children.length === 1) {
+            var childClassKey = custom_tree_class_key(tree_data.children[0].name);
+            if (childClassKey) {
+                tree_options.forceClassColor = childClassKey;
+            }
+        }
+    }
     var collapsed = collapse_singletons(tree_data, []);
     tree_data = custom_update_tree_data(collapsed.data);
     tree_options.colorMode = tree_options.colorMode || 'class';
@@ -1464,10 +1577,16 @@ window.mapperClassificationRedraw = function(td, optsBase, layoutLabel) {
     tree_data = applyTreeColors(tree_data, collapsed.stacked, tree_options);
     tree_data = applyLeafLabels(tree_data, (window.TREE_UI && TREE_UI.leafLabelType) || 'Protein');
     var maxDepth = custom_get_max_depth(tree_data, 0);
+    if (window.console && typeof window.console.log === "function") {
+        window.console.log("[MapperTree] render depth", maxDepth, {
+            leafLabelType: (window.TREE_UI && TREE_UI.leafLabelType) || "Protein"
+        });
+    }
     tree_options.depth = maxDepth;
     tree_options.branch_length = custom_compute_branch_lengths(tree_data, maxDepth);
-    if (tree_options.chemotypeLabelExtra == null) tree_options.chemotypeLabelExtra = 65;
-    if (tree_options.familyLabelExtra == null) tree_options.familyLabelExtra = 6;
+    if (tree_options.classLabelOut == null) tree_options.classLabelOut = 0;
+    if (tree_options.chemotypeLabelOut == null) tree_options.chemotypeLabelOut = maxDepth >= 4 ? 14 : 10;
+    if (tree_options.familyLabelOut == null) tree_options.familyLabelOut = 0;
     if (!tree_options.layer1Type) tree_options.layer1Type = 'class';
     if (tree_options.labelBoxPadX == null) tree_options.labelBoxPadX = 7;
     if (tree_options.labelBoxPadY == null) tree_options.labelBoxPadY = 1;
@@ -1475,17 +1594,19 @@ window.mapperClassificationRedraw = function(td, optsBase, layoutLabel) {
     tree_options.labelBoxStrokeColorMode = (tree_options.colorMode === "chemotype") ? "chemotype" : "class";
     if (tree_options.diameterPad == null) tree_options.diameterPad = 100;
     if (tree_options.extraPadding == null) tree_options.extraPadding = 0;
-    if (tree_options.targetSvgSize == null) tree_options.targetSvgSize = 800;
+    if (tree_options.targetSvgSize == null) {
+        tree_options.targetSvgSize = maxDepth <= 2 ? 650 : maxDepth === 3 ? 730 : 800;
+    }
     tree_options.radiusScale = mapperTreeManualRadiusScale();
     if (!tree_options.fontSize) {
         tree_options.fontSize = { 'class': "25px", 'ligandtype': "10px", 'receptorfamily': "10px", 'receptor': "10px" };
     }
     if (!tree_options.fontFamily) tree_options.fontFamily = 'Palatino';
     if (tree_options.leaf_offset == null || !isFinite(Number(tree_options.leaf_offset))) {
-        tree_options.leaf_offset = 55;
+        tree_options.leaf_offset = maxDepth <= 2 ? 42 : maxDepth === 3 ? 50 : 58;
     }
     if (tree_options.radialLeafLabelGap == null || !isFinite(Number(tree_options.radialLeafLabelGap))) {
-        tree_options.radialLeafLabelGap = 18;
+        tree_options.radialLeafLabelGap = 12;
     }
     if (tree_options.leafEndDotRadius == null || !isFinite(Number(tree_options.leafEndDotRadius))) {
         tree_options.leafEndDotRadius = 2;
