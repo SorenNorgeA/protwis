@@ -24,6 +24,8 @@
   window.mapperTreeStemLabelDicts = { IUPHAR: {}, Gene: {}, UniProt: {} };
 
   var MAPPER_TREE_MAX_ROWS = 500;
+  var MAPPER_TREE_PLACEHOLDER_NUMERIC  = 'Paste in 1–6 columns of data\nor type';
+  var MAPPER_TREE_PLACEHOLDER_CATMODE  = 'Paste in 1–2 columns of data\nor type';
   /** Mapper tree page uses circular layout only (no curved/straight dendrogram UI). */
   var MAPPER_TREE_LAYOUT = 'Tree - Circular';
   var MAPPER_TREE_RADIAL_LEAF_LABEL_GAP_BASE = 10;
@@ -63,6 +65,7 @@
   var TreeLegendPosition;
   var styling_circles;
   var maxLeafNodeLength_scaler;
+  var mapperTreeLastLabelSet = '';
 
   function deepClone(obj) {
     return JSON.parse(JSON.stringify(obj));
@@ -296,6 +299,18 @@
     return window.mapperTreeInputMode === 'text';
   }
 
+  function mapperTreeSyncFirstRowPlaceholder() {
+    var hint = mapperTreeIsTextMode()
+      ? MAPPER_TREE_PLACEHOLDER_CATMODE
+      : MAPPER_TREE_PLACEHOLDER_NUMERIC;
+    $('#mapper-tree-input-tbody tr').each(function (idx) {
+      var $inp = $(this).find('.mapper20-in-receptor');
+      if (!$inp.length) { return; }
+      if (idx === 0) { $inp.attr('placeholder', hint); }
+      else            { $inp.removeAttr('placeholder'); }
+    });
+  }
+
   function mapper20FNV1a32(str) {
     var h = 0x811c9dc5;
     var s = String(str || '');
@@ -450,6 +465,15 @@
     $('.mapper-tree-leaf-btn').each(function () {
       var ok = ($(this).attr('data-value') || '') === btnVal;
       $(this).toggleClass('btn-outline-primary', !ok).toggleClass('btn-primary', ok);
+    });
+    // Refresh resolved receptor capsules in the input table to match the new label type
+    $('#mapper-tree-input-tbody tr').each(function () {
+      var sid = ($(this).find('.mapper20-receptor-entry').val() || '').trim();
+      if (!sid) { return; }
+      var $view = $(this).find('.mapper20-receptor-html-view');
+      if ($view.length && $view.is(':visible')) {
+        $view.html(mapperTreeResolvedDisplay(sid));
+      }
     });
   }
 
@@ -686,6 +710,7 @@
       }
     }
     mapperTreeFitFinalSvgViewBox();
+    mapperTreeSyncColorRings();
   }
 
   window.mapperTreeRedrawNow = mapperTreeRedrawNow;
@@ -698,19 +723,127 @@
     redrawTimer = window.setTimeout(mapperTreeRedrawNow, DEBOUNCE_MS);
   }
 
+  // ── Mode snapshots ──────────────────────────────────────────────────────
+  var MAPPER20_MODE_SNAPSHOTS_TREE = { numeric: null, categorical: null };
+
+  function mapperTreeCaptureSnapshot() {
+    var mode = mapperTreeIsTextMode() ? 'categorical' : 'numeric';
+    var rows = mapperTreeSerializeRows();
+    // In categorical mode, strip o1-o4 from the saved rows (they are disabled/irrelevant)
+    if (mode === 'categorical') {
+      rows = rows.map(function (r) {
+        return { entry: r.entry, receptorText: r.receptorText, unmatched: r.unmatched,
+                 invalid: r.invalid, inner: r.inner, o1: '', o2: '', o3: '', o4: '' };
+      });
+      MAPPER20_MODE_SNAPSHOTS_TREE.categorical = {
+        rows: rows,
+        labelColors: $.extend({}, window.MAPPER20_LABEL_COLORS || {})
+      };
+    } else {
+      MAPPER20_MODE_SNAPSHOTS_TREE.numeric = { rows: rows };
+    }
+  }
+
+  function mapperTreeSeedOppositeMode(targetMode) {
+    if (MAPPER20_MODE_SNAPSHOTS_TREE[targetMode] != null) { return; }
+    if (targetMode === 'categorical') {
+      var base = MAPPER20_MODE_SNAPSHOTS_TREE.numeric || { rows: [] };
+      var seed = (base.rows || []).map(function (r) {
+        return { entry: r.entry, receptorText: r.receptorText, unmatched: r.unmatched,
+                 invalid: r.invalid, inner: '', o1: '', o2: '', o3: '', o4: '' };
+      });
+      MAPPER20_MODE_SNAPSHOTS_TREE.categorical = { rows: seed, labelColors: {} };
+    } else {
+      var tbase = MAPPER20_MODE_SNAPSHOTS_TREE.categorical || { rows: [] };
+      var seed2 = (tbase.rows || []).map(function (r) {
+        return { entry: r.entry, receptorText: r.receptorText, unmatched: r.unmatched,
+                 invalid: r.invalid, inner: '', o1: '', o2: '', o3: '', o4: '' };
+      });
+      MAPPER20_MODE_SNAPSHOTS_TREE.numeric = { rows: seed2 };
+    }
+  }
+
   function mapperTreeSetInputMode(mode) {
-    window.mapperTreeInputMode = mode === 'text' ? 'text' : 'numeric';
+    var nextMode = mode === 'text' ? 'text' : 'numeric';
+    var prevMode = window.mapperTreeInputMode;
+
+    // No-op if mode unchanged, except on initial boot (prevMode undefined)
+    if (prevMode === nextMode) { return; }
+
+    // Save current state before switching (skip on initial boot)
+    if (prevMode === 'text' || prevMode === 'numeric') {
+      mapperTreeCaptureSnapshot();
+    }
+
+    window.mapperTreeInputMode = nextMode;
     var text = mapperTreeIsTextMode();
+
+    // Seed the target mode's snapshot if this is the first visit
+    mapperTreeSeedOppositeMode(text ? 'categorical' : 'numeric');
+
+    // Restore rows from snapshot
+    var snap = MAPPER20_MODE_SNAPSHOTS_TREE[text ? 'categorical' : 'numeric'] || {};
+    if (snap.rows && snap.rows.length) {
+      if (text && snap.labelColors) {
+        window.MAPPER20_LABEL_COLORS = $.extend({}, snap.labelColors);
+      }
+      mapperTreeApplySerializedRows(snap.rows);
+    }
+
+    // Update button active states
     $('#mapper-tree-mode-numeric-btn, #mapper-tree-mode-labels-btn').each(function () {
       var isNum = $(this).attr('id') === 'mapper-tree-mode-numeric-btn';
       var on = text ? !isNum : isNum;
       $(this).toggleClass('active', on).attr('aria-pressed', on ? 'true' : 'false');
     });
+
     var $tbl = $('#mapper-tree-input-table');
     $tbl.toggleClass('mapper20-text-mode', text);
 
+    // Disable hidden outer inputs (tab / screen reader skip)
+    $tbl.find('.mapper-tree-o1,.mapper-tree-o2,.mapper-tree-o3,.mapper-tree-o4').prop('disabled', text);
+
+    // Swap inner column header label
+    $('.mapper-tree-inner-header-label').text(text ? 'Category' : 'Inner');
+
+    // Show/hide Colors and Labels dropdown panels
+    $('#mapper-tree-colors-numeric, #mapper-tree-labels-numeric').toggle(!text);
+    $('#mapper-tree-colors-text,   #mapper-tree-labels-text').toggle(text);
+
+    // Hide Legend labels button and spacer slider in categorical mode; shrink panel
+    $('#mapper-tree-labels-dropdown').toggle(!text);
+    $('#mapper-tree-spacer-section').toggle(!text);
+    $('.mapper20-wheel-wrap.mapper-tree-page').toggleClass('mapper-tree-catmode', text);
+    // Drive the left panel to an explicit pixel width so the flex column actually shrinks
+    $('.mapper20-wheel-wrap.mapper-tree-page .mapper20-wheel-left').css('width', text ? '356px' : '');
+
+    // Resize colors menu and sync categorical colours panel + placeholder
+    $('#mapper-tree-colors-menu').toggleClass('mapper-tree-colors-text-mode', text);
+    mapperTreeSyncColorsPanel();
+    mapperTreeSyncFirstRowPlaceholder();
+
+    // Orange hint on Category cells that need filling
+    mapperTreeSyncInnerHints();
+
     mapperTreeRefreshInnerSwatches();
     mapperTreeScheduleRedraw();
+  }
+
+  function mapperTreeSyncInnerHints() {
+    var text = mapperTreeIsTextMode();
+    $('#mapper-tree-input-tbody tr').each(function () {
+      var $tr = $(this);
+      var $td = $tr.find('td.mapper-tree-cell-inner');
+      if (!$td.length) { return; }
+      if (!text) {
+        $td.removeClass('mapper-tree-inner-hint');
+        return;
+      }
+      var hasReceptor = !!($tr.find('.mapper20-receptor-entry').val() || '').trim() ||
+                        !!($tr.find('.mapper20-in-receptor').val() || '').trim();
+      var hasInner = !!($tr.find('.mapper-tree-inner').val() || '').trim();
+      $td.toggleClass('mapper-tree-inner-hint', hasReceptor && !hasInner);
+    });
   }
 
   function mapperTreeDestroyRowColorSpectrum($picker) {
@@ -746,6 +879,13 @@
         } catch (e3) {}
       }
     });
+    // Sync the categorical Colors panel picker for this label
+    var $pp = $('#mapper-tree-label-color-pickers .mapper20-lcat-spectrum[data-mapper-tree-lcat-label="' + key + '"]');
+    if ($pp.length && (!$activePicker || !$activePicker.length || $pp[0] !== $activePicker[0])) {
+      if ($.fn.spectrum && ($pp.data('spectrum') || $pp.hasClass('sp-replaced'))) {
+        try { $pp.spectrum('set', color); } catch (e4) {}
+      }
+    }
     mapperTreeScheduleRedraw();
   }
 
@@ -807,11 +947,171 @@
       $sw.css('background-color', hex);
       mapperTreeEnsureRowColorSpectrum($sw, inner, hex);
     });
+    mapperTreeSyncColorsPanel();
+  }
+
+  function mapperTreeSyncColorsPanel() {
+    var $mount = $('#mapper-tree-label-color-pickers');
+    if (!$mount.length) { return; }
+
+    if (!mapperTreeIsTextMode()) {
+      $mount.find('.mapper20-lcat-spectrum').each(function () {
+        try { if ($(this).data('spectrum')) { $(this).spectrum('destroy'); } } catch (eIgnore) {}
+      });
+      $mount.empty();
+      mapperTreeLastLabelSet = '';
+      return;
+    }
+
+    // Collect distinct labels from the input table
+    var seen = {};
+    var labels = [];
+    $('#mapper-tree-input-tbody tr').each(function () {
+      var lbl = ($(this).find('.mapper-tree-inner').val() || '').trim();
+      if (lbl && !seen[lbl]) { seen[lbl] = true; labels.push(lbl); }
+    });
+    labels.sort(function (a, b) {
+      return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    var newSetKey = labels.join('\n');
+    if (newSetKey === mapperTreeLastLabelSet) {
+      // Label set unchanged — colours are kept in sync by mapperTreeApplyLabelColor; nothing to rebuild
+      return;
+    }
+
+    // Label set changed: full rebuild — destroy existing widgets first
+    $mount.find('.mapper20-lcat-spectrum').each(function () {
+      try { if ($(this).data('spectrum')) { $(this).spectrum('destroy'); } } catch (eIgnore) {}
+    });
+    $mount.empty();
+
+    // Resize the dropdown menu for the current mode
+    $('#mapper-tree-colors-menu').toggleClass('mapper-tree-colors-text-mode', true);
+
+    // Initialize colour and enabled state for each label
+    labels.forEach(function (lbl) {
+      if (!window.MAPPER20_LABEL_COLORS[lbl]) {
+        window.MAPPER20_LABEL_COLORS[lbl] = mapperTreeDefaultHexForLabelKey(lbl);
+      }
+      if (!Object.prototype.hasOwnProperty.call(window.MAPPER20_LABEL_ENABLED, lbl)) {
+        window.MAPPER20_LABEL_ENABLED[lbl] = true;
+      }
+    });
+
+    mapperTreeLastLabelSet = labels.join('\n');
+
+    if (!labels.length) {
+      $mount.append($('<p style="color:#888; font-size:11px; text-align:center; margin:4px 0;">Enter categorical labels to configure colours.</p>'));
+      return;
+    }
+
+    // ── Build panel (matches wheel's mapper20RebuildLabelColorCustomizePanel) ──
+
+    function domId(ix, kind) {
+      return 'mapper_tree_l_' + kind + '_' + String(ix);
+    }
+
+    function updateMasterCheckbox() {
+      var allOn  = labels.length > 0 && labels.every(function (l) { return window.MAPPER20_LABEL_ENABLED[l] !== false; });
+      var allOff = labels.length > 0 && labels.every(function (l) { return window.MAPPER20_LABEL_ENABLED[l] === false; });
+      var mx = $('#mapper-tree-label-cat-master')[0];
+      if (!mx) { return; }
+      mx.checked = !!allOn;
+      mx.indeterminate = !allOn && !allOff && labels.length > 0;
+    }
+
+    function refreshGridRowUi(ix, lbl) {
+      var $inp = $('#' + domId(ix, 'spe'));
+      if (!$inp.length || !$inp.data('spectrum')) { return; }
+      var en = window.MAPPER20_LABEL_ENABLED[lbl] !== false;
+      try {
+        if (en) { $inp.spectrum('enable').css('opacity', '1'); }
+        else    { $inp.spectrum('disable').css('opacity', '0.5'); }
+      } catch (eR) {}
+    }
+
+    var $hdr = $('<div class="mapper20-label-cat-head">').append(
+      $('<input type="checkbox" id="mapper-tree-label-cat-master" aria-label="Toggle all label colours enabled">'),
+      $('<div class="mapper20-label-cat-head-title">Categories</div>')
+    );
+    var $grid = $('<div class="color-grid" id="mapper-tree-label-color-grid">');
+    $mount.append($hdr, $grid);
+
+    updateMasterCheckbox();
+
+    $('#mapper-tree-label-cat-master').on('change.mapperTreeColors', function () {
+      var checked = !!$(this).prop('checked');
+      labels.forEach(function (lbl, ix) {
+        window.MAPPER20_LABEL_ENABLED[lbl] = checked;
+        refreshGridRowUi(ix, lbl);
+      });
+      mapperTreeRefreshInnerSwatches();
+      mapperTreeScheduleRedraw();
+    });
+
+    labels.forEach(function (lbl, ix) {
+      var chkId   = domId(ix, 'chk');
+      var spId    = domId(ix, 'spe');
+      var hex = window.MAPPER20_LABEL_COLORS[lbl] || mapperTreeDefaultHexForLabelKey(lbl);
+      window.MAPPER20_LABEL_COLORS[lbl] = hex;
+      var en = window.MAPPER20_LABEL_ENABLED[lbl] !== false;
+
+      var $spe = $('<input type="text">')
+        .addClass('mapper20-lcat-spectrum form-control input-sm')
+        .attr('id', spId)
+        .attr('data-mapper-tree-lcat-label', lbl);
+
+      $grid.append($('<div class="color-item">').append(
+        $('<input type="checkbox">').attr('id', chkId).prop('checked', !!en),
+        $('<label>').attr('for', chkId).addClass('color-label').text(lbl),
+        $spe
+      ));
+
+      $('#' + chkId).on('change.mapperTreeColors', function () {
+        window.MAPPER20_LABEL_ENABLED[lbl] = !!$(this).prop('checked');
+        refreshGridRowUi(ix, lbl);
+        updateMasterCheckbox();
+        mapperTreeRefreshInnerSwatches();
+        mapperTreeScheduleRedraw();
+      });
+
+      $spe.spectrum({
+        color: hex,
+        showPalette: true,
+        showInput: true,
+        showButtons: false,
+        preferredFormat: 'hex',
+        appendTo: '#mapper-tree-colors-menu',
+        containerClassName: 'mapper20-lcat-sp-container',
+        replacerClassName: 'mapper20-lcat-replacer',
+        palette: [
+          ['#000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00'],
+          ['#FF00FF', '#00FFFF', '#FFFFFF', '#C0C0C0', '#808080']
+        ],
+        change: function (c) {
+          if (window.MAPPER20_LABEL_ENABLED[lbl] === false) { return; }
+          var nextHex = c && c.toHexString ? c.toHexString() : hex;
+          mapperTreeApplyLabelColor(lbl, nextHex, $spe);
+        }
+      });
+
+      if (!en) {
+        try { $spe.spectrum('disable').css('opacity', '0.5'); } catch (e) {}
+      }
+    });
   }
 
   function mapperTreeResolvedDisplay(entryId) {
     var sid = entryId != null ? String(entryId).trim() : '';
     var meta = (window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[sid]) || {};
+    var ltype = mapperTreeActiveLeafDropdownVal();
+    if (ltype === 'Gene' && meta.gene) {
+      return $('<span/>').text(meta.gene).html();
+    }
+    if (ltype === 'UniProt' && meta.uniprot) {
+      return $('<span/>').text(meta.uniprot).html();
+    }
     return meta.name_html ? String(meta.name_html) : $('<span/>').text(sid || '').html();
   }
 
@@ -1045,10 +1345,12 @@
       )
     );
     $.each(['o1', 'o2', 'o3', 'o4'], function (_, suf) {
+      var $outerInput = $('<input type="text" class="form-control input-sm mapper-tree-' + suf + '" autocomplete="off">');
+      if (mapperTreeIsTextMode()) {
+        $outerInput.prop('disabled', true);
+      }
       tr.append(
-        $('<td class="mapper-tree-outer-cell mapper20-value-cell">').append(
-          $('<input type="text" class="form-control input-sm mapper-tree-' + suf + '" autocomplete="off">')
-        )
+        $('<td class="mapper-tree-outer-cell mapper20-value-cell">').append($outerInput)
       );
     });
     tr.append(
@@ -1348,8 +1650,156 @@
     mapperTreeRefreshInnerSwatches();
     mapperTreeSyncRemoveButtons();
     mapperTreeCompactReceptorRowsAfterInput();
+    mapperTreeSyncInnerHints();
     $('#mapper-tree-clear-rows').removeClass('mapper20-clear-clean');
+    if (!textMode) {
+      mapperTreeApplyDemoColorPresets();
+    }
     mapperTreeRedrawNow();
+  }
+
+  function mapperTreeApplyDemoColorPresets() {
+    if (!$.fn.spectrum) { return; }
+    var DEMO = [
+      { ring: 'Inner', style: 'Three_RWB' },
+      { ring: 'O1',    style: 'Two'       },
+      { ring: 'O2',    style: 'Three_TWM' },
+      { ring: 'O3',    style: 'Three_RWB' },
+      { ring: 'O4',    style: 'Two'       }
+    ];
+    var CUSTOM = {
+      Inner:  ['#a00000', '#1a80bb'],
+      Outer1: ['#97a6c4', '#1a2b3c'],
+      Outer2: ['#298c8c', '#800074'],
+      Outer3: ['#a00000', '#1a80bb'],
+      Outer4: ['#ffffff', '#2ca02c']
+    };
+    // Apply preset (sets styling dict + UI visibility) then override colors
+    DEMO.forEach(function (d) {
+      try { $('#mapper-tree-cstyle-' + d.ring).val(d.style).trigger('change'); } catch (e) {}
+    });
+    // Override Tree_colors with the custom demo palette
+    if (Tree_colors) {
+      Object.keys(CUSTOM).forEach(function (k) { Tree_colors[k] = CUSTOM[k]; });
+    }
+    // Sync Spectrum pickers to show the custom colors
+    DEMO.forEach(function (d) {
+      var tKey = { Inner:'Inner', O1:'Outer1', O2:'Outer2', O3:'Outer3', O4:'Outer4' }[d.ring];
+      try { $('#mapper-tree-cpicker-min-' + d.ring).spectrum('set', CUSTOM[tKey][0]); } catch (e) {}
+      try { $('#mapper-tree-cpicker-max-' + d.ring).spectrum('set', CUSTOM[tKey][1]); } catch (e) {}
+    });
+  }
+
+  // ── Color pickers (Colors dropdown) ──────────────────────────────────────
+  function mapperTreeInitColorPickers() {
+    if (!$.fn.spectrum || !$.fn.select2) { return; }
+
+    var RINGS  = ['Inner', 'O1', 'O2', 'O3', 'O4'];
+    var KEYS   = { Inner: 'Inner', O1: 'Outer1', O2: 'Outer2', O3: 'Outer3', O4: 'Outer4' };
+    var PRESETS = {
+      One:       { setup: 'One',   start: '#ffffff', end: '#707070' },
+      Two:       { setup: 'Two',   start: '#97a6c4', end: '#384860' },
+      Three_RWB: { setup: 'Three', start: '#a00000', end: '#1a80bb' },
+      Three_TWM: { setup: 'Three', start: '#298c8c', end: '#800074' }
+    };
+
+    var SPECTRUM_PALETTE = [
+      ['#000000', '#ffffff', '#a00000', '#1a80bb', '#298c8c', '#800074', '#97a6c4', '#384860'],
+      ['#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22']
+    ];
+
+    function formatColorScheme(option) {
+      if (!option.id) { return option.text; }
+      var colorMap = {
+        One:       [null, null, '#707070'],
+        Two:       ['#97a6c4', null, '#384860'],
+        Three_RWB: ['#a00000', '#ffffff', '#1a80bb'],
+        Three_TWM: ['#298c8c', '#ffffff', '#800074']
+      };
+      var colors = colorMap[option.id];
+      if (!colors) { return option.text; }
+      var chips = colors.map(function (c) {
+        return '<span style="display:inline-block;width:12px;height:12px;margin-left:4px;border:1px solid #ccc;border-radius:2px;background:' +
+          (c || 'transparent') + ';' + (c ? '' : 'opacity:0') + '"></span>';
+      }).join('');
+      return $('<span style="display:flex;align-items:center;"><span style="min-width:50px;text-align:center;margin-right:5px;">' +
+        option.text + '</span>' + chips + '</span>');
+    }
+
+    function applyPreset(ring, presetKey, silent) {
+      var p = PRESETS[presetKey] || PRESETS.One;
+      var k = KEYS[ring];
+      if (Tree_colors)             { Tree_colors[k]             = [p.start, p.end]; }
+      if (Tree_circle_styling_dict) { Tree_circle_styling_dict[k] = p.setup; }
+      var $minWrap = $('#mapper-tree-cpicker-min-wrap-' + ring);
+      var $midWrap = $('#mapper-tree-cpicker-mid-wrap-' + ring);
+      if ($minWrap.length) { $minWrap.css('visibility', p.setup !== 'One' ? 'visible' : 'hidden'); }
+      if ($midWrap.length) { $midWrap.css('visibility', p.setup === 'Three' ? 'visible' : 'hidden'); }
+      try { $('#mapper-tree-cpicker-min-' + ring).spectrum('set', p.start); } catch (e) {}
+      try { $('#mapper-tree-cpicker-max-' + ring).spectrum('set', p.end); } catch (e) {}
+      if (!silent) { mapperTreeScheduleRedraw(); }
+    }
+
+    RINGS.forEach(function (ring) {
+      var k = KEYS[ring];
+      var initStart = (Tree_colors && Tree_colors[k]) ? Tree_colors[k][0] : '#ffffff';
+      var initEnd   = (Tree_colors && Tree_colors[k]) ? Tree_colors[k][1] : '#000000';
+
+      // Wrap min/mid cells in span with ID for easy toggle — the HTML uses class;
+      // we add the id attribute here so applyPreset can find them.
+      $('#mapper-tree-cpicker-min-' + ring).closest('.mapper-tree-cpicker-min-wrap')
+        .attr('id', 'mapper-tree-cpicker-min-wrap-' + ring);
+      $('#mapper-tree-cpicker-mid-' + ring).closest('.mapper-tree-cpicker-mid-wrap')
+        .attr('id', 'mapper-tree-cpicker-mid-wrap-' + ring);
+
+      // Min picker
+      $('#mapper-tree-cpicker-min-' + ring).spectrum({
+        color: initStart, preferredFormat: 'hex', showInput: true, showPalette: true,
+        palette: SPECTRUM_PALETTE,
+        change: function (c) { if (Tree_colors) { Tree_colors[KEYS[ring]][0] = c.toHexString(); } mapperTreeScheduleRedraw(); },
+        move:   function (c) { if (Tree_colors) { Tree_colors[KEYS[ring]][0] = c.toHexString(); } mapperTreeScheduleRedraw(); }
+      });
+
+      // Mid picker — always disabled (white midpoint for Three-color modes)
+      $('#mapper-tree-cpicker-mid-' + ring).spectrum({
+        color: '#ffffff', preferredFormat: 'hex', showInput: true, disabled: true
+      });
+
+      // Max picker
+      $('#mapper-tree-cpicker-max-' + ring).spectrum({
+        color: initEnd, preferredFormat: 'hex', showInput: true, showPalette: true,
+        palette: SPECTRUM_PALETTE,
+        change: function (c) { if (Tree_colors) { Tree_colors[KEYS[ring]][1] = c.toHexString(); } mapperTreeScheduleRedraw(); },
+        move:   function (c) { if (Tree_colors) { Tree_colors[KEYS[ring]][1] = c.toHexString(); } mapperTreeScheduleRedraw(); }
+      });
+
+      // Style select — Select2 with colour chips
+      $('#mapper-tree-cstyle-' + ring).select2({
+        templateResult: formatColorScheme,
+        templateSelection: formatColorScheme,
+        width: 'resolve',
+        dropdownParent: $('#mapper-tree-colors-menu')
+      }).on('change', function () {
+        applyPreset(ring, $(this).val());
+      });
+
+      // Apply default "One" preset silently
+      applyPreset(ring, 'One', true);
+    });
+  }
+
+  function mapperTreeSyncColorRings() {
+    var KEYS = { Inner: 'Inner', O1: 'Outer1', O2: 'Outer2', O3: 'Outer3', O4: 'Outer4' };
+    var anyVisible = false;
+    ['Inner', 'O1', 'O2', 'O3', 'O4'].forEach(function (ring) {
+      var k = KEYS[ring];
+      var hasData = !!(Tree_circles && Object.keys(Tree_circles).some(function (id) {
+        return Tree_circles[id] && Object.prototype.hasOwnProperty.call(Tree_circles[id], k);
+      }));
+      $('#mapper-tree-color-row-' + ring).toggle(hasData);
+      if (hasData) { anyVisible = true; }
+    });
+    $('#mapper-tree-colors-no-data').toggle(!anyVisible);
   }
 
   function mapperBoot() {
@@ -1452,8 +1902,30 @@
     $('#mapper-tree-input-tbody').empty();
     mapperTreeAppendRow();
     mapperTreeSetInputMode('numeric');
+    mapperTreeSyncFirstRowPlaceholder(); // mode-switch is a no-op on boot; set placeholder explicitly
     mapperTreeSyncLeafLabelUi('IUPHAR');
     mapperTreeUpdateSortHeaders();
+    mapperTreeInitColorPickers();
+
+    // Wire gradient bar label inputs to Label_dict
+    var LABEL_INPUT_MAP = [
+      { ring: 'Inner', key: 'Inner'  },
+      { ring: 'O1',    key: 'Outer1' },
+      { ring: 'O2',    key: 'Outer2' },
+      { ring: 'O3',    key: 'Outer3' },
+      { ring: 'O4',    key: 'Outer4' }
+    ];
+    LABEL_INPUT_MAP.forEach(function (m) {
+      var $inp = $('#mapper-tree-lbl-' + m.ring);
+      if (!$inp.length) { return; }
+      $inp.val(Label_dict && Label_dict[m.key] ? Label_dict[m.key] : m.key);
+      $inp.off('input.mapperTreeLabel').on('input.mapperTreeLabel', function () {
+        if (Label_dict) {
+          Label_dict[m.key] = $(this).val() || m.key;
+        }
+        mapperTreeScheduleRedraw();
+      });
+    });
 
     /** Legend toggle */
     $('#legendToggleBtn')
@@ -1511,8 +1983,10 @@
         $('#mapper-tree-clear-rows').removeClass('mapper20-clear-clean');
         mapperTreeEnsureTrailingBlankRow();
         mapperTreeRefreshInnerSwatches();
+        mapperTreeSyncInnerHints();
         mapperTreeSyncRemoveButtons();
         mapperTreeCompactReceptorRowsAfterInput();
+        mapperTreeSyncFirstRowPlaceholder();
         mapperTreeScheduleRedraw();
       }
     );
@@ -1526,6 +2000,7 @@
         $('#mapper-tree-messages').empty();
         mapperTreeAppendRow();
         mapperTreeCompactReceptorRowsAfterInput();
+        mapperTreeSyncFirstRowPlaceholder();
         $clearButton.addClass('mapper20-clear-clean').blur();
         mapperTreeRedrawNow();
       });

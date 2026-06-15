@@ -135,7 +135,7 @@
   display: flex;
   flex-direction: column;
   row-gap: 6px;
-  width: 265px;
+  width: 320px;
   max-width: 100%;
 }
 .mapper20-wheel-toolbar-stack .mapper20-wheel-toolbar {
@@ -220,10 +220,10 @@
 .mapper20-wheel-left .table { margin-bottom: 8px; font-size: 11px; }
 .mapper20-wheel-left .table thead th { border-bottom-width: 1px; padding: 4px 5px; }
 .mapper20-wheel-left .table tbody td { padding: 3px 4px; vertical-align: middle; }
-/* Narrow fixed grid: lock table width and clip cells so inputs cannot spill into the next column */
+/* Narrow fixed grid: lock table width; receptor gets remaining space after value column */
 .mapper20-wheel-left .mapper20-input-table {
   table-layout: fixed;
-  width: 228px;
+  width: 320px;
   max-width: 100%;
   border-collapse: collapse;
 }
@@ -248,7 +248,10 @@
 }
 .mapper20-wheel-left .mapper20-input-table th.mapper20-th-receptor,
 .mapper20-wheel-left .mapper20-input-table td.mapper20-receptor-cell {
-  width: 146px;
+  min-width: 165px;
+}
+.mapper20-wheel-left .mapper20-input-table th.mapper20-th-value .mapper20-value-col-label {
+  margin-right: 3px;
 }
 .mapper20-wheel-left .mapper20-input-table th.mapper20-th-value,
 .mapper20-wheel-left .mapper20-input-table td.mapper20-value-cell {
@@ -265,19 +268,25 @@
   min-width: 0;
   box-sizing: border-box;
 }
-.mapper20-wheel-left .mapper20-input-table .mapper20-in-receptor::placeholder {
-  color: #8a9399;
-  opacity: 1;
-}
-.mapper20-wheel-left .mapper20-input-table .mapper20-in-receptor::-webkit-input-placeholder {
-  color: #8a9399;
-}
-.mapper20-wheel-left .mapper20-input-table .mapper20-in-receptor::-moz-placeholder {
-  color: #8a9399;
-  opacity: 1;
-}
+.mapper20-wheel-left .mapper20-input-table .mapper20-in-receptor::placeholder,
+.mapper20-wheel-left .mapper20-input-table .mapper20-in-receptor::-webkit-input-placeholder,
+.mapper20-wheel-left .mapper20-input-table .mapper20-in-receptor::-moz-placeholder,
 .mapper20-wheel-left .mapper20-input-table .mapper20-in-receptor:-ms-input-placeholder {
   color: #8a9399;
+  opacity: 1;
+  white-space: pre-line;
+}
+/* Orange border on empty receptor cells; clears when filled */
+.mapper20-receptor-input-wrap.is-empty .mapper20-in-receptor {
+  border-color: #e0892e !important;
+}
+/* "Input data" label above the mode toggle */
+.mapper20-input-mode-wrap {
+  display: inline-flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.mapper20-input-mode-label {
+  font-size: 9px; font-weight: 600; color: #555;
+  letter-spacing: 0.04em; text-transform: uppercase; line-height: 1; user-select: none;
 }
 /* Value column stays single-line; receptor is a textarea that grows with placeholder / text */
 .mapper20-wheel-left .mapper20-input-table .mapper20-in-value.form-control.input-sm {
@@ -513,12 +522,9 @@
 
 /* ------- Text mode: swatch column + widen grid ------- */
 .mapper20-wheel-left .mapper20-input-table.mapper20-text-mode {
-  width: 292px;
+  width: 320px;
 }
-.mapper20-wheel-left .mapper20-input-table.mapper20-text-mode th.mapper20-th-receptor,
-.mapper20-wheel-left .mapper20-input-table.mapper20-text-mode td.mapper20-receptor-cell {
-  width: 140px;
-}
+/* Receptor fills remaining space in text mode too */
 .mapper20-wheel-left .mapper20-input-table.mapper20-text-mode th.mapper20-th-value,
 .mapper20-wheel-left .mapper20-input-table.mapper20-text-mode td.mapper20-value-cell {
   width: 108px;
@@ -587,10 +593,9 @@
 }
 
 #mapper20-colors-dropdown-menu.mapper20-colors-show-text {
-  /* Explicit width so the label column gets a predictable share; avoids collapsing to ~0 and char-by-char wraps */
-  box-sizing: border-box !important;
-  width: min(332px, 92vw);
-  max-width: min(332px, 92vw);
+  width: max-content;
+  min-width: 120px;
+  max-width: min(320px, 92vw);
   padding: 8px 8px !important;
 }
 
@@ -712,25 +717,25 @@
   <div class="col-xs-12 mapper20-wheel-primary-col">
     <div class="mapper20-wheel-left">
       <div class="mapper20-wheel-top-row">
-        <div class="mapper20-wheel-top-left">
-          <a href="{% url 'MapperLandingPage' %}" class="btn btn-default btn-xs mapper20-wheel-back-btn"><span class="glyphicon glyphicon-new-window" aria-hidden="true"></span> Back</a>
-        </div>
         <h2 class="mapper20-wheel-page-title">GPCRome wheel</h2>
       </div>
       <div class="mapper20-wheel-toolbar-stack">
         <div class="mapper20-wheel-toolbar-grid">
-          <div class="mapper20-wheel-toolbar" aria-label="Mapper tools primary">
+          <div class="mapper20-wheel-toolbar" aria-label="Mapper tools primary" style="align-items:flex-end;">
             <button type="button" class="btn btn-default btn-xs" id="mapper20-howto-btn" data-toggle="modal" data-target="#mapper20-howto-modal" title="How to use the mapper">
               How to<span class="mapper20-howto-mark" aria-hidden="true">?</span>
             </button>
-            <div class="btn-group btn-group-xs" role="group" aria-label="Input mode">
-              <button type="button" class="btn btn-default btn-xs active" id="mapper20-mode-numeric-btn" aria-pressed="true">Numeric</button>
-              <button type="button" class="btn btn-default btn-xs" id="mapper20-mode-labels-btn" aria-pressed="false">Text</button>
+            <div class="mapper20-input-mode-wrap">
+              <span class="mapper20-input-mode-label">Input data</span>
+              <div class="btn-group btn-group-xs" role="group" aria-label="Input mode">
+                <button type="button" class="btn btn-default btn-xs active" id="mapper20-mode-numeric-btn" aria-pressed="true">Numerical</button>
+                <button type="button" class="btn btn-default btn-xs" id="mapper20-mode-labels-btn" aria-pressed="false">Categorical</button>
+              </div>
             </div>
             <button type="button" class="btn btn-default btn-xs" id="mapper20-demo-rows">Demo</button>
           </div>
           <div class="mapper20-wheel-toolbar" aria-label="Table actions">
-            <button type="button" class="btn btn-primary btn-xs" id="mapper20-open-gpcrome-picker" data-toggle="modal" data-target="#mapper20-gpcrome-picker-modal">Select from table</button>
+            <button type="button" class="btn btn-primary btn-xs" id="mapper20-open-gpcrome-picker" data-toggle="modal" data-target="#mapper20-gpcrome-picker-modal">Receptor lookup</button>
             <button type="button" class="btn btn-default btn-xs" id="mapper20-clear-rows">Clear table</button>
           </div>
         </div>
@@ -742,7 +747,7 @@
             <tr>
               <th class="mapper20-th-remove" aria-label="Remove row"></th>
               <th class="mapper20-sortable-head" data-mapper20-sort-col="receptor" tabindex="0" role="button" aria-sort="none">Receptor <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
-              <th class="mapper20-th-value mapper20-sortable-head" data-mapper20-sort-col="value" tabindex="0" role="button" aria-sort="none">Value <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
+              <th class="mapper20-th-value mapper20-sortable-head" data-mapper20-sort-col="value" tabindex="0" role="button" aria-sort="none"><span class="mapper20-value-col-label">Number</span> <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
               <th class="mapper20-th-swatch" title="Label colour">Color</th>
             </tr>
           </thead>
@@ -914,7 +919,6 @@
         <h4 class="modal-title" id="mapper20-gpcrome-picker-modal-label">Select receptors (GPCRome wheel)</h4>
       </div>
       <div class="modal-body">
-        <p class="mapper20-picker-dt-note">Same receptor set as this plot. Use the <strong>GPCRdb</strong> column for the receptor page link; <strong>GtoPdb</strong> through <strong>Class</strong> each have a Select2 filter row (selector and GPCRdb columns have no filter).</p>
         <div style="overflow-x: auto;">
           <table width="100%" class="display compact" id="mapper20-gpcrome-picker-table">
             <thead>
@@ -927,14 +931,14 @@
                 <th>Receptor family</th>
                 <th>Class</th>
               </tr>
-              <tr>
-                <th data-dt-order="disable"></th>
-                <th data-dt-order="disable"></th>
-                <th data-dt-order="disable"></th>
-                <th data-dt-order="disable"></th>
-                <th data-dt-order="disable"></th>
-                <th data-dt-order="disable"></th>
-                <th data-dt-order="disable"></th>
+              <tr id="mapper20-picker-filter-row">
+                <th></th>
+                <th></th>
+                <th></th>
+                <th></th>
+                <th></th>
+                <th></th>
+                <th></th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -971,7 +975,7 @@ $('.dropdown-menu').on('click', function(event){
 var MAPPER20_MAX_ROWS = 500;
 /** Hint on the top receptor cell only */
 var MAPPER20_FIRST_ROW_RECEPTOR_PLACEHOLDER =
-    'Paste in 1–2 columns of data, or start typing to fill in.';
+    'Paste in 1–2 columns of data\nor type';
 /** Tall, wrap-friendly receptor cells until first multi-line/tab grid paste (then compact). Cleared rows restore this. */
 var mapper20ReceptorTallPlaceholderIntro = true;
 var receptorSelect2Data = {{ receptor_select2_json|safe }};
@@ -1138,7 +1142,7 @@ function mapper20NormalizeSortText(value) {
 
 function mapper20SortHeaderLabel(column) {
   if (column === 'value') {
-    return mapper20IsTextMode() ? 'Label' : 'Value';
+    return '';
   }
   return 'Receptor';
 }
@@ -1153,7 +1157,8 @@ function mapper20UpdateSortHeaders() {
     $th.contents().filter(function() {
       return this.nodeType === 3;
     }).remove();
-    $th.prepend(document.createTextNode(mapper20SortHeaderLabel(col) + ' '));
+    var lbl = mapper20SortHeaderLabel(col);
+    if (lbl) { $th.prepend(document.createTextNode(lbl + ' ')); }
     $th.find('.mapper20-sort-indicator').text(active ? (dir === 'desc' ? '▼' : '▲') : '↕');
   });
 }
@@ -1777,6 +1782,8 @@ function mapper20ApplyChromeForInputMode() {
     .toggleClass('btn-default', !text)
     .toggleClass('active', text)
     .attr('aria-pressed', text ? 'true' : 'false');
+  // Update value column header label
+  $('.mapper20-value-col-label').text(text ? 'Category' : 'Number');
   mapper20UpdateSortHeaders();
 }
 
@@ -1944,7 +1951,7 @@ function mapper20RebuildLabelColorCustomizePanel(forceRedrawWheel) {
 
   var hdr = $('<div class="mapper20-label-cat-head">').append(
     $('<input type="checkbox" id="mapper20-label-cat-master" aria-label="Toggle all label colours enabled">'),
-    $('<div class="mapper20-label-cat-head-title">Labels</div>')
+    $('<div class="mapper20-label-cat-head-title">Categories</div>')
   );
   var grid = $('<div class="color-grid" id="mapper20-label-color-grid"></div>');
   $mount.append(hdr, grid);

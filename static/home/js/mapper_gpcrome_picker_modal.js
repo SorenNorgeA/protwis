@@ -55,6 +55,46 @@
     return String(val == null ? '' : val).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   }
 
+  function buildPickerFilterRow(dt) {
+    var $filterCells = $('#mapper20-gpcrome-picker-table thead tr').last().find('th');
+    var esc = $.fn.dataTable.util.escapeRegex;
+    // Columns 2-6 get multi-select filters; 0-1 (checkbox, GPCRdb link) are left empty
+    [2, 3, 4, 5, 6].forEach(function (colIdx) {
+      var $th = $filterCells.eq(colIdx);
+      var filterId = 'mapper20-gpcrome-picker-table_Filter' + colIdx;
+      var $sel = $('<select multiple="multiple" style="width:100%;">')
+        .attr('id', filterId);
+
+      dt.column(colIdx).data().unique().sort().each(function (d) {
+        var str = String(d == null ? '' : d).trim();
+        if (str) { $sel.append($('<option>').val(str).text(str)); }
+      });
+
+      $th.append($sel);
+
+      (function (col) {
+        $sel.on('change', function () {
+          var vals = $(this).val() || [];
+          if (!vals.length) {
+            dt.column(col).search('').draw();
+          } else {
+            var regex = vals.map(function (v) { return '^' + esc(v) + '$'; }).join('|');
+            dt.column(col).search(regex, true, false).draw();
+          }
+        });
+      })(colIdx);
+
+      $sel.select2({
+        multiple: true,
+        closeOnSelect: true,
+        placeholder: { text: 'Filter' },
+        dropdownAutoWidth: true,
+        width: 'element',
+        dropdownParent: $('#mapper20-gpcrome-picker-modal')
+      });
+    });
+  }
+
   function buildDataTable(rows) {
     var columns = [
       {
@@ -152,16 +192,11 @@
       scrollX: true,
       scrollY: '52vh',
       scrollCollapse: true,
+      orderCellsTop: true,
       order: [[4, 'asc']]
     });
     var dt = pickerState.dt;
-    var columnFilters = [];
-    columnFilters = columnFilters.concat(CreateColumnFilters(dt, 2, 1, 'Multi-select-exact'));
-    columnFilters = columnFilters.concat(CreateColumnFilters(dt, 3, 1, 'Multi-select-exact'));
-    columnFilters = columnFilters.concat(CreateColumnFilters(dt, 4, 1, 'Multi-select-exact'));
-    columnFilters = columnFilters.concat(CreateColumnFilters(dt, 5, 1, 'Multi-select-exact'));
-    columnFilters = columnFilters.concat(CreateColumnFilters(dt, 6, 1, 'Multi-select-exact'));
-    createDropdownFilters(dt, columnFilters);
+    buildPickerFilterRow(dt);
 
     $('#mapper20-gpcrome-picker-table').on('draw.dt', syncSelectAllCheckbox);
     $('#mapper20-gpcrome-picker-table tbody').on('change', '.mapper20-gpcrome-pick-cb', syncSelectAllCheckbox);

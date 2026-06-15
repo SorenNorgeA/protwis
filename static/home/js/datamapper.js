@@ -620,6 +620,131 @@ function createLegendBars(location, data, conversion, circle_styling_dict, datat
     }
 }
 
+/**
+ * Gradient legend bars for the List mapper — mirrors createLegendBars visually.
+ * @param {string}   location      - DOM id of the plot container (e.g. 'mapper-list-plot')
+ * @param {object}   list_data_wow - {receptorName: {Value1:n, Value2:n, ...}, ...}
+ * @param {object}   colorConfig   - {Col1:{style,color1,color2}, ...}  from mapper_list_page.js
+ * @param {object}   barlabels     - {Col1:'Value 1', ...}
+ * @param {object}   datatype_map  - {Col1:'Continuous'|'Discrete', ...}
+ * @param {string}   position      - 'Top' or 'Bottom'
+ * @param {number}   topReserved   - pixels reserved at top of SVG for bars (Top mode only)
+ */
+function createListLegendBars(location, list_data_wow, colorConfig, barlabels, datatype_map, position, topReserved) {
+    const svg = d3.select('#' + location + ' svg');
+    if (!svg.node()) return;
+    svg.selectAll('.list-legend-group').remove();
+
+    // Column definitions: internal col key → data key
+    const colDef = [
+        { col: 'Col1', valKey: 'Value1' },
+        { col: 'Col2', valKey: 'Value2' },
+        { col: 'Col3', valKey: 'Value3' },
+        { col: 'Col4', valKey: 'Value4' }
+    ];
+
+    // Compute min/max per column from list_data_wow
+    const stats = {};
+    Object.values(list_data_wow).forEach(function (item) {
+        colDef.forEach(function (d) {
+            var v = item[d.valKey];
+            if (typeof v === 'number' && isFinite(v)) {
+                if (!stats[d.col]) { stats[d.col] = { min: v, max: v }; }
+                else {
+                    stats[d.col].min = Math.min(stats[d.col].min, v);
+                    stats[d.col].max = Math.max(stats[d.col].max, v);
+                }
+            }
+        });
+    });
+
+    var activeCols = colDef.filter(function (d) {
+        return stats[d.col] && (datatype_map[d.col] || 'Continuous') !== 'Discrete';
+    });
+    if (!activeCols.length) return;
+
+    const barWidth = 100, barHeight = 15, hSpacing = 50;
+    const legendGroup = svg.append('g').attr('class', 'list-legend-group');
+
+    activeCols.forEach(function (d, idx) {
+        var cfg    = colorConfig[d.col] || {};
+        var raw    = cfg.style || 'One';
+        var style  = raw === 'One' ? 'One' : (raw.indexOf('Three') === 0 ? 'Three' : 'Two');
+        var min    = parseFloat((stats[d.col].min).toFixed(2));
+        var max    = parseFloat((stats[d.col].max).toFixed(2));
+        var label  = (barlabels && barlabels[d.col]) || ('Value ' + d.col.substr(3));
+        var x      = idx * (barWidth + hSpacing);
+        var gradId = 'list-bar-grad-' + d.col;
+
+        var defs = legendGroup.append('defs');
+        var grad = defs.append('linearGradient')
+            .attr('id', gradId).attr('x1', '0%').attr('x2', '100%').attr('y1', '0%').attr('y2', '0%');
+
+        if (style === 'One') {
+            grad.append('stop').attr('offset', '0%').attr('stop-color', '#FFFFFF');
+            grad.append('stop').attr('offset', '100%').attr('stop-color', cfg.color2 || '#707070');
+        } else if (style === 'Three') {
+            grad.append('stop').attr('offset', '0%').attr('stop-color', cfg.color1 || '#a00000');
+            grad.append('stop').attr('offset', '50%').attr('stop-color', '#FFFFFF');
+            grad.append('stop').attr('offset', '100%').attr('stop-color', cfg.color2 || '#1a80bb');
+        } else {
+            grad.append('stop').attr('offset', '0%').attr('stop-color', cfg.color1 || '#97a6c4');
+            grad.append('stop').attr('offset', '100%').attr('stop-color', cfg.color2 || '#384860');
+        }
+
+        // Gradient bar
+        legendGroup.append('rect')
+            .attr('x', x).attr('y', 0).attr('width', barWidth).attr('height', barHeight)
+            .style('fill', 'url(#' + gradId + ')')
+            .style('stroke', '#444').style('stroke-width', '0.8px');
+
+        // Label above
+        legendGroup.append('text')
+            .attr('x', x + barWidth / 2).attr('y', -8)
+            .attr('text-anchor', 'middle')
+            .style('font-size', '11px').style('font-family', 'sans-serif')
+            .text(label);
+
+        // Min value
+        legendGroup.append('text')
+            .attr('x', x).attr('y', barHeight + 13)
+            .attr('text-anchor', 'start')
+            .style('font-size', '10px').style('font-family', 'sans-serif')
+            .text(String(min));
+
+        // Max value
+        legendGroup.append('text')
+            .attr('x', x + barWidth).attr('y', barHeight + 13)
+            .attr('text-anchor', 'end')
+            .style('font-size', '10px').style('font-family', 'sans-serif')
+            .text(String(max));
+    });
+
+    // Position the legend group — center horizontally, top or bottom
+    var svgW    = +svg.attr('width')  || 600;
+    var svgH    = +svg.attr('height') || 400;
+    var lBBox   = legendGroup.node().getBBox();
+    var centerX = svgW / 2;
+    var tx      = centerX - (lBBox.x + lBBox.width / 2);
+
+    if (position === 'Bottom') {
+        var plotGroup    = svg.select('.main-plot-group').node();
+        var contentBottom = svgH - 20;
+        if (plotGroup) {
+            var pb = plotGroup.getBBox();
+            contentBottom = pb.y + pb.height + 25;
+        }
+        var ty = contentBottom - lBBox.y;
+        legendGroup.attr('transform', 'translate(' + tx + ',' + ty + ')');
+        var needed = ty + lBBox.height + 20;
+        if (needed > svgH) svg.attr('height', needed);
+    } else {
+        // Top: place within the reserved band at the top of the SVG
+        var reserved = topReserved || 50;
+        var ty2 = Math.max(8, (reserved - (lBBox.height)) / 2) - lBBox.y;
+        legendGroup.attr('transform', 'translate(' + tx + ',' + ty2 + ')');
+    }
+}
 
 // Updated CreateTextLegend for Tree Plot with layout/sorting logic and centering
 function CreateTextLegend(location, circle_data, Layout) {
@@ -1706,8 +1831,10 @@ function RenderListPlot_Labels(data, category_data, location, styling_option, La
     // Adding correct group for appending
     const plotGroup = svg.append("g").attr("class", "main-plot-group");
 
-    // Set initial X & Y positions
-    let yOffset = margin.top + 5 + 80;
+    // Set initial X & Y positions — reserve top space for gradient bars unless they go to the bottom
+    const _legendTopSpace = (Layout_dict && Layout_dict.legend_top_space != null)
+        ? Layout_dict.legend_top_space : 50;
+    let yOffset = margin.top + 5 + _legendTopSpace;
     let yOffset_max = yOffset; // Track the maximum yOffset
     let xOffset = 0;
     const { labelOffset } = computeDynamicOffsets(Data_styling);
@@ -1904,7 +2031,7 @@ function RenderListPlot_Labels(data, category_data, location, styling_option, La
             current_col++;
             xOffset += spacing_dict[`Col${current_col - 1}`]; // Move to the next column
             label_counter = 1; // Reset label counter for the new column
-            yOffset = margin.top + 5 + 80; // Reset yOffset for the new column
+            yOffset = margin.top + 5 + _legendTopSpace; // Reset to same start as column 1
         }
 
         // Ensure the global maximum yOffset is tracked
@@ -1928,7 +2055,9 @@ function data_visualization(data, category_data, location, Layout_dict, data_sty
 
     // Set default margins, xOffset, yOffset, and columns based on Layout_dict
     const margin = { top: 40, right: 20, bottom: 20, left: 20 };
-    let yOffset = margin.top + 5 + 80 + 5;
+    const _vizLegendTopSpace = (Layout_dict && Layout_dict.legend_top_space != null)
+        ? Layout_dict.legend_top_space : 50;
+    let yOffset = margin.top + 5 + _vizLegendTopSpace + 5;
     let xOffset = 5;
     let columns = Layout_dict.columns;
 
@@ -2014,7 +2143,7 @@ function data_visualization(data, category_data, location, Layout_dict, data_sty
             current_col++;
             xOffset += spacing_dict[`Col${current_col - 1}`]; // Move to the next column
             label_counter = 1; // Reset label counter for the new column
-            yOffset = margin.top + 5 + 80 + 5; // Reset yOffset for the new column
+            yOffset = margin.top + 5 + _vizLegendTopSpace + 5; // Reset to same start as column 1
         }
     }
 
@@ -2151,19 +2280,29 @@ function data_visualization(data, category_data, location, Layout_dict, data_sty
         return ((low + high) / 2).toFixed(decimals);
     }
 
+    // Allow the list mapper (or any caller) to skip these built-in bars and use createListLegendBars instead
+    if (Layout_dict && Layout_dict.skip_gradient_bars) return;
+
+    const _barsAtBottom = Layout_dict && Layout_dict.legend_position === 'Bottom';
+    // Compact bar dimensions (similar visual weight to the tree's legend bars)
+    const _LW = 120; const _BH = 12; const _SB = 15;
+    const _XO = 25;  const _TO = 18; const _DF = Math.min(data_fontsize_variable, 11);
+    // When bars go at bottom, place them after the last drawn row
+    const _barBaseY = _barsAtBottom ? (yOffset_max + 22) : 10;
+
     let bar_index = 0;
     Object.keys(data_styling).forEach(function(column) {
         if (data_styling[column].Data === "Yes" && data_styling[column].Datatype === 'Continuous') {
-            const legendWidth = 200; // Width of the legend bar
-            const data_fontsize = data_fontsize_variable; // Adjust as needed
+            const legendWidth = _LW;
+            const data_fontsize = _DF;
             const lowest_value = data_styling[column].Data_min;
             const highest_value = data_styling[column].Data_max;
             const midpointText = formatMidpoint(lowest_value, highest_value);
-            const spacing_bar = 30;
-            const bar_height = 20;
-            const text_off_set = 35;
-            const x_off_set = 100;
-            const y_off_set = 20;
+            const spacing_bar = _SB;
+            const bar_height = _BH;
+            const text_off_set = _TO;
+            const x_off_set = _XO;
+            const y_off_set = _barBaseY;
 
             // Calculate the x position for the current bar
             const x_position = bar_index * (legendWidth + spacing_bar) + x_off_set;
@@ -2277,6 +2416,13 @@ function data_visualization(data, category_data, location, Layout_dict, data_sty
                 .text(highest_value);
         }
     });
+
+    // When bars are at the bottom, extend SVG height to fit them
+    if (_barsAtBottom && bar_index > 0) {
+        const barsBottom = _barBaseY + _BH + _TO + _DF + 10;
+        const curH = +svg.attr('height') || 0;
+        if (barsBottom > curH) svg.attr('height', barsBottom);
+    }
 }
 
 function CreateTextLegend_list(location, data, Layout) {
@@ -2590,18 +2736,35 @@ function handleRowLabels(textElement, label, labelType, fontSize) {
 // Create the heatmap
 function Heatmap(data, location, heatmap_DataStyling,label_x_converter) {
 
+    // Format a numeric value for display in cells and the colour-bar legend.
+    // Shows full precision for numbers whose digit characters (0-9, not counting '-', '.', ',')
+    // number ≤ 10; switches to scientific notation (3 d.p.) for longer numbers.
+    function fmtHeatmapVal(val) {
+        const n = parseFloat(val);
+        if (!isFinite(n)) return '';
+        const s = n.toString();
+        if ((s.match(/\d/g) || []).length <= 12) return s;
+        return n.toExponential(3); // e.g. 1.235e+10
+    }
+
     const margin = { top: 30, right: 100, bottom: 30, left: 60 }; // Adjusted margin for row labels
     const rows = Object.keys(data);
-    // Create a Set to collect all unique column keys
-    const colSet = new Set();
 
-    // Loop through each row and collect all keys from its columns
+    // Collect all column keys that appear in at least one row
+    const colSet = new Set();
     rows.forEach(row => {
         Object.keys(data[row] || {}).forEach(col => colSet.add(col));
     });
 
-    // Convert Set to array
-    const cols = Array.from(colSet);
+    // Use a fixed canonical order for Value1-Value5 so that skipped columns
+    // don't reorder the remaining ones. Any extra keys are appended after.
+    const FIXED_COL_ORDER = ['Value1', 'Value2', 'Value3', 'Value4', 'Value5'];
+    const cols = [
+        ...FIXED_COL_ORDER.filter(c => colSet.has(c)),
+        ...Array.from(colSet).filter(c => !FIXED_COL_ORDER.includes(c))
+    ];
+    // Blank cells (rows that have no value for a column) are handled below:
+    // data[row][col] === undefined → isNaN → fill:'None' (transparent cell).
     const col_labels = cols.map((col, i) => {
         const label = label_x_converter[col];
         return (typeof label === 'string' && label.trim() !== '') ? label : `Dataset ${i + 1}`;
@@ -2664,23 +2827,36 @@ function Heatmap(data, location, heatmap_DataStyling,label_x_converter) {
     if (size.height > longestLabelSize.height) longestLabelSize.height = size.height;
     });
 
-    // Measure the longest numeric value as text
-    let longestDataValueText = '';
-    chartData.forEach(d => {
-    if (!isNaN(d.value)) {
-        const valText = Number(parseFloat(d.value).toFixed(1)).toString();
-        if (valText.length > longestDataValueText.length) {
-        longestDataValueText = valText;
+    // Measure every unique formatted data value's width using measureTextSize
+    // (same mechanism that successfully measures longestLabelSize above).
+    // Character count ≠ pixel width, so we measure each unique string individually.
+    const cellPad = 0; // px padding each side inside the cell
+    let maxDataValueWidth = 0;
+    const seenValStrs = new Set();
+    chartData.forEach(function (d) {
+        if (!isNaN(d.value)) {
+            seenValStrs.add(fmtHeatmapVal(d.value));
         }
-    }
     });
-    const measuredDataValueSize = measureTextSize(longestDataValueText, label_fontsize);
+    seenValStrs.forEach(function (valStr) {
+        const sz = measureTextSize(valStr, data_fontsize);
+        if (sz.width > maxDataValueWidth) maxDataValueWidth = sz.width;
+    });
 
-    // Set row label width
+    // Column width: all columns equal, driven by the widest measurement.
+    // Both rotation modes use maxDataValueWidth as the primary cell-width driver.
     if (rotation === 90 || rotation === 45) {
-        rowLabelWidth = Math.max(baseWidth, measuredDataValueSize.height);
+        // Vertical labels: cell width must fit the data value + padding;
+        // longestLabelSize.height is the font line-height (≈ font size), the label's
+        // footprint in the column direction when rotated 90°.
+        rowLabelWidth = Math.max(baseWidth,
+                                 maxDataValueWidth + cellPad * 2,
+                                 longestLabelSize.height + 4);
     } else {
-        rowLabelWidth = Math.max(baseWidth, longestLabelSize.width, measuredDataValueSize.width);
+        // Horizontal labels: wider of the column-label text or the data value + padding.
+        rowLabelWidth = Math.max(baseWidth,
+                                 longestLabelSize.width + 8,
+                                 maxDataValueWidth + cellPad * 2);
     }
 
     // Adjust margin and legend position for top/bottom label placement
@@ -2819,7 +2995,7 @@ function Heatmap(data, location, heatmap_DataStyling,label_x_converter) {
           .style("font-size", `${data_fontsize}px`)
           .style("font-family", "sans-serif")
           .style("fill", textColor)
-          .text(Number(parseFloat(d.value).toFixed(1)));  // Round and fix to 1 decimal place
+          .text(fmtHeatmapVal(d.value));
       });
     }
 
@@ -2907,7 +3083,7 @@ function Heatmap(data, location, heatmap_DataStyling,label_x_converter) {
       .attr('y', 50)
       .style("font-size", `${data_fontsize}px`)
       .style("font-family", "sans-serif")
-      .text(Number(parseFloat(lowest_value).toFixed(1)));
+      .text(fmtHeatmapVal(lowest_value));
 
     if (heatmap_DataStyling.Number_of_colors === 'Three') {
         legend_svg.append("text")
@@ -2916,7 +3092,7 @@ function Heatmap(data, location, heatmap_DataStyling,label_x_converter) {
         .style("font-size", `${data_fontsize}px`)
         .style("font-family", "sans-serif")
         .style("text-anchor", "middle")
-        .text(Number(parseFloat((highest_value + lowest_value) / 2).toFixed(1)));
+        .text(fmtHeatmapVal((highest_value + lowest_value) / 2));
     }
 
     legend_svg.append("text")
@@ -2925,7 +3101,7 @@ function Heatmap(data, location, heatmap_DataStyling,label_x_converter) {
       .style("font-size", `${data_fontsize}px`)
       .style("font-family", "sans-serif")
       .style("text-anchor", "end")
-      .text(Number(parseFloat(highest_value).toFixed(1)));
+      .text(fmtHeatmapVal(highest_value));
 
     // Rerender height of plot as the last thing using real label height
     const extraPadding = 55;  // base padding

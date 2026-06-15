@@ -140,16 +140,20 @@
       <p>Cluster receptors by sequence similarity or by a spatial column from your template.</p>
       <button type="button" class="btn btn-default" disabled title="Coming soon">Coming soon</button>
     </div>
-    <div class="mapper20-card mapper20-card--muted">
+    <div class="mapper20-card">
+      <span class="mapper20-badge">Available</span>
       <h2>List</h2>
       <img src="{% static 'home/images/DataMapper/List_icon.png' %}" alt="" width="120" height="120">
       <p>List receptors under configurable headings with up to four mapped shapes per receptor.</p>
-      <button type="button" class="btn btn-default" disabled title="Coming soon">Coming soon</button>
+      <a href="{% url 'MapperList' %}" class="btn btn-primary">Open</a>
     </div>
-    <div class="mapper20-card mapper20-card--muted">
+    <div class="mapper20-card">
+      <span class="mapper20-badge">Available</span>
       <h2>Heatmap</h2>
       <img src="{% static 'home/images/DataMapper/Heatmap_icon.png' %}" alt="" width="120" height="120">
       <p>Grid of cells coloured by your numeric values for up to several data columns per receptor.</p>
+      <a href="{% url 'MapperHeatmap' %}" class="btn btn-primary">Open</a>
+    </div>
       <button type="button" class="btn btn-default" disabled title="Coming soon">Coming soon</button>
     </div>
   </div>

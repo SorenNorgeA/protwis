@@ -735,6 +735,37 @@ class DataMapperHome(TemplateView):
         return rows
 
     @staticmethod
+    def gpcrome_receptor_info_for_list(maps=None):
+        """Returns dict of entry_name → {class, ligandtype, family, name_plain, gene, uniprot}
+        for all human non-odorant GPCRs, for building list plot data in the browser."""
+        if maps is None:
+            maps = DataMapperHome.build_gpcrome_receptor_normalization_maps()
+        gpcrome_set = maps.get('proteins_gpcrome_tree', set())
+        select2_opts = {o['id']: o for o in DataMapperHome.gpcrome_receptor_select2_options(maps=maps)}
+
+        qs = Protein.objects.filter(
+            entry_name__in=list(gpcrome_set)
+        ).values_list(
+            'entry_name',
+            'family__parent__parent__parent__name',  # Class
+            'family__parent__parent__name',           # Ligand type
+            'family__parent__name',                   # Receptor family
+        )
+
+        result = {}
+        for entry_name, cls, ligandtype, family in qs:
+            opt = select2_opts.get(entry_name, {})
+            result[entry_name] = {
+                'class':      cls        or 'Other',
+                'ligandtype': ligandtype or 'Other',
+                'family':     family     or 'Other',
+                'name_plain': opt.get('name_plain', ''),
+                'gene':       opt.get('gene', ''),
+                'uniprot':    opt.get('uniprot', ''),
+            }
+        return result
+
+    @staticmethod
     def generate_tree_plot(input_data): #ADD AN INPUT FILTER DICTIONARY
         ### TREE SECTION
         tree = PhylogeneticTreeGenerator()
@@ -1990,6 +2021,45 @@ class MapperTreeView(TemplateView):
         )
         context['gpcrome_picker_rows_json'] = json.dumps(
             DataMapperHome.gpcrome_receptor_picker_table_rows(maps=maps)
+        )
+        return context
+
+
+class MapperHeatmapView(TemplateView):
+    template_name = 'mapper/Mapper_Heatmap.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        maps = DataMapperHome.build_gpcrome_receptor_normalization_maps()
+        context['receptor_select2_json'] = json.dumps(
+            DataMapperHome.gpcrome_receptor_select2_options(maps=maps)
+        )
+        context['gpcrome_resolve_json'] = json.dumps(
+            DataMapperHome.gpcrome_receptor_client_resolve_map(maps=maps)
+        )
+        context['gpcrome_picker_rows_json'] = json.dumps(
+            DataMapperHome.gpcrome_receptor_picker_table_rows(maps=maps)
+        )
+        return context
+
+
+class MapperListView(TemplateView):
+    template_name = 'mapper/Mapper_List.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        maps = DataMapperHome.build_gpcrome_receptor_normalization_maps()
+        context['receptor_select2_json'] = json.dumps(
+            DataMapperHome.gpcrome_receptor_select2_options(maps=maps)
+        )
+        context['gpcrome_resolve_json'] = json.dumps(
+            DataMapperHome.gpcrome_receptor_client_resolve_map(maps=maps)
+        )
+        context['gpcrome_picker_rows_json'] = json.dumps(
+            DataMapperHome.gpcrome_receptor_picker_table_rows(maps=maps)
+        )
+        context['receptor_info_json'] = json.dumps(
+            DataMapperHome.gpcrome_receptor_info_for_list(maps=maps)
         )
         return context
 

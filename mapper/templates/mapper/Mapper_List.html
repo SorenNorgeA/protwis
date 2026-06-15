@@ -1,0 +1,791 @@
+{% extends "home/base.html" %}
+{% load static %}
+{% load humanize %}
+{% block addon_css %}
+<link rel="stylesheet" href="{% static 'home/css/nv.d3.min.css' %}" type="text/css" />
+<link rel="stylesheet" href="{% static 'home/css/nvd3-update.css' %}" type="text/css" />
+<link rel="stylesheet" href="{% static 'home/css/Spectrum_1_8_1.css' %}" type="text/css" />
+<link rel="stylesheet" href="{% static 'home/css/select2_4.1.0-rc.0._full.css' %}" type="text/css">
+<link rel="stylesheet" href="{% static 'home/css/NewDrugsBrowser_datatables.min.css' %}" type="text/css" />
+<style>
+/* ── Layout ───────────────────────────────────────────────── */
+.mapper20-wheel-wrap { margin-bottom: 24px; }
+.mapper20-wheel-wrap.row {
+  display: flex; flex-wrap: wrap; align-items: flex-start;
+}
+@media (min-width: 992px) {
+  .mapper20-wheel-primary-col.col-xs-12 {
+    width: auto; float: none; flex: 0 1 auto; max-width: 100%;
+  }
+  .mapper20-wheel-plot-col.col-xs-12 {
+    width: auto; float: none; flex: 1 1 0; min-width: 0;
+  }
+}
+@media (max-width: 991px) {
+  .mapper20-wheel-wrap.row { display: block; }
+  .mapper20-wheel-primary-col, .mapper20-wheel-plot-col { width: 100%; float: none; }
+  .mapper20-wheel-plot-col { margin-top: 20px; }
+}
+/* ── Left panel ───────────────────────────────────────────── */
+.mapper20-wheel-left {
+  display: inline-block; width: max-content; max-width: 100%;
+  box-sizing: border-box; vertical-align: top; background: #fff;
+  border: 1px solid rgba(26,43,60,0.08); border-radius: 10px;
+  padding: 10px 10px 12px; box-shadow: 0 4px 14px rgba(26,43,60,0.05);
+  font-size: 11px; line-height: 1.35; color: #333;
+}
+.mapper20-wheel-left .table-responsive { width: max-content; max-width: 100%; }
+.mapper20-wheel-top-row {
+  display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px; row-gap: 4px;
+  position: relative; width: auto; max-width: 100%; box-sizing: border-box;
+  margin-bottom: 8px; min-height: 28px;
+}
+.mapper20-wheel-page-title {
+  flex: 1 1 100%; min-width: 0; margin: 0; padding: 0; align-self: center;
+  text-align: center; white-space: nowrap; font-size: 14px; font-weight: 600;
+  line-height: 1.2; color: #1a2b3c;
+}
+/* ── Toolbar ──────────────────────────────────────────────── */
+.mapper20-wheel-toolbar-stack {
+  display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;
+  width: max-content; max-width: 100%;
+}
+.mapper20-wheel-toolbar-grid {
+  display: flex; flex-direction: column; row-gap: 6px;
+  width: 460px; max-width: 100%;
+}
+.mapper20-wheel-toolbar-stack .mapper20-wheel-toolbar { margin-bottom: 0; }
+.mapper20-wheel-toolbar {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  justify-content: center; margin-bottom: 8px;
+}
+.mapper20-wheel-toolbar .btn { font-size: 12px; padding: 4px 10px; line-height: 1.35; }
+.mapper20-wheel-toolbar .btn-primary,
+.mapper20-wheel-toolbar .btn-default {
+  color: #fff; background-color: #337ab7; border-color: #2e6da4;
+}
+.mapper20-wheel-toolbar .btn-primary:hover,
+.mapper20-wheel-toolbar .btn-primary:focus,
+.mapper20-wheel-toolbar .btn-default:hover,
+.mapper20-wheel-toolbar .btn-default:focus {
+  color: #fff; background-color: #286090; border-color: #204d74;
+}
+.mapper20-wheel-toolbar .btn-group[aria-label="Input mode"] .btn { min-width: 58px; }
+.mapper20-wheel-toolbar #mapper-list-clear-rows:not(.mapper20-clear-clean):hover {
+  color: #fff; background-color: #a94442; border-color: #843534;
+}
+.mapper20-wheel-toolbar #mapper-list-clear-rows:focus,
+.mapper20-wheel-toolbar #mapper-list-clear-rows:active,
+.mapper20-wheel-toolbar #mapper-list-clear-rows.mapper20-clear-clean,
+.mapper20-wheel-toolbar #mapper-list-clear-rows.mapper20-clear-clean:hover,
+.mapper20-wheel-toolbar #mapper-list-clear-rows.mapper20-clear-clean:focus {
+  color: #fff; background-color: #337ab7; border-color: #2e6da4; outline: none;
+}
+.mapper20-wheel-toolbar #mapper-list-howto-btn {
+  color: #fff; background-color: #f0ad4e; border-color: #eea236;
+  font-weight: 700; padding-left: 7px; padding-right: 7px;
+}
+.mapper20-wheel-toolbar #mapper-list-howto-btn:hover,
+.mapper20-wheel-toolbar #mapper-list-howto-btn:focus {
+  color: #fff; background-color: #ec971f; border-color: #d58512;
+}
+.mapper20-howto-mark {
+  display: inline-flex; position: relative; top: -1px; align-items: center;
+  justify-content: center; width: 11px; height: 11px; margin-left: 3px;
+  border: 1px solid currentColor; border-radius: 50%;
+  font-size: 8px; line-height: 1; font-weight: 700;
+}
+/* ── Input data label + mode toggle ──────────────────────── */
+.mapper20-input-mode-wrap {
+  display: inline-flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.mapper20-input-mode-label {
+  font-size: 9px; font-weight: 600; color: #555;
+  letter-spacing: 0.04em; text-transform: uppercase; line-height: 1; user-select: none;
+}
+/* ── Left panel tree-page overrides ──────────────────────── */
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-primary-col {
+  flex: 0 0 auto; min-width: 0;
+}
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-plot-col {
+  flex: 1 1 0; min-width: 0;
+}
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left {
+  display: block; width: 100%;
+  max-width: min(500px, calc(100vw - 48px));
+  box-sizing: border-box;
+}
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left .table-responsive {
+  width: max-content; max-width: 100%;
+  padding-left: 14px; overflow: visible;
+}
+/* ── Input table ──────────────────────────────────────────── */
+.mapper20-wheel-left .table { margin-bottom: 8px; font-size: 11px; }
+.mapper20-wheel-left .table thead th { border-bottom-width: 1px; padding: 4px 5px; }
+.mapper20-wheel-left .table tbody td { padding: 3px 4px; vertical-align: middle; }
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table {
+  table-layout: fixed; width: 460px; max-width: 100%; border-collapse: collapse;
+}
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table thead th,
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table tbody td {
+  box-sizing: border-box; overflow: hidden; word-wrap: break-word; word-break: break-word;
+}
+/* Remove button column */
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table th.mapper20-th-remove,
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table td.mapper20-remove-cell {
+  position: relative; width: 0; max-width: 0; padding: 0 !important;
+  border: 0 !important; background: transparent !important;
+  overflow: visible; text-align: center; vertical-align: middle !important;
+}
+/* Receptor column — auto-fill */
+/* Value columns — fixed */
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table th.mapper-list-val-h,
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table td.mapper-list-val-cell {
+  width: 70px;  /* 4 × 70 = 280px; receptor fills remaining 180px of 460px table */
+}
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table tbody td.mapper20-receptor-cell,
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table tbody td.mapper20-value-cell {
+  max-width: 0;
+}
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table tbody td.mapper20-receptor-cell {
+  vertical-align: top;
+}
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table tbody td.mapper20-value-cell {
+  vertical-align: middle;
+}
+/* Receptor column min-width */
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table th.mapper20-th-receptor,
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table td.mapper20-receptor-cell {
+  min-width: 165px;
+}
+/* Text-mode: hide value columns, show swatch */
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table.mapper20-text-mode {
+  width: 310px;
+}
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table.mapper20-text-mode th.mapper20-th-receptor,
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table.mapper20-text-mode td.mapper20-receptor-cell {
+  min-width: 165px;
+}
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table.mapper20-text-mode th.mapper-list-cat-h,
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table.mapper20-text-mode td.mapper-list-cat-cell {
+  width: 108px;
+}
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table.mapper20-text-mode th.mapper-list-val-h,
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table.mapper20-text-mode td.mapper-list-val-cell {
+  display: none !important; width: 0 !important; padding: 0 !important; border: none !important;
+}
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table.mapper20-text-mode th.mapper20-th-swatch,
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table.mapper20-text-mode td.mapper20-swatch-cell {
+  width: 44px; max-width: 44px; text-align: center; vertical-align: middle !important; padding: 2px !important;
+}
+/* Swatch hidden in numeric mode */
+.mapper20-wheel-left #mapper-list-input-table:not(.mapper20-text-mode) .mapper20-th-swatch,
+.mapper20-wheel-left #mapper-list-input-table:not(.mapper20-text-mode) td.mapper20-swatch-cell {
+  display: none;
+}
+/* Cat-mode header */
+.mapper20-wheel-left #mapper-list-input-table:not(.mapper20-text-mode) .mapper-list-cat-h,
+.mapper20-wheel-left #mapper-list-input-table:not(.mapper20-text-mode) td.mapper-list-cat-cell {
+  display: none !important;
+}
+/* Center value column headers + inputs */
+#mapper-list-input-table thead th.mapper-list-val-h,
+#mapper-list-input-table thead th.mapper-list-cat-h,
+#mapper-list-input-table thead th.mapper20-th-swatch { text-align: center !important; }
+#mapper-list-input-table .mapper-list-val,
+#mapper-list-input-table .mapper-list-cat { text-align: center; }
+/* Receptor textarea */
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table textarea.mapper20-in-receptor.form-control.input-sm {
+  height: auto; min-height: 44px; max-height: 200px; padding: 4px 6px;
+  font-size: 11px; line-height: 1.38; resize: vertical;
+  overflow-x: hidden; overflow-y: hidden;
+  white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word;
+}
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table.mapper20-receptors-compact textarea.mapper20-in-receptor.form-control.input-sm {
+  min-height: 26px; max-height: 26px; height: 26px;
+  padding-top: 2px; padding-bottom: 2px; line-height: 1.3;
+  resize: none; overflow-x: auto; overflow-y: hidden; white-space: nowrap;
+}
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table.mapper20-receptors-compact .mapper20-receptor-html-view {
+  min-height: 26px; max-height: 26px; height: 26px; overflow: hidden;
+}
+/* Critical: counteract max-width:0 on <td> so inputs render at column width, not 0px */
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table .form-control.input-sm {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table .mapper-list-val.form-control.input-sm,
+.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left #mapper-list-input-table .mapper-list-cat.form-control.input-sm {
+  height: 26px; padding: 2px 6px; font-size: 11px; line-height: 1.3;
+}
+/* Placeholder */
+.mapper20-in-receptor::placeholder,
+.mapper20-in-receptor::-webkit-input-placeholder,
+.mapper20-in-receptor::-moz-placeholder,
+.mapper20-in-receptor:-ms-input-placeholder {
+  color: #8a9399; opacity: 1; white-space: pre-line;
+}
+/* Orange border only on the first (placeholder) row — trailing blank rows stay neutral */
+#mapper-list-input-tbody tr:first-child .mapper20-receptor-input-wrap.is-empty .mapper20-in-receptor { border-color: #e0892e !important; }
+/* Catmode hint on empty category cell */
+#mapper-list-input-table.mapper20-text-mode tbody td.mapper-list-cat-cell.mapper-list-cat-hint {
+  border: 2px solid #e0892e !important; background-color: rgba(224,137,46,0.08);
+}
+/* Remove button */
+.mapper20-remove-row {
+  width: 17px; height: 17px; margin: 0; padding: 0;
+  border: 1px solid rgba(169,68,66,0.35); border-radius: 50%; background: #fff;
+  color: #a94442; font-size: 14px; line-height: 14px; cursor: pointer;
+  box-shadow: 0 1px 3px rgba(26,43,60,0.12);
+  position: absolute; top: 50%; right: 3px; transform: translateY(-50%);
+}
+.mapper20-remove-row:hover, .mapper20-remove-row:focus {
+  color: #fff; border-color: #a94442; background: #a94442; outline: none;
+}
+.mapper20-remove-cell.is-remove-hidden .mapper20-remove-row { visibility: hidden; pointer-events: none; }
+/* Sortable headers */
+.mapper20-wheel-left #mapper-list-input-table th.mapper20-sortable-head {
+  cursor: pointer; position: relative; padding-right: 18px; user-select: none;
+}
+.mapper20-sort-indicator {
+  position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+  color: #666; font-size: 10px; line-height: 1;
+}
+/* Receptor input wrap */
+.mapper20-receptor-input-wrap { position: relative; width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
+.mapper20-receptor-clear {
+  display: block; position: absolute; top: 4px; right: 3px; z-index: 2;
+  width: 18px; height: 18px; margin: 0; padding: 0; border: 0;
+  background: transparent; line-height: 16px; font-size: 16px;
+  font-weight: 400; color: #8a9399; cursor: pointer; border-radius: 2px;
+}
+.mapper20-receptor-clear:hover, .mapper20-receptor-clear:focus { color: #333; background: rgba(0,0,0,0.05); outline: none; }
+.mapper20-receptor-input-wrap.is-empty .mapper20-receptor-clear { display: none; }
+.mapper20-receptor-html-view {
+  display: none; cursor: text; min-height: 44px; height: auto;
+  max-width: 100%; overflow: hidden; white-space: normal; word-break: break-word;
+}
+.mapper20-receptor-html-view:focus { outline: thin dotted #333; outline-offset: 1px; }
+.mapper20-receptor-html-view:not(:empty) { padding-top: 5px; padding-bottom: 5px; }
+.mapper20-receptor-input-wrap .mapper20-in-receptor,
+.mapper20-receptor-input-wrap .mapper20-receptor-html-view { padding-right: 26px; }
+/* Autocomplete */
+.mapper20-wheel-left .mapper20-receptor-ac-menu.ui-autocomplete { z-index: 4000; max-height: 224px; overflow-y: auto; overflow-x: hidden; }
+.mapper20-wheel-left .mapper20-receptor-ac-menu .ui-menu-item { padding: 0; margin: 0; }
+.mapper20-wheel-left .mapper20-receptor-ac-menu .mapper20-ac-item-label { padding: 4px 8px; font-size: 11px; line-height: 1.35; }
+/* Row invalid */
+.mapper20-input-table tbody tr.mapper20-row-invalid td.mapper20-receptor-cell {
+  border: 2px solid #a94442 !important; background-color: rgba(169,68,66,0.06);
+}
+/* Messages */
+#mapper-list-messages { margin-top: 8px; font-size: 10px; max-height: 160px; overflow: auto; color: #a94442; }
+#mapper-list-messages:empty { display: none; }
+/* Swatch */
+.mapper20-label-swatch {
+  display: inline-block; width: 18px; height: 18px; border: 1px solid #aaa;
+  border-radius: 3px; box-sizing: border-box; vertical-align: middle;
+  background-color: transparent;
+}
+.mapper20-label-swatch.mapper20-row-color-picker { padding: 0; color: transparent; font-size: 0; cursor: pointer; }
+.mapper20-swatch-cell .mapper20-row-swatch-replacer.sp-replacer {
+  display: inline-block; width: 18px !important; height: 18px !important;
+  padding: 0; border: 1px solid #aaa; border-radius: 3px; vertical-align: middle; overflow: hidden;
+}
+.mapper20-swatch-cell .mapper20-row-swatch-replacer .sp-preview { width: 18px; height: 18px; margin: 0; border: 0; }
+.mapper20-swatch-cell .mapper20-row-swatch-replacer .sp-dd { display: none; }
+/* Catmode: left panel shrinks */
+.mapper20-wheel-wrap.mapper-list-page.mapper-list-catmode .mapper20-wheel-left { min-width: 356px; }
+.mapper20-wheel-wrap.mapper-list-page.mapper-list-catmode .mapper20-wheel-toolbar-stack { width: 100%; }
+.mapper20-wheel-wrap.mapper-list-page.mapper-list-catmode .mapper20-wheel-toolbar-grid { width: 100%; }
+.mapper20-wheel-wrap.mapper-list-page.mapper-list-catmode .mapper20-wheel-left .table-responsive { width: fit-content; }
+.mapper20-wheel-wrap.mapper-list-page.mapper-list-catmode .mapper20-wheel-left #mapper-list-input-table.mapper20-text-mode { width: 322px; }
+/* Categorical colours panel in Colors dropdown */
+#mapper-list-colors-menu.mapper-list-colors-text-mode {
+  width: max-content; min-width: 120px !important; max-width: min(320px, 92vw); padding: 8px !important;
+}
+.mapper20-colors-text-wrap .customize-menu {
+  --check-col: 20px; --picker-col: 32px; --gap: 4px;
+  width: 100%; max-width: none; max-height: 58vh;
+  overflow-y: auto; overflow-x: hidden;
+  padding: 6px 4px 6px 6px; box-sizing: border-box; scrollbar-width: thin;
+}
+.mapper20-colors-text-wrap .customize-menu::-webkit-scrollbar { width: 6px; }
+.mapper20-colors-text-wrap .customize-menu::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); border-radius: 3px; }
+.mapper20-colors-text-wrap .mapper20-label-cat-head {
+  display: grid; grid-template-columns: var(--check-col) minmax(0, 1fr);
+  align-items: center; column-gap: var(--gap); padding: 0 0 6px; margin: 0 0 6px; border-bottom: 1px solid #eaeaea;
+}
+.mapper20-colors-text-wrap .mapper20-label-cat-head-title { font-weight: 600; font-size: 12px; text-align: center; letter-spacing: 0.02em; }
+.mapper20-colors-text-wrap .color-item {
+  display: grid; grid-template-columns: var(--check-col) minmax(0, 1fr) var(--picker-col);
+  align-items: center; column-gap: var(--gap); padding: 2px 0; border-bottom: 1px solid #ebebeb;
+}
+.mapper20-colors-text-wrap .color-item:last-child { border-bottom: none; }
+.mapper20-colors-text-wrap .color-item .color-label {
+  margin: 0; min-width: 0; align-self: center; line-height: 1.3;
+  font-weight: normal; font-size: 11px; word-break: normal; overflow-wrap: break-word; hyphens: none;
+}
+.mapper20-colors-text-wrap .mapper20-lcat-replacer.sp-replacer { height: 22px !important; padding: 2px !important; vertical-align: middle; }
+.mapper20-colors-text-wrap .mapper20-lcat-replacer .sp-preview { width: 20px !important; height: 16px !important; }
+.mapper20-colors-text-wrap .mapper20-lcat-replacer .sp-dd { height: auto !important; line-height: 16px !important; padding: 0 1px !important; font-size: 9px; }
+.mapper20-colors-dropdown-anchor .mapper20-lcat-sp-container.sp-container { box-sizing: border-box !important; z-index: 10055 !important; max-width: min(316px, calc(100vw - 20px)) !important; }
+/* Numeric colours panel (ring-style) */
+.mapper-list-color-ring-grid { display: flex; align-items: center; gap: 6px; }
+.mapper-list-color-ring-label { width: 52px; text-align: center; flex-shrink: 0; }
+.mapper-list-color-style-wrap { width: 130px; flex-shrink: 0; }
+.mapper-list-color-picker-wrap { flex: 1; min-width: 0; display: flex; justify-content: center; align-items: center; }
+/* Plot panel */
+.mapper20-plot-panel { background: transparent; border-radius: 12px; padding: 8px 8px 16px; border: none; max-width: 100%; box-sizing: border-box; }
+.mapper-list-plot-toolbar {
+  display: flex; justify-content: center; align-items: center; gap: 12px;
+  flex-wrap: wrap; font-size: 11px; margin-bottom: 8px; padding-top: 8px;
+}
+.mapper-list-plot-toolbar .dropdown-toggle { font-size: 13px; line-height: 1.35; }
+.mapper-list-plot-wrap { margin-top: 8px; width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; overflow-y: hidden; text-align: center; }
+.mapper-list-plot-placeholder {
+  box-sizing: border-box; margin: 0 auto; max-width: 560px;
+  min-height: clamp(240px, 40vh, 480px); padding: 28px 20px;
+  border: 1px dashed rgba(26,43,60,0.18); border-radius: 12px;
+  background: linear-gradient(180deg, #fafcfd 0%, #f5f8fb 100%);
+  color: #4a5f73; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; text-align: center; gap: 10px;
+}
+.mapper-list-plot-placeholder-title { margin: 0; font-size: 14px; font-weight: 600; color: #1a2b3c; }
+.mapper-list-plot-placeholder-hint { margin: 0; font-size: 12px; line-height: 1.45; max-width: 420px; }
+/* Picker modal */
+#mapper20-gpcrome-picker-modal .modal-dialog { width: 95%; max-width: 1200px; }
+#mapper20-gpcrome-picker-modal table.dataTable { font-size: 12px; }
+#mapper20-gpcrome-picker-modal .select2-container--open .select2-dropdown { z-index: 2060 !important; }
+#mapper20-gpcrome-picker-modal #mapper20-picker-filter-row th { padding: 3px 2px; }
+.mapper20-picker-gpcrdb-label { white-space: nowrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mapper20-wheel-wrap row mapper-list-page">
+  <div class="col-xs-12 mapper20-wheel-primary-col">
+    <div class="mapper20-wheel-left">
+      <div class="mapper20-wheel-top-row">
+        <h2 class="mapper20-wheel-page-title">List mapper</h2>
+      </div>
+      <div class="mapper20-wheel-toolbar-stack">
+        <div class="mapper20-wheel-toolbar-grid">
+          <div class="mapper20-wheel-toolbar" aria-label="Mapper list tools primary" style="align-items:flex-end;">
+            <button type="button" class="btn btn-default btn-xs" id="mapper-list-howto-btn" data-toggle="modal" data-target="#mapper-list-howto-modal" title="How to use the list mapper">
+              How to<span class="mapper20-howto-mark" aria-hidden="true">?</span>
+            </button>
+            <div class="mapper20-input-mode-wrap">
+              <span class="mapper20-input-mode-label">Input data</span>
+              <div class="btn-group btn-group-xs" role="group" aria-label="Input mode">
+                <button type="button" class="btn btn-default btn-xs active" id="mapper-list-mode-numeric-btn" aria-pressed="true">Numerical</button>
+                <button type="button" class="btn btn-default btn-xs" id="mapper-list-mode-labels-btn" aria-pressed="false">Categorical</button>
+              </div>
+            </div>
+            <button type="button" class="btn btn-default btn-xs" id="mapper-list-demo-rows">Demo</button>
+          </div>
+          <div class="mapper20-wheel-toolbar" aria-label="Table actions">
+            <button type="button" class="btn btn-primary btn-xs" id="mapper-list-open-picker" data-toggle="modal" data-target="#mapper20-gpcrome-picker-modal">Receptor lookup</button>
+            <button type="button" class="btn btn-default btn-xs" id="mapper-list-clear-rows">Clear table</button>
+          </div>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-bordered table-condensed mapper20-input-table" id="mapper-list-input-table">
+          <thead>
+            <tr>
+              <th class="mapper20-th-remove" aria-label="Remove row"></th>
+              <th class="mapper20-th-receptor mapper20-sortable-head" data-mapper-list-sort-col="receptor" tabindex="0" role="button" aria-sort="none">Receptor <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
+              <th class="mapper-list-val-h mapper20-sortable-head" data-mapper-list-sort-col="val1" tabindex="0" role="button" aria-sort="none">V1 <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
+              <th class="mapper-list-val-h mapper20-sortable-head" data-mapper-list-sort-col="val2">V2</th>
+              <th class="mapper-list-val-h mapper20-sortable-head" data-mapper-list-sort-col="val3">V3</th>
+              <th class="mapper-list-val-h mapper20-sortable-head" data-mapper-list-sort-col="val4">V4</th>
+              <th class="mapper-list-cat-h mapper20-sortable-head" data-mapper-list-sort-col="cat" tabindex="0" role="button" aria-sort="none"><span class="mapper-list-cat-header-label">Category</span> <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
+              <th class="mapper20-th-swatch" title="Category colour">Color</th>
+            </tr>
+          </thead>
+          <tbody id="mapper-list-input-tbody"></tbody>
+        </table>
+      </div>
+      <p id="mapper-list-messages" role="status" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <div class="col-xs-12 mapper20-wheel-plot-col">
+    <div class="mapper20-plot-panel">
+      <div class="mapper-list-plot-toolbar" aria-label="List plot toolbar">
+
+        <!-- Receptor names -->
+        <div class="dropdown" style="position:relative;">
+          <button type="button" class="btn btn-primary dropdown-toggle btn-sm" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Receptor names</button>
+          <div class="dropdown-menu p-2" style="min-width:160px; padding:10px 15px; left:100%; top:50%; margin-left:5px; position:absolute; transform:translateY(-30%);">
+            <button type="button" class="btn btn-outline-primary btn-block mb-1 mapper-list-leaf-btn btn-primary active" data-value="Protein">Protein</button>
+            <button type="button" class="btn btn-outline-primary btn-block mb-1 mapper-list-leaf-btn" data-value="Gene">Gene</button>
+            <button type="button" class="btn btn-outline-primary btn-block mapper-list-leaf-btn" data-value="UniProt">UniProt</button>
+          </div>
+        </div>
+
+        <!-- Layout -->
+        <div class="dropdown mapper20-dropdown-anchor-topleft" style="position:relative;">
+          <button type="button" class="btn btn-primary dropdown-toggle btn-sm" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Layout</button>
+          <div class="dropdown-menu dropdown-menu-listplot mapper20-dropdown-menu-topleft p-3 text-center"
+               style="min-width:250px; padding:10px 15px; left:100%; margin-left:5px; position:absolute;">
+            <div class="mb-3" style="padding:10px 5px;">
+              <label style="padding:5px 0;">Columns:</label>
+              <select id="mapper-list-columns" class="form-control input-sm" style="width:110px; text-align:center; display:inline-block; margin-left:6px;">
+                <option value="1">1 column</option>
+                <option value="2" selected>2 columns</option>
+                <option value="3">3 columns</option>
+                <option value="4">4 columns</option>
+              </select>
+            </div>
+            <div class="mb-2" style="padding:5px;">
+              <label for="mapper-list-max-label-sel">Max labels per column:</label>
+            </div>
+            <div class="d-flex justify-content-center align-items-center gap-2" style="padding:0 5px 10px;">
+              <select id="mapper-list-max-label-sel" class="form-control input-sm" style="width:110px; padding:4px;">
+                <option value="Auto" selected>Auto</option>
+                <option value="Custom">Custom</option>
+              </select>
+              <input type="number" id="mapper-list-max-label-num" class="form-control input-sm" style="width:70px;" min="1" disabled>
+            </div>
+            <div class="mb-2" style="padding:5px;"><label>Visible labels:</label></div>
+            <div class="form-check mb-1" style="padding:0 15px; margin-top:-6px;">
+              <input class="form-check-input" type="checkbox" id="toggle-layer-1" checked>
+              <label class="form-check-label" for="toggle-layer-1">Class</label>
+            </div>
+            <div class="form-check mb-1" style="padding:0 15px;">
+              <input class="form-check-input" type="checkbox" id="toggle-layer-2" checked>
+              <label class="form-check-label" for="toggle-layer-2">Ligand type</label>
+            </div>
+            <div class="form-check mb-1" style="padding:0 15px;">
+              <input class="form-check-input" type="checkbox" id="toggle-layer-3" checked>
+              <label class="form-check-label" for="toggle-layer-3">Receptor family</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Colors (numerical: gradient pickers / categorical: label list) — placed before Labels to match wheel/tree -->
+        <div class="dropdown mapper20-dropdown-anchor-topleft mapper20-colors-dropdown-anchor" style="position:relative;">
+          <button type="button" class="btn btn-primary dropdown-toggle btn-sm" data-toggle="dropdown">Colors</button>
+          <div class="dropdown-menu dropdown-menu-listplot mapper20-dropdown-menu-topleft" id="mapper-list-colors-menu"
+               style="min-width:510px; padding:10px 14px; left:100%; margin-left:5px; position:absolute; font-size:11px; box-sizing:border-box; overflow:visible;">
+            <!-- Numeric panel -->
+            <div id="mapper-list-colors-numeric">
+              <div class="mapper-list-color-ring-grid" style="font-weight:600; border-bottom:1px solid #ddd; padding-bottom:6px; margin-bottom:8px;">
+                <div class="mapper-list-color-ring-label">Dataset</div>
+                <div class="mapper-list-color-style-wrap" style="text-align:center;">Style</div>
+                <div class="mapper-list-color-picker-wrap">Min</div>
+                <div class="mapper-list-color-picker-wrap">Mid</div>
+                <div class="mapper-list-color-picker-wrap">Max</div>
+              </div>
+              <div class="mapper-list-color-ring-row" id="mapper-list-color-row-Col1" style="margin-bottom:6px;">
+                <div class="mapper-list-color-ring-grid">
+                  <div class="mapper-list-color-ring-label">V1</div>
+                  <div class="mapper-list-color-style-wrap"><select id="mapper-list-cstyle-Col1" class="form-control input-sm" style="width:100%;"><option value="One">One</option><option value="Two">Two</option><option value="Three_RWB">Three</option><option value="Three_TWM">Three</option></select></div>
+                  <div class="mapper-list-cpicker-min-wrap mapper-list-color-picker-wrap" style="visibility:hidden;"><input type="text" id="mapper-list-cpicker-min-Col1"></div>
+                  <div class="mapper-list-cpicker-mid-wrap mapper-list-color-picker-wrap" style="visibility:hidden;"><input type="text" id="mapper-list-cpicker-mid-Col1"></div>
+                  <div class="mapper-list-color-picker-wrap"><input type="text" id="mapper-list-cpicker-max-Col1"></div>
+                </div>
+              </div>
+              <div class="mapper-list-color-ring-row" id="mapper-list-color-row-Col2" style="margin-bottom:6px;">
+                <div class="mapper-list-color-ring-grid">
+                  <div class="mapper-list-color-ring-label">V2</div>
+                  <div class="mapper-list-color-style-wrap"><select id="mapper-list-cstyle-Col2" class="form-control input-sm" style="width:100%;"><option value="One">One</option><option value="Two">Two</option><option value="Three_RWB">Three</option><option value="Three_TWM">Three</option></select></div>
+                  <div class="mapper-list-cpicker-min-wrap mapper-list-color-picker-wrap" style="visibility:hidden;"><input type="text" id="mapper-list-cpicker-min-Col2"></div>
+                  <div class="mapper-list-cpicker-mid-wrap mapper-list-color-picker-wrap" style="visibility:hidden;"><input type="text" id="mapper-list-cpicker-mid-Col2"></div>
+                  <div class="mapper-list-color-picker-wrap"><input type="text" id="mapper-list-cpicker-max-Col2"></div>
+                </div>
+              </div>
+              <div class="mapper-list-color-ring-row" id="mapper-list-color-row-Col3" style="margin-bottom:6px;">
+                <div class="mapper-list-color-ring-grid">
+                  <div class="mapper-list-color-ring-label">V3</div>
+                  <div class="mapper-list-color-style-wrap"><select id="mapper-list-cstyle-Col3" class="form-control input-sm" style="width:100%;"><option value="One">One</option><option value="Two">Two</option><option value="Three_RWB">Three</option><option value="Three_TWM">Three</option></select></div>
+                  <div class="mapper-list-cpicker-min-wrap mapper-list-color-picker-wrap" style="visibility:hidden;"><input type="text" id="mapper-list-cpicker-min-Col3"></div>
+                  <div class="mapper-list-cpicker-mid-wrap mapper-list-color-picker-wrap" style="visibility:hidden;"><input type="text" id="mapper-list-cpicker-mid-Col3"></div>
+                  <div class="mapper-list-color-picker-wrap"><input type="text" id="mapper-list-cpicker-max-Col3"></div>
+                </div>
+              </div>
+              <div class="mapper-list-color-ring-row" id="mapper-list-color-row-Col4" style="margin-bottom:6px;">
+                <div class="mapper-list-color-ring-grid">
+                  <div class="mapper-list-color-ring-label">V4</div>
+                  <div class="mapper-list-color-style-wrap"><select id="mapper-list-cstyle-Col4" class="form-control input-sm" style="width:100%;"><option value="One">One</option><option value="Two">Two</option><option value="Three_RWB">Three</option><option value="Three_TWM">Three</option></select></div>
+                  <div class="mapper-list-cpicker-min-wrap mapper-list-color-picker-wrap" style="visibility:hidden;"><input type="text" id="mapper-list-cpicker-min-Col4"></div>
+                  <div class="mapper-list-cpicker-mid-wrap mapper-list-color-picker-wrap" style="visibility:hidden;"><input type="text" id="mapper-list-cpicker-mid-Col4"></div>
+                  <div class="mapper-list-color-picker-wrap"><input type="text" id="mapper-list-cpicker-max-Col4"></div>
+                </div>
+              </div>
+              <p id="mapper-list-colors-no-data" style="margin:6px 0 0; color:#888; font-size:11px; text-align:center;">Enter numerical data to configure colours.</p>
+            </div>
+            <!-- Categorical panel -->
+            <div id="mapper-list-colors-text" style="display:none;" class="mapper20-colors-text-wrap">
+              <div class="customize-menu mapper20-colors-text-menu" onclick="event.stopPropagation();">
+                <div id="mapper-list-label-color-pickers"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Labels -->
+        <div class="dropdown mapper20-dropdown-anchor-topleft" style="position:relative;">
+          <button type="button" class="btn btn-primary dropdown-toggle btn-sm" data-toggle="dropdown">Labels</button>
+          <div class="dropdown-menu dropdown-menu-listplot mapper20-dropdown-menu-topleft p-3"
+               style="min-width:325px; padding:10px 15px; left:100%; margin-left:5px; position:absolute; font-size:11px;">
+            {% for layer_key, layer_label, slider_max, slider_val in label_layers %}
+            {% endfor %}
+            <!-- Class -->
+            <div class="mb-3">
+              <label style="font-weight:bold; display:block; margin-bottom:6px;">Class</label>
+              <div style="white-space:nowrap;">
+                <input type="text" id="colorPicker_Class" style="display:inline-block; width:80px; vertical-align:middle; margin-right:10px;" />
+                <label style="margin-bottom:0; display:inline-block; margin-right:10px;"><input type="checkbox" id="boldCheckbox_Class"> Bold</label>
+                <label style="margin-bottom:0; display:inline-block; margin-right:10px;"><input type="checkbox" id="italicCheckbox_Class"> Italic</label>
+                <label style="margin-bottom:0; display:inline-block;"><input type="checkbox" id="underlineCheckbox_Class"> Underline</label>
+              </div>
+              <div class="text-center" style="margin-top:8px;"><label class="small">Font size</label></div>
+              <input type="range" class="form-control" min="8" max="32" value="20" id="fontSizeSlider_Class" style="width:100%;">
+              <div class="text-center"><span id="fontSizeSliderLabel_Class">20</span> px</div>
+            </div>
+            <hr style="margin:6px 0;">
+            <!-- Ligand type -->
+            <div class="mb-3">
+              <label style="font-weight:bold; display:block; margin-bottom:6px;">Ligand type</label>
+              <div style="white-space:nowrap;">
+                <input type="text" id="colorPicker_LigandType" style="display:inline-block; width:80px; vertical-align:middle; margin-right:10px;" />
+                <label style="margin-bottom:0; display:inline-block; margin-right:10px;"><input type="checkbox" id="boldCheckbox_LigandType"> Bold</label>
+                <label style="margin-bottom:0; display:inline-block; margin-right:10px;"><input type="checkbox" id="italicCheckbox_LigandType"> Italic</label>
+                <label style="margin-bottom:0; display:inline-block;"><input type="checkbox" id="underlineCheckbox_LigandType"> Underline</label>
+              </div>
+              <div class="text-center" style="margin-top:8px;"><label class="small">Font size</label></div>
+              <input type="range" class="form-control" min="8" max="28" value="18" id="fontSizeSlider_LigandType" style="width:100%;">
+              <div class="text-center"><span id="fontSizeSliderLabel_LigandType">18</span> px</div>
+            </div>
+            <hr style="margin:6px 0;">
+            <!-- Receptor family -->
+            <div class="mb-3">
+              <label style="font-weight:bold; display:block; margin-bottom:6px;">Receptor family</label>
+              <div style="white-space:nowrap;">
+                <input type="text" id="colorPicker_ReceptorFamily" style="display:inline-block; width:80px; vertical-align:middle; margin-right:10px;" />
+                <label style="margin-bottom:0; display:inline-block; margin-right:10px;"><input type="checkbox" id="boldCheckbox_ReceptorFamily"> Bold</label>
+                <label style="margin-bottom:0; display:inline-block; margin-right:10px;"><input type="checkbox" id="italicCheckbox_ReceptorFamily"> Italic</label>
+                <label style="margin-bottom:0; display:inline-block;"><input type="checkbox" id="underlineCheckbox_ReceptorFamily"> Underline</label>
+              </div>
+              <div class="text-center" style="margin-top:8px;"><label class="small">Font size</label></div>
+              <input type="range" class="form-control" min="8" max="28" value="16" id="fontSizeSlider_ReceptorFamily" style="width:100%;">
+              <div class="text-center"><span id="fontSizeSliderLabel_ReceptorFamily">16</span> px</div>
+            </div>
+            <hr style="margin:6px 0;">
+            <!-- Receptor -->
+            <div class="mb-2">
+              <label style="font-weight:bold; display:block; margin-bottom:6px;">Receptor</label>
+              <div style="white-space:nowrap;">
+                <input type="text" id="colorPicker_Receptor" style="display:inline-block; width:80px; vertical-align:middle; margin-right:10px;" />
+                <label style="margin-bottom:0; display:inline-block; margin-right:10px;"><input type="checkbox" id="boldCheckbox_Receptor"> Bold</label>
+                <label style="margin-bottom:0; display:inline-block; margin-right:10px;"><input type="checkbox" id="italicCheckbox_Receptor"> Italic</label>
+                <label style="margin-bottom:0; display:inline-block;"><input type="checkbox" id="underlineCheckbox_Receptor"> Underline</label>
+              </div>
+              <div class="text-center" style="margin-top:8px;"><label class="small">Font size</label></div>
+              <input type="range" class="form-control" min="8" max="26" value="14" id="fontSizeSlider_Receptor" style="width:100%;">
+              <div class="text-center"><span id="fontSizeSliderLabel_Receptor">14</span> px</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Legend labels (numerical only) -->
+        <div class="dropdown mapper20-dropdown-anchor-topleft" id="mapper-list-legend-labels-wrap" style="position:relative;">
+          <button type="button" class="btn btn-primary dropdown-toggle btn-sm" data-toggle="dropdown">Legend labels</button>
+          <div class="dropdown-menu dropdown-menu-listplot mapper20-dropdown-menu-topleft p-3"
+               style="min-width:320px; padding:10px 14px; left:100%; margin-left:5px; position:absolute; font-size:11px;">
+            <div style="font-weight:600; margin-bottom:8px; border-bottom:1px solid #ddd; padding-bottom:5px;">Gradient bar labels</div>
+            <div style="display:flex; flex-direction:column; gap:5px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <label style="width:54px; margin:0; font-weight:normal; flex-shrink:0;">Val 1</label>
+                <input type="text" id="mapper-list-lbl-Val1" class="form-control input-sm" maxlength="22" value="Value 1">
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <label style="width:54px; margin:0; font-weight:normal; flex-shrink:0;">Val 2</label>
+                <input type="text" id="mapper-list-lbl-Val2" class="form-control input-sm" maxlength="22" value="Value 2">
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <label style="width:54px; margin:0; font-weight:normal; flex-shrink:0;">Val 3</label>
+                <input type="text" id="mapper-list-lbl-Val3" class="form-control input-sm" maxlength="22" value="Value 3">
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <label style="width:54px; margin:0; font-weight:normal; flex-shrink:0;">Val 4</label>
+                <input type="text" id="mapper-list-lbl-Val4" class="form-control input-sm" maxlength="22" value="Value 4">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Legend (categorical only) -->
+        <div class="dropdown mapper20-dropdown-anchor-topleft" id="mapper-list-legend-wrap" style="position:relative; display:none;">
+          <button type="button" class="btn btn-primary dropdown-toggle btn-sm" data-toggle="dropdown">Legend</button>
+          <div class="dropdown-menu dropdown-menu-listplot mapper20-dropdown-menu-topleft p-3 text-center"
+               style="min-width:280px; padding:12px 14px; left:100%; margin-left:5px; position:absolute; font-size:12px;">
+            <div style="display:flex; justify-content:center; align-items:center; gap:10px; padding:8px 0;">
+              <label style="margin:0;">Legend:</label>
+              <button type="button" id="mapper-list-legend-toggle" class="btn btn-xs btn-success" style="min-width:54px;">Shown</button>
+            </div>
+            <hr style="margin:6px auto; width:82%; border-top:1px solid #ddd;">
+            <div style="display:flex; align-items:center; gap:8px; margin:8px 0;">
+              <label style="flex:1; text-align:right; margin:0;">Layout:</label>
+              <select id="mapper-list-legend-layout" class="form-control input-sm" style="flex:1.5;">
+                <option value="row">Continuous text</option>
+                <option value="columns-1">1 column</option>
+                <option value="columns-2">2 columns</option>
+                <option value="columns-3">3 columns</option>
+                <option value="columns-4">4 columns</option>
+              </select>
+            </div>
+            <hr style="margin:6px auto; width:82%; border-top:1px solid #ddd;">
+            <div style="display:flex; align-items:center; gap:8px; margin:8px 0;">
+              <label style="flex:1; text-align:right; margin:0;">Sorting:</label>
+              <button type="button" id="mapper-list-legend-sorting" class="btn btn-xs btn-primary" style="flex:1.5;">Vertically</button>
+            </div>
+            <hr style="margin:6px auto; width:82%; border-top:1px solid #ddd;">
+            <div style="display:flex; align-items:center; gap:8px; margin:8px 0;">
+              <label style="flex:1; text-align:right; margin:0;">Position:</label>
+              <button type="button" id="mapper-list-legend-position" class="btn btn-xs btn-primary" style="flex:1.5;">Top</button>
+            </div>
+            <hr style="margin:6px auto; width:82%; border-top:1px solid #ddd;">
+            <div class="form-group text-center" style="margin:8px 0 4px;">
+              <label class="small" for="mapper-list-legend-fontsize">Font size</label>
+              <input type="range" class="form-control" style="width:90%" min="11" max="20" value="14" id="mapper-list-legend-fontsize">
+              <div class="small"><span id="mapper-list-legend-fontsize-val">14</span> px</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Download -->
+        <div class="dropdown" style="position:relative;">
+          <button type="button" class="btn btn-primary dropdown-toggle btn-sm" id="mapper-list-download-btn" data-toggle="dropdown">
+            <span class="glyphicon glyphicon-download" style="vertical-align:top; line-height:1.3;"></span>
+            Download <span class="caret"></span>
+          </button>
+          <div class="dropdown-menu p-2" style="min-width:160px; padding:10px 15px; left:100%; top:50%; margin-left:5px; position:absolute; transform:translateY(-25%); display:none;">
+            <button type="button" class="btn btn-primary btn-block mb-1" onclick="saveSvgAsJpg(document.querySelector('#mapper-list-plot svg'), 'ListMapper.jpg');">JPG</button>
+            <button type="button" class="btn btn-primary btn-block mb-1" onclick="saveSvgAsPng(document.querySelector('#mapper-list-plot svg'), 'ListMapper.png');">PNG</button>
+            <button type="button" class="btn btn-primary btn-block mb-1" onclick="saveSvg(document.querySelector('#mapper-list-plot svg'), 'ListMapper.svg');">SVG</button>
+            <button type="button" class="btn btn-primary btn-block" onclick="saveSvgAsTiff(document.querySelector('#mapper-list-plot svg'), 'ListMapper.tiff');">TIFF</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="mapper-list-plot-wrap">
+        <div id="mapper-list-plot" class="text-center"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- How to modal -->
+<div class="modal fade" id="mapper-list-howto-modal" tabindex="-1" role="dialog" aria-labelledby="mapper-list-howto-label">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title" id="mapper-list-howto-label">List mapper</h4>
+      </div>
+      <div class="modal-body">
+        <p>Enter one receptor per row (search, paste synonyms, or use <strong>Receptor lookup</strong>). Receptors are placed in their GPCRdb classification hierarchy (class → ligand type → receptor family).</p>
+        <p><strong>Numerical</strong> mode — up to four values (Val 1–4) per receptor, rendered as coloured shapes. Paste as receptor + TAB-separated values.</p>
+        <p><strong>Categorical</strong> mode — one text label per receptor; same label shares a colour swatch. Configure label colours in the <strong>Colors</strong> menu.</p>
+        <p>Use the right toolbar to adjust column layout, font styling, gradient colours, and legend options.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Receptor lookup modal (shared) -->
+<div class="modal fade" id="mapper20-gpcrome-picker-modal" tabindex="-1" role="dialog" aria-labelledby="mapper20-gpcrome-picker-modal-label">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" id="mapper20-gpcrome-picker-dismiss-x" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title" id="mapper20-gpcrome-picker-modal-label">Select receptors</h4>
+      </div>
+      <div class="modal-body">
+        <div style="overflow-x:auto;">
+          <table width="100%" class="display compact" id="mapper20-gpcrome-picker-table">
+            <thead>
+              <tr>
+                <th data-dt-order="disable"><input type="checkbox" id="mapper20-gpcrome-picker-select-all" title="Select all filtered rows"></th>
+                <th class="mapper20-picker-gpcrdb-label" data-dt-order="disable">GPCRdb</th>
+                <th>GtoPdb</th>
+                <th>Gene</th>
+                <th>UniProt</th>
+                <th>family</th>
+                <th>class</th>
+              </tr>
+              <tr id="mapper20-picker-filter-row">
+                <th></th><th></th><th></th><th></th><th></th><th></th><th></th>
+              </tr>
+            </thead>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal" id="mapper20-gpcrome-picker-cancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="mapper20-gpcrome-picker-add">Add to table</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block addon_js %}
+<script src="{% static 'home/js/d3.min.js' %}"></script>
+<script src="{% static 'home/js/nv.d3.min.js' %}"></script>
+<script src="{% static 'home/js/d3.v4.min.js' %}"></script>
+<script src="{% static 'home/js/saveSvgAsPng.js' %}"></script>
+<script src="{% static 'home/js/saveSvg.js' %}"></script>
+<script src="{% static 'home/js/datamapper.js' %}"></script>
+<script src="{% static 'home/js/spectrum_v1_8_1.js' %}"></script>
+<script src="{% static 'home/js/select2_4.1.0-rc.0_full.js' %}"></script>
+<script src="{% static 'home/js/NewDrugsBrowser_datatables.min.js' %}"></script>
+<script src="{% static 'home/js/NorgesDTFilterBuilder.js' %}"></script>
+<script src="{% static 'home/js/mapper_gpcrome_picker_modal.js' %}"></script>
+
+<script>
+$('.dropdown-menu').on('click', function(e){ e.stopPropagation(); });
+// Download dropdown manual toggle (same pattern as PlotRender_List)
+(function(){
+  var btn = document.querySelector('#mapper-list-download-btn');
+  var menu = btn && btn.nextElementSibling;
+  if (!btn || !menu) return;
+  btn.addEventListener('click', function(e){ e.stopPropagation(); menu.style.display = (menu.style.display==='block')?'none':'block'; });
+  document.addEventListener('click', function(){ menu.style.display='none'; });
+  menu.addEventListener('click', function(e){ e.stopPropagation(); });
+})();
+
+var receptorSelect2Data = {{ receptor_select2_json|safe }};
+var MAPPER20_RESOLVE    = {{ gpcrome_resolve_json|safe }};
+var MAPPER20_GPCROME_PICKER_ROWS = {{ gpcrome_picker_rows_json|safe }};
+var MAPPER_LIST_RECEPTOR_INFO    = {{ receptor_info_json|safe }};
+
+window.MAPPER20_ENTRY_META = {};
+(function(){
+  if (receptorSelect2Data && receptorSelect2Data.length) {
+    receptorSelect2Data.forEach(function(item){
+      var uni = item.uniprot != null ? String(item.uniprot).trim().toUpperCase() : '';
+      if (!uni && item.id && String(item.id).indexOf('_') !== -1) uni = String(item.id).split('_')[0].trim().toUpperCase();
+      else if (!uni && item.id) uni = String(item.id).trim().toUpperCase();
+      window.MAPPER20_ENTRY_META[item.id] = {
+        name_html:  item.name_html  || '',
+        name_plain: item.name_plain || '',
+        text:       item.text       || '',
+        gene:       item.gene != null ? String(item.gene).trim() : '',
+        uniprot:    uni
+      };
+    });
+  }
+})();
+</script>
+<script src="{% static 'home/js/mapper_list_page.js' %}"></script>
+{% endblock %}
