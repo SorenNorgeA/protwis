@@ -16,6 +16,11 @@ function custom_mapper_tree_font_px(d, options) {
     if (d.depth <= 0) {
         return '10px';
     }
+    // Explicit depth→fontSizeKey map (set when tree levels are stripped)
+    var dm = options && options.fontSize_depth_map;
+    if (dm && dm[d.depth] != null) {
+        return pick(fz[dm[d.depth]], '12px');
+    }
     var md = LD;
     if (md >= 4) {
         if (d.depth === 1) { return pick(fz.class, '14px'); }
@@ -137,6 +142,8 @@ const CLASS_COLORS = {
     'F':  '#FF7F0E',
     'T2': '#F7B6D2',
     'Cl': '#9e9e9e',
+    'O1': '#66CDAA',
+    'O2': '#3CB371',
 };
 
 // 14-category chemotype colors (based on the legacy set in common/phylogenetic_tree.py)
@@ -297,7 +304,6 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
 
     // Leaf label radial gap (pixels): room for stem dot + first data circle stacked along the tangent.
     var leaf_label_offset = isFinite(Number(options.radialLeafLabelGap)) ? Number(options.radialLeafLabelGap) : 18;
-    var leafLabelGapDebugCount = 0;
 
     // Calculate branch offsets (sorted numerically)
     const depthKeys = Object.keys(options.branch_length || {}).map(k => parseInt(k, 10)).filter(n => !isNaN(n)).sort((a,b) => a-b);
@@ -503,19 +509,6 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
             // Label offsets (no dots/circles on this page)
             var labelOffset = d.depth === options.depth ? leaf_label_offset : 6;
             if (d.depth === options.depth) {
-                if (leafLabelGapDebugCount < 5 && window.console && typeof window.console.log === "function") {
-                    window.console.log("[MapperTree] leaf label gap", {
-                        label: d.name,
-                        depth: d.depth,
-                        leafRadius: d.y,
-                        leafEndDotRadius: options.leafEndDotRadius,
-                        radialLeafLabelGap: options.radialLeafLabelGap,
-                        appliedLabelOffset: labelOffset,
-                        dotEdgeToLabelStart: labelOffset - (Number(options.leafEndDotRadius) || 0),
-                        side: d.x < 181 ? "right" : "left"
-                    });
-                    leafLabelGapDebugCount += 1;
-                }
                 return d.x < 181 ? `translate(${labelOffset})` : `rotate(180)translate(-${labelOffset})`;
             } else {
                 // Internal label offset only moves the label boxes/text, not the branch geometry.
@@ -1506,8 +1499,9 @@ function applyTreeColors(root, stacked_meta, options) {
         }
         if (root && root.children && root.children.length) {
             root.children.forEach(function(clsNode) {
-                var k = String(clsNode.name || "").trim();
-                k = k.replace(/^Class\s+/i, '');
+                // _classNodeName is set by the tree page when the class level is stripped,
+                // so chemotype/RF nodes that were hoisted up retain their original class color.
+                var k = custom_tree_class_key(clsNode._classNodeName || clsNode.name);
                 var cc = CLASS_COLORS[k] || "#333";
                 (function walk4(n) {
                     if (!n) return;
@@ -1577,11 +1571,6 @@ window.mapperClassificationRedraw = function(td, optsBase, layoutLabel) {
     tree_data = applyTreeColors(tree_data, collapsed.stacked, tree_options);
     tree_data = applyLeafLabels(tree_data, (window.TREE_UI && TREE_UI.leafLabelType) || 'Protein');
     var maxDepth = custom_get_max_depth(tree_data, 0);
-    if (window.console && typeof window.console.log === "function") {
-        window.console.log("[MapperTree] render depth", maxDepth, {
-            leafLabelType: (window.TREE_UI && TREE_UI.leafLabelType) || "Protein"
-        });
-    }
     tree_options.depth = maxDepth;
     tree_options.branch_length = custom_compute_branch_lengths(tree_data, maxDepth);
     if (tree_options.classLabelOut == null) tree_options.classLabelOut = 0;

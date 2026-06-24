@@ -526,8 +526,15 @@ class DataMapperHome(TemplateView):
         return structure_dict
 
     @staticmethod
-    def build_gpcrome_receptor_normalization_maps():
-        """Build the same lookup tables as the Excel DataMapperHome GPCRome / Tree branch."""
+    def build_gpcrome_receptor_normalization_maps(include_odorant=False):
+        """Build lookup tables for receptor normalization.
+
+        Args:
+            include_odorant: If True, include odorant receptors (family slugs 007, 008)
+                             in the picker / autocomplete / resolve set.
+                             The GPCRome Wheel page leaves this False; all other Mapper
+                             pages pass True.
+        """
         all_proteins = Protein.objects.filter(
             species_id=1,
             parent_id__isnull=True,
@@ -535,18 +542,22 @@ class DataMapperHome(TemplateView):
             family_id__slug__startswith='0',
         ).values_list('entry_name', flat=True).distinct()
 
-        proteins_gpcrome_tree = set(
-            Protein.objects.filter(
-                species_id=1,
-                parent_id__isnull=True,
-                accession__isnull=False,
-                family_id__slug__startswith='0',
-            ).exclude(
-                family_id__slug__startswith='007',
-            ).exclude(
-                family_id__slug__startswith='008',
-            ).values_list('entry_name', flat=True).distinct()
-        )
+        if include_odorant:
+            # All human GPCRs including odorant families 007 / 008
+            proteins_gpcrome_tree = set(all_proteins)
+        else:
+            proteins_gpcrome_tree = set(
+                Protein.objects.filter(
+                    species_id=1,
+                    parent_id__isnull=True,
+                    accession__isnull=False,
+                    family_id__slug__startswith='0',
+                ).exclude(
+                    family_id__slug__startswith='007',
+                ).exclude(
+                    family_id__slug__startswith='008',
+                ).values_list('entry_name', flat=True).distinct()
+            )
 
         proteins = Protein.objects.prefetch_related('genes').filter(entry_name__in=all_proteins)
         entry_to_gene = {
@@ -776,6 +787,10 @@ class DataMapperHome(TemplateView):
         class_f_data = tree.get_tree_data(ProteinFamily.objects.get(name__startswith='Class F (Frizzled)'))
         class_t2_data = tree.get_tree_data(ProteinFamily.objects.get(name__startswith='Class T2 (Taste 2)'))
         class_cl_data = tree.get_tree_data(ProteinFamily.objects.get(name__startswith='Other GPCRs'))
+        class_o1_family = ProteinFamily.objects.filter(name__startswith='Class O1').first()
+        class_o2_family = ProteinFamily.objects.filter(name__startswith='Class O2').first()
+        class_o1_data = tree.get_tree_data(class_o1_family) if class_o1_family else None
+        class_o2_data = tree.get_tree_data(class_o2_family) if class_o2_family else None
         ### GETTING NODES
         data_a = class_a_data.get_nodes_dict(None)
         data_b1 = class_b1_data.get_nodes_dict(None)
@@ -784,6 +799,8 @@ class DataMapperHome(TemplateView):
         data_f = class_f_data.get_nodes_dict(None)
         data_t2 = class_t2_data.get_nodes_dict(None)
         data_cl = class_cl_data.get_nodes_dict(None)
+        data_o1 = class_o1_data.get_nodes_dict(None) if class_o1_data else None
+        data_o2 = class_o2_data.get_nodes_dict(None) if class_o2_data else None
         #Collating everything into a single tree
         general_options = {'depth': 4,
                            'branch_length': {1: 'Class A (Rhodopsin)',
@@ -832,6 +849,14 @@ class DataMapperHome(TemplateView):
                                   ('value', 0),
                                   ('color', 'Gold'),
                                   ('children',data_cl['children'])])
+        class_o1_dict = OrderedDict([('name', 'Class O1 (fish-like odorant)'),
+                                  ('value', 0),
+                                  ('color', '#66CDAA'),
+                                  ('children', data_o1['children'])]) if data_o1 else None
+        class_o2_dict = OrderedDict([('name', 'Class O2 (tetrapod specific odorant)'),
+                                  ('value', 0),
+                                  ('color', '#3CB371'),
+                                  ('children', data_o2['children'])]) if data_o2 else None
         ### APPENDING TO MASTER DICT
         master_dict['children'].append(class_a_dict)
         master_dict['children'].append(class_b1_dict)
@@ -840,6 +865,10 @@ class DataMapperHome(TemplateView):
         master_dict['children'].append(class_f_dict)
         master_dict['children'].append(class_t2_dict)
         master_dict['children'].append(class_cl_dict)
+        if class_o1_dict:
+            master_dict['children'].append(class_o1_dict)
+        if class_o2_dict:
+            master_dict['children'].append(class_o2_dict)
 
         updated_data = {key.replace('_human', ''): value for key, value in input_data.items()}
         circles = {
@@ -912,8 +941,12 @@ class DataMapperHome(TemplateView):
             reduced_df = DataMapperHome.reduce_and_cluster(distance_df, method=method, is_distance_matrix=True)
 
             # --- Merge metadata ---
-            df_merged = pd.merge(reduced_df, data_df['Value1'], left_on='label', right_index=True, how='left')
-            df_merged.rename(columns={'Value1': 'fill'}, inplace=True)
+            if 'Value1' in data_df.columns:
+                df_merged = pd.merge(reduced_df, data_df['Value1'], left_on='label', right_index=True, how='left')
+                df_merged.rename(columns={'Value1': 'fill'}, inplace=True)
+            else:
+                df_merged = reduced_df.copy()
+                df_merged['fill'] = 0
 
             ## add class/ligand_type/receptor_family clusters ##
 
@@ -1042,7 +1075,7 @@ class DataMapperHome(TemplateView):
 
         if method == 'tsne':
             if is_distance_matrix:
-                reducer = TSNE(n_components=n_components, metric='precomputed', random_state=42,perplexity=suggested_perplexity)
+                reducer = TSNE(n_components=n_components, metric='precomputed', init='random', random_state=42, perplexity=suggested_perplexity)
             else:
                 reducer = TSNE(n_components=n_components, random_state=42,perplexity=suggested_perplexity)
         else:
@@ -1827,72 +1860,6 @@ class DataMapperHome(TemplateView):
 class ExcelUploadForm(forms.Form):
     file = forms.FileField()
 
-class GPCRomeRender(TemplateView):
-    template_name = 'mapper/PlotRender_GPCRome.html'  # default fallback
-
-    def get_template_names(self):
-        # If PlotType is set during post, switch template accordingly
-        plot_type = getattr(self, 'plot_type', None)
-        if plot_type == "Text":
-            return ['mapper/PlotRender_GPCRome_Text.html']
-        return ['mapper/PlotRender_GPCRome.html']
-
-    def post(self, request, *args, **kwargs):
-        Data_json = request.POST.get('Data')
-        PlotType = request.POST.get('PlotType')
-
-        try:
-            Data = json.loads(Data_json)
-            gpcr_data = DataMapperHome.GenerateGPCRomeDataStructure(data_type="Classic")
-            updated_data = DataMapperHome.update_nested_GPCRome_data(gpcr_data["Data"], Data)
-
-            # Store PlotType so get_template_names can access it
-            self.plot_type = PlotType
-
-            context = {
-                'GPCRomeData': updated_data,
-                'PlotType': PlotType
-            }
-            return self.render_to_response(context)
-
-        except json.JSONDecodeError:
-            return HttpResponse("Invalid JSON data")
-
-class TreeRender(TemplateView):
-    template_name = 'mapper/PlotRender_Tree.html'  # default fallback
-
-    def get_template_names(self):
-        # If PlotType is set during post, switch template accordingly
-        plot_type = getattr(self, 'plot_type', None)
-        if plot_type == "Text":
-            return ['mapper/PlotRender_Tree_Text.html']
-        return ['mapper/PlotRender_Tree.html']
-
-    def post(self, request, *args, **kwargs):
-        Data_json = request.POST.get('Data')
-        PlotType = request.POST.get('PlotType')
-
-        try:
-            Data = json.loads(Data_json)
-            tree, tree_options, circles, receptors, genes = DataMapperHome.generate_tree_plot(Data)
-
-            # Store PlotType so get_template_names can access it
-            self.plot_type = PlotType
-
-            context = {
-                'tree': json.dumps(tree),
-                'tree_options': tree_options,
-                'circles': json.dumps(circles),
-                'Receptor_dict': json.dumps(receptors),
-                'Entrez_dict': json.dumps(genes),
-                'PlotType': PlotType,
-                'Data': json.dumps(Data)
-            }
-            return self.render_to_response(context)
-
-        except json.JSONDecodeError:
-            return HttpResponse("Invalid JSON data")
-
 class ClusterRender(TemplateView):
     template_name = 'mapper/PlotRender_Cluster.html'  # default fallback
 
@@ -1905,72 +1872,23 @@ class ClusterRender(TemplateView):
             # Calculate the plot
             output_seq = DataMapperHome.clustering_test('tsne', Data,'seq')
             label_converter = DataMapperHome.Label_conversion_info(Data)
-            # Create the context
+
+            # Return JSON when called via AJAX (new Mapper_Cluster.html page)
+            if request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'cluster_data_seq': json.loads(output_seq),
+                    'Label_converter': label_converter
+                })
+
+            # Return rendered HTML template (legacy PlotRender_Cluster.html flow)
             context = {
                 'cluster_data_seq': output_seq,
                 'Label_converter': json.dumps(label_converter)
                 }
-            # Return context
             return self.render_to_response(context)
 
         except json.JSONDecodeError:
             return HttpResponse("Invalid JSON data")
-
-class ListRender(TemplateView):
-    template_name = 'mapper/PlotRender_List.html'  # default fallback
-
-    def get_template_names(self):
-        # If PlotType is set during post, switch template accordingly
-        plot_type = getattr(self, 'plot_type', None)
-        if plot_type == "Text":
-            return ['mapper/PlotRender_List_Text.html']
-        return ['mapper/PlotRender_List.html']
-
-    def post(self, request, *args, **kwargs):
-        Data_json = request.POST.get('Data')
-        PlotType = request.POST.get('PlotType')
-
-        try:
-            Data = json.loads(Data_json)
-            listplot_data = DataMapperHome.generate_list_plot(Data)
-            label_converter = DataMapperHome.Label_conversion_info(Data)
-
-            # Store PlotType so get_template_names can access it
-            self.plot_type = PlotType
-
-            context = {
-                'listplot_data': json.dumps(listplot_data["NameList"]),
-                'listplot_data_variables': json.dumps(listplot_data['DataPoints']),
-                'Label_Conversion': json.dumps(label_converter),
-                'PlotType': PlotType
-            }
-            return self.render_to_response(context)
-
-        except json.JSONDecodeError:
-            return HttpResponse("Invalid JSON data")
-
-class HeatmapRender(TemplateView):
-    template_name = 'mapper/PlotRender_Heatmap.html'  # default fallback
-
-    def post(self, request, *args, **kwargs):
-        Data_json = request.POST.get('Data')
-
-        try:
-            # Get data
-            Data = json.loads(Data_json)
-            # Calculate the plot
-            label_converter = DataMapperHome.Label_conversion_info(Data)
-            # Create the context
-            context = {
-                'Label_converter': json.dumps(label_converter),
-                'heatmap_data': json.dumps(Data)
-                }
-            # Return context
-            return self.render_to_response(context)
-
-        except json.JSONDecodeError:
-            return HttpResponse("Invalid JSON data")
-
 
 class MapperLandingPageView(TemplateView):
     template_name = 'mapper/Mapper_landingPage.html'
@@ -2012,7 +1930,7 @@ class MapperTreeView(TemplateView):
         context['Entrez_dict'] = json.dumps(genes if genes else {})
         context['PlotType'] = 'Numeric'
         context['Data'] = json.dumps({})
-        maps = DataMapperHome.build_gpcrome_receptor_normalization_maps()
+        maps = DataMapperHome.build_gpcrome_receptor_normalization_maps(include_odorant=True)
         context['receptor_select2_json'] = json.dumps(
             DataMapperHome.gpcrome_receptor_select2_options(maps=maps)
         )
@@ -2030,7 +1948,7 @@ class MapperHeatmapView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        maps = DataMapperHome.build_gpcrome_receptor_normalization_maps()
+        maps = DataMapperHome.build_gpcrome_receptor_normalization_maps(include_odorant=True)
         context['receptor_select2_json'] = json.dumps(
             DataMapperHome.gpcrome_receptor_select2_options(maps=maps)
         )
@@ -2048,7 +1966,7 @@ class MapperListView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        maps = DataMapperHome.build_gpcrome_receptor_normalization_maps()
+        maps = DataMapperHome.build_gpcrome_receptor_normalization_maps(include_odorant=True)
         context['receptor_select2_json'] = json.dumps(
             DataMapperHome.gpcrome_receptor_select2_options(maps=maps)
         )
@@ -2061,5 +1979,25 @@ class MapperListView(TemplateView):
         context['receptor_info_json'] = json.dumps(
             DataMapperHome.gpcrome_receptor_info_for_list(maps=maps)
         )
+        return context
+
+
+class MapperClusterView(TemplateView):
+    template_name = 'mapper/Mapper_Cluster.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        maps = DataMapperHome.build_gpcrome_receptor_normalization_maps(include_odorant=True)
+        context['receptor_select2_json'] = json.dumps(
+            DataMapperHome.gpcrome_receptor_select2_options(maps=maps)
+        )
+        context['gpcrome_resolve_json'] = json.dumps(
+            DataMapperHome.gpcrome_receptor_client_resolve_map(maps=maps)
+        )
+        context['gpcrome_picker_rows_json'] = json.dumps(
+            DataMapperHome.gpcrome_receptor_picker_table_rows(maps=maps)
+        )
+        full_matrix = DataMapperHome.generate_full_matrix('tsne')
+        context['cluster_all_positions_json'] = full_matrix.to_json(orient='records')
         return context
 

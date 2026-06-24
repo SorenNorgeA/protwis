@@ -11,6 +11,9 @@
 
   var ORIG_SKEL = null;
   var ORIG_OPTS = null;
+  var skipLigandtypeLevel = false;
+  var skipClassLevel = false;
+  var classLevelAutoOff = false; // true when class was hidden automatically (single class)
 
   var ServerReceptorDict = {};
   var ServerGeneDict = {};
@@ -127,6 +130,57 @@
       };
     }
     return { tree: md, opts: o };
+  }
+
+  function mapperTreeStripLigandtypeLevel(skel) {
+    if (!skel || !skel.children) { return skel; }
+    var stripped = deepClone(skel);
+    stripped.children = (skel.children || []).map(function (classNode) {
+      var newClass = deepClone(classNode);
+      var hoisted = [];
+      (classNode.children || []).forEach(function (ltNode) {
+        (ltNode.children || []).forEach(function (familyNode) {
+          hoisted.push(deepClone(familyNode));
+        });
+      });
+      newClass.children = hoisted;
+      return newClass;
+    });
+    return stripped;
+  }
+
+  function mapperTreeStripClassLevel(skel) {
+    // Root → Class → Chemotype → RF → Leaf  becomes  Root → Chemotype → RF → Leaf
+    if (!skel || !skel.children) { return skel; }
+    var stripped = deepClone(skel);
+    var hoisted = [];
+    (skel.children || []).forEach(function (classNode) {
+      (classNode.children || []).forEach(function (chemotypeNode) {
+        var n = deepClone(chemotypeNode);
+        n._classNodeName = classNode.name; // preserve for class-color lookup
+        hoisted.push(n);
+      });
+    });
+    stripped.children = hoisted;
+    return stripped;
+  }
+
+  function mapperTreeStripBothLevels(skel) {
+    // Root → Class → Chemotype → RF → Leaf  becomes  Root → RF → Leaf
+    if (!skel || !skel.children) { return skel; }
+    var stripped = deepClone(skel);
+    var hoisted = [];
+    (skel.children || []).forEach(function (classNode) {
+      (classNode.children || []).forEach(function (chemotypeNode) {
+        (chemotypeNode.children || []).forEach(function (rfNode) {
+          var n = deepClone(rfNode);
+          n._classNodeName = classNode.name; // preserve for class-color lookup
+          hoisted.push(n);
+        });
+      });
+    });
+    stripped.children = hoisted;
+    return stripped;
   }
 
   function mapperStemFromEntry(entryId) {
@@ -623,6 +677,37 @@
 
     var filteredSk = mapperTreeFilterSkeleton(ORIG_SKEL, namesPayload);
 
+    // Auto-manage class level: hide when only 1 class present, restore when 2+ appear
+    var rawClassCount = (filteredSk && filteredSk.children) ? filteredSk.children.length : 0;
+    if (rawClassCount >= 1) {
+      if (rawClassCount <= 1 && !skipClassLevel) {
+        skipClassLevel = true;
+        classLevelAutoOff = true;
+        mapperTreeUpdateSliderStates();
+      } else if (rawClassCount > 1 && classLevelAutoOff && skipClassLevel) {
+        skipClassLevel = false;
+        classLevelAutoOff = false;
+        mapperTreeUpdateSliderStates();
+      }
+    }
+
+    if (skipClassLevel) {
+      // Single-class view: keep chemotype only if the sole class is Class A (uniform leaf depth).
+      // Non-Class-A single-class: strip both levels so all leaves land at uniform depth.
+      var singleClassName = (filteredSk.children && filteredSk.children[0] && filteredSk.children[0].name) || '';
+      if (singleClassName.indexOf('Class A') !== -1) {
+        skipLigandtypeLevel = false;
+        filteredSk = mapperTreeStripClassLevel(filteredSk);
+      } else {
+        filteredSk = mapperTreeStripBothLevels(filteredSk);
+        skipLigandtypeLevel = true;
+      }
+    } else {
+      // Multi-class view: strip all chemotype so all leaves land at a uniform depth.
+      filteredSk = mapperTreeStripLigandtypeLevel(filteredSk);
+      skipLigandtypeLevel = true;
+    }
+
     var labelDdVal = mapperTreeActiveLeafDropdownVal();
     mapperTreeSyncLeafLabelUi(labelDdVal);
 
@@ -646,14 +731,6 @@
 
     var fontMerge = mergedFontSizesFromDom();
     mapperTreeSyncCircleSizingFromUi();
-    if (window.console && typeof window.console.log === 'function') {
-      window.console.log('[MapperTree] leaf gap inputs', {
-        radialLeafLabelGapBase: MAPPER_TREE_RADIAL_LEAF_LABEL_GAP_BASE,
-        stylingCircleSize: styling_circles.circle_size,
-        computedRadialLeafLabelGap: mapperTreeRadialLeafLabelGap(),
-        stylingCircleSpacer: styling_circles.circle_spacer
-      });
-    }
     var baseOptsIn = $.extend(deepClone(ORIG_OPTS), {
       fontSize: fontMerge,
       fontFamily: ORIG_OPTS.fontFamily || 'Palatino',
@@ -664,7 +741,50 @@
           : 2
     });
 
+    var wouldPromote = !!(filteredSk && filteredSk.children && filteredSk.children.length === 1);
     var promLocal = mapperTreeMaybePromoteRoot(deepClone(filteredSk), baseOptsIn);
+
+    if (skipClassLevel || skipLigandtypeLevel) {
+      var classPresent = !skipClassLevel;
+      var chemotypePresent = !skipLigandtypeLevel;
+      var newDepth, fontMap, newBL;
+
+      if (!wouldPromote) {
+        if (classPresent && !chemotypePresent) {
+          // Root → Class → RF → Leaf
+          newDepth = 3;
+          fontMap = { 1: 'class', 2: 'receptorfamily' };
+          newBL = { 1: (ORIG_OPTS.branch_length && ORIG_OPTS.branch_length[1]) || 'Class', 2: 'Receptor family', 3: '' };
+        } else if (!classPresent && chemotypePresent) {
+          // Root → Chemotype → RF → Leaf
+          newDepth = 3;
+          fontMap = { 1: 'ligandtype', 2: 'receptorfamily' };
+          newBL = { 1: 'Chemotype', 2: 'Receptor family', 3: '' };
+        } else {
+          // Root → RF → Leaf (both stripped)
+          newDepth = 2;
+          fontMap = { 1: 'receptorfamily' };
+          newBL = { 1: 'Receptor family', 2: '' };
+        }
+      } else {
+        if (!classPresent && !chemotypePresent) {
+          // RF → Leaf (both stripped, single RF promoted)
+          newDepth = 1;
+          fontMap = {};
+          newBL = { 1: '' };
+        } else {
+          // Any other promoted case: RF at depth 1
+          newDepth = 2;
+          fontMap = { 1: 'receptorfamily' };
+          newBL = { 1: 'Receptor family', 2: '' };
+        }
+      }
+
+      promLocal.opts.depth = newDepth;
+      promLocal.opts.fontSize_depth_map = fontMap;
+      promLocal.opts.branch_length = newBL;
+    }
+
     var td = deepClone(promLocal.tree);
     window.tree_options_draw = window.mapperClassificationRedraw(td, deepClone(promLocal.opts), window.TREE_UI.layout);
 
@@ -804,7 +924,7 @@
     $tbl.find('.mapper-tree-o1,.mapper-tree-o2,.mapper-tree-o3,.mapper-tree-o4').prop('disabled', text);
 
     // Swap inner column header label
-    $('.mapper-tree-inner-header-label').text(text ? 'Category' : 'Inner');
+    $('.mapper-tree-inner-header-label').text(text ? 'Category' : 'Dot 1');
 
     // Show/hide Colors and Labels dropdown panels
     $('#mapper-tree-colors-numeric, #mapper-tree-labels-numeric').toggle(!text);
@@ -827,6 +947,7 @@
 
     mapperTreeRefreshInnerSwatches();
     mapperTreeScheduleRedraw();
+    if (typeof mapperTreeSyncClearDropdown === 'function') { mapperTreeSyncClearDropdown(); }
   }
 
   function mapperTreeSyncInnerHints() {
@@ -1191,29 +1312,49 @@
     mapperTreeScheduleRedraw();
   }
 
+  /** Returns the label-type-appropriate seed text for a resolved receptor's edit field. */
+  function mapperTreeEditSeed(entryId) {
+    var sid = entryId != null ? String(entryId).trim() : '';
+    var meta = (window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[sid]) || {};
+    var ltype = mapperTreeActiveLeafDropdownVal();
+    if (ltype === 'Gene' && meta.gene) { return meta.gene; }
+    if (ltype === 'UniProt' && meta.uniprot) { return meta.uniprot; }
+    return meta.name_plain || '';
+  }
+
   function mapperTreeFilterLocal(term, limit) {
     var t = (term || '').trim().toUpperCase();
     if (!t || !window.receptorSelect2Data) {
       return [];
     }
-    var filtered = window.receptorSelect2Data.filter(function (item) {
-      var st = (item.search_text || item.text || '').toUpperCase();
-      return st.indexOf(t) !== -1 || (item.id && String(item.id).toUpperCase().indexOf(t) !== -1);
-    });
-    var lim = limit || 80;
-    if (filtered.length > lim) {
-      filtered = filtered.slice(0, lim);
-    }
-    return filtered.map(function (item) {
-      return {
-        label: item.name_plain || item.text || item.id,
+    var ltype = mapperTreeActiveLeafDropdownVal();
+    var meta = window.MAPPER20_ENTRY_META || {};
+    var results = [];
+    window.receptorSelect2Data.forEach(function (item) {
+      var m = meta[item.id] || {};
+      // Always search across all name forms so any alias finds the receptor
+      var searchIn = [(m.name_plain || item.name_plain || item.text || ''), (m.gene || ''), (m.uniprot || ''), item.id].join(' ').toUpperCase();
+      if (searchIn.indexOf(t) === -1) { return; }
+      var dispHtml;
+      if (ltype === 'Gene' && m.gene) {
+        dispHtml = $('<span/>').text(m.gene).html();
+      } else if (ltype === 'UniProt' && m.uniprot) {
+        dispHtml = $('<span/>').text(m.uniprot).html();
+      } else {
+        dispHtml = m.name_html || item.name_html || $('<span/>').text(m.name_plain || item.text || item.id).html();
+      }
+      results.push({
+        label: m.name_plain || item.name_plain || item.text || item.id,
         value: item.id,
         id: item.id,
-        text: item.text,
+        html: dispHtml,
         name_html: item.name_html || '',
         name_plain: item.name_plain || ''
-      };
+      });
     });
+    var lim = limit || 80;
+    if (results.length > lim) { results = results.slice(0, lim); }
+    return results;
   }
 
   function mapperTreeBindAc($inp) {
@@ -1234,11 +1375,7 @@
     var w = $inp.data('ui-autocomplete');
     if (w) {
       w._renderItem = function (ul, item) {
-        var inner =
-          item.name_html ||
-          $('<span/>')
-            .text(item.label || '')
-            .html();
+        var inner = item.html || item.name_html || $('<span/>').text(item.label || '').html();
         return $('<li>')
           .append($('<div class="mapper20-ac-item-label">').html(inner))
           .appendTo(ul);
@@ -1656,6 +1793,39 @@
       mapperTreeApplyDemoColorPresets();
     }
     mapperTreeRedrawNow();
+
+    // Seed opposite mode snapshot with demo values so switching modes keeps the data
+    mapperTreeCaptureSnapshot();
+    var oppMode = textMode ? 'numeric' : 'categorical';
+    if (!MAPPER20_MODE_SNAPSHOTS_TREE[oppMode]) {
+      var entryToDemo = {};
+      MAPPER_TREE_DEMO_ROWS.forEach(function (r) {
+        var entry = window.MAPPER20_RESOLVE && window.MAPPER20_RESOLVE[r.receptor.toUpperCase()];
+        if (entry) entryToDemo[entry] = r;
+      });
+      var curSnap = MAPPER20_MODE_SNAPSHOTS_TREE[textMode ? 'categorical' : 'numeric'];
+      if (curSnap && curSnap.rows) {
+        var seedRows = curSnap.rows.map(function (r) {
+          var dr = r.entry && entryToDemo[r.entry];
+          if (!dr) return { entry: r.entry, receptorText: r.receptorText, unmatched: r.unmatched, invalid: r.invalid, inner: '', o1: '', o2: '', o3: '', o4: '' };
+          if (oppMode === 'categorical') {
+            return { entry: r.entry, receptorText: r.receptorText, unmatched: r.unmatched, invalid: r.invalid, inner: dr.text || '', o1: '', o2: '', o3: '', o4: '' };
+          }
+          var vals = dr.numeric || [];
+          return { entry: r.entry, receptorText: r.receptorText, unmatched: r.unmatched, invalid: r.invalid,
+                   inner: vals[0] != null ? String(vals[0]) : '',
+                   o1:    vals[1] != null ? String(vals[1]) : '',
+                   o2:    vals[2] != null ? String(vals[2]) : '',
+                   o3:    vals[3] != null ? String(vals[3]) : '',
+                   o4:    vals[4] != null ? String(vals[4]) : '' };
+        });
+        if (oppMode === 'categorical') {
+          MAPPER20_MODE_SNAPSHOTS_TREE.categorical = { rows: seedRows, labelColors: {} };
+        } else {
+          MAPPER20_MODE_SNAPSHOTS_TREE.numeric = { rows: seedRows };
+        }
+      }
+    }
   }
 
   function mapperTreeApplyDemoColorPresets() {
@@ -1802,7 +1972,14 @@
     $('#mapper-tree-colors-no-data').toggle(!anyVisible);
   }
 
+  function mapperTreeUpdateSliderStates() {
+    var $cg = $('#classFontSizeSlider').closest('.form-group');
+    $cg.css('opacity', skipClassLevel ? '0.4' : '');
+    $('#classFontSizeSlider').prop('disabled', !!skipClassLevel);
+  }
+
   function mapperBoot() {
+    $('.mapper20-booting').removeClass('mapper20-booting');
     var boot = window.MAPPER_TREE_BOOT || {};
     ORIG_SKEL = boot.tree_skeleton;
     if (typeof ORIG_SKEL === 'string') {
@@ -1849,12 +2026,12 @@
     };
 
     Label_dict = {
-      Inner: 'Inner',
-      Outer1: 'Outer 1',
-      Outer2: 'Outer 2',
-      Outer3: 'Outer 3',
-      Outer4: 'Outer 4',
-      Outer5: 'Outer 5'
+      Inner: 'Dot 1',
+      Outer1: 'Dot 2',
+      Outer2: 'Dot 3',
+      Outer3: 'Dot 4',
+      Outer4: 'Dot 5',
+      Outer5: 'Dot 5'
     };
 
     window.mapperTreeNumericDatatypes = {
@@ -1952,6 +2129,11 @@
       });
     $('#toggleLegendPosition').text(TreeLegendPosition || 'Top');
 
+    skipClassLevel = false;
+    skipLigandtypeLevel = false;
+    classLevelAutoOff = false;
+    mapperTreeUpdateSliderStates();
+
     $('#mapper-tree-circle-size-slider')
       .off('input.mapperTree')
       .on('input.mapperTree', function () {
@@ -1991,19 +2173,51 @@
       }
     );
 
-    $('#mapper-tree-clear-rows')
-      .off('click.mapperTree')
-      .on('click.mapperTree', function () {
-        var $clearButton = $(this);
-        mapperTreeDestroyAllRows();
-        $('#mapper-tree-input-tbody').empty();
-        $('#mapper-tree-messages').empty();
-        mapperTreeAppendRow();
-        mapperTreeCompactReceptorRowsAfterInput();
-        mapperTreeSyncFirstRowPlaceholder();
-        $clearButton.addClass('mapper20-clear-clean').blur();
-        mapperTreeRedrawNow();
+    function mapperTreeDoWholeTableClear() {
+      mapperTreeDestroyAllRows();
+      $('#mapper-tree-input-tbody').empty();
+      $('#mapper-tree-messages').empty();
+      MAPPER20_MODE_SNAPSHOTS_TREE.numeric = null;
+      MAPPER20_MODE_SNAPSHOTS_TREE.categorical = null;
+      mapperTreeAppendRow();
+      mapperTreeCompactReceptorRowsAfterInput();
+      mapperTreeSyncFirstRowPlaceholder();
+      mapperTreeRedrawNow();
+      $('#mapper-tree-clear-rows').addClass('mapper20-clear-clean').blur();
+    }
+    function mapperTreeDoCurrentModeClear() {
+      var curKey = mapperTreeIsTextMode() ? 'categorical' : 'numeric';
+      mapperTreeDestroyAllRows();
+      $('#mapper-tree-input-tbody').empty();
+      $('#mapper-tree-messages').empty();
+      MAPPER20_MODE_SNAPSHOTS_TREE[curKey] = null;
+      mapperTreeAppendRow();
+      mapperTreeCompactReceptorRowsAfterInput();
+      mapperTreeSyncFirstRowPlaceholder();
+      mapperTreeRedrawNow();
+      $('#mapper-tree-clear-rows').addClass('mapper20-clear-clean').blur();
+    }
+    function mapperTreeSyncClearDropdown() {
+      var isText = mapperTreeIsTextMode();
+      $('#mapper-tree-clear-mode-label').text(isText ? 'Categories' : 'Numbers');
+      $('.mapper-tree-clear-col-num').toggle(!isText);
+      $('.mapper-tree-clear-col-text').toggle(isText);
+    }
+    $('#mapper-tree-clear-whole').off('click.mapperTree').on('click.mapperTree', function(e) {
+      e.preventDefault(); mapperTreeDoWholeTableClear();
+    });
+    $('#mapper-tree-clear-mode').off('click.mapperTree').on('click.mapperTree', function(e) {
+      e.preventDefault(); mapperTreeDoCurrentModeClear();
+    });
+    $('.mapper20-clear-menu').on('click.mapperTree', '[data-tree-col]', function(e) {
+      e.preventDefault();
+      var col = $(this).data('tree-col');
+      $('#mapper-tree-input-tbody tr').each(function() {
+        $(this).find('.mapper-tree-' + col).val('').trigger('input');
       });
+      $('#mapper-tree-clear-rows').removeClass('mapper20-clear-clean');
+      mapperTreeScheduleRedraw();
+    });
 
     $('#mapper-tree-mode-numeric-btn')
       .off('click.mapperTree')
@@ -2191,18 +2405,25 @@
           var $inp2 = $(
             '<textarea class="form-control input-sm mapper20-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>'
           );
-          var metaEv = hidEv && window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[hidEv];
-          $inp2.val((metaEv && metaEv.name_plain) || '');
+          var seedEv = mapperTreeEditSeed(hidEv);
+          $inp2.val(seedEv);
+          if (!seedEv) { $trEv.find('.mapper20-receptor-input-wrap').addClass('is-empty'); }
           $trEv.find('.mapper20-receptor-input-wrap .mapper20-in-receptor').remove();
           $trEv.find('.mapper20-receptor-input-wrap').prepend($inp2);
           $trEv.find('.mapper20-receptor-entry').val('');
           mapperTreeBindAc($inp2);
           $inp2.show().focus();
+          window.setTimeout(function () {
+            var t = ($inp2.val() || '').trim();
+            if (t.length >= 1 && $inp2.data('ui-autocomplete')) { $inp2.autocomplete('search', t); }
+          }, 0);
           mapperTreeSyncClearBtn($trEv);
           mapperTreeSyncRemoveButtons();
           mapperTreeCompactReceptorRowsAfterInput();
         }
       );
+
+    mapperTreeSyncClearDropdown();
   }
 
   if (typeof window.mapper20ResolveEntry !== 'function' && window.MAPPER20_RESOLVE) {

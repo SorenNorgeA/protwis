@@ -52,9 +52,9 @@
                        skip_gradient_bars: true }; // use createListLegendBars instead
 
   var Styling_Option_dict = {
-    Class:          { Bold: true,  Italic: false, Underline: false, Fontsize: '20px', Color: '#000' },
+    Class:          { Bold: true,  Italic: false, Underline: true,  Fontsize: '20px', Color: '#000' },
     LigandType:     { Bold: false, Italic: false, Underline: false, Fontsize: '18px', Color: '#000' },
-    ReceptorFamily: { Bold: false, Italic: false, Underline: false, Fontsize: '16px', Color: '#000' },
+    ReceptorFamily: { Bold: false, Italic: true,  Underline: false, Fontsize: '16px', Color: '#000' },
     Receptor:       { Bold: false, Italic: false, Underline: false, Fontsize: '14px', Color: '#000' }
   };
 
@@ -66,7 +66,7 @@
     Col4: { style: 'One', color1: '#ffffff', colorMid: '#ffffff', color2: '#008000' }
   };
 
-  var Barlabels = { Col1: 'Value 1', Col2: 'Value 2', Col3: 'Value 3', Col4: 'Value 4' };
+  var Barlabels = { Col1: 'Dot 1', Col2: 'Dot 2', Col3: 'Dot 3', Col4: 'Dot 4' };
 
   var ShowLegend = true;
   var Textlegend_styling = {
@@ -256,13 +256,9 @@
   // ── Render ───────────────────────────────────────────────────────────────────
   function mapperListRedrawNow() {
     var built = mapperListBuildData();
-    console.log('[ListMapper] redraw — listdata keys:', Object.keys(built.listdata).length,
-                'list_data_wow keys:', Object.keys(built.list_data_wow).length,
-                'mode:', window.mapperListInputMode);
 
     if (!Object.keys(built.listdata).length) {
       mapperListShowPlaceholder();
-      console.log('[ListMapper] no data — showing placeholder');
       return;
     }
 
@@ -270,9 +266,7 @@
     var modded;
     try {
       modded = Initialize_Data(built.listdata);
-      console.log('[ListMapper] Initialize_Data OK, top-level keys:', Object.keys(modded));
     } catch (e) {
-      console.error('[ListMapper] Initialize_Data FAILED:', e);
       mapperListShowPlaceholder(); return;
     }
 
@@ -283,8 +277,7 @@
 
     try {
       Data_styling = initializeDataStyling(built.list_data_wow, dt);
-      console.log('[ListMapper] Data_styling Col1:', Data_styling.Col1);
-    } catch (e) { console.error('[ListMapper] initializeDataStyling FAILED:', e); }
+    } catch (e) {}
     mapperListApplyColorConfig();
 
     // Expose as globals — datamapper.js reads Data_styling and list_data_wow directly
@@ -295,16 +288,12 @@
     var result;
     try {
       result = Data_resorter(modded);
-      console.log('[ListMapper] Data_resorter OK — final_array length:', result.final_array.length,
-                  'sample:', result.final_array.slice(0, 3));
     } catch (e) {
-      console.error('[ListMapper] Data_resorter FAILED:', e);
       mapperListShowPlaceholder(); return;
     }
     var Data_array          = result.final_array;
     var Data_category_array = result.category_array;
     if (!Data_array || !Data_array.length) {
-      console.log('[ListMapper] empty final_array — showing placeholder');
       mapperListShowPlaceholder(); return;
     }
 
@@ -314,7 +303,6 @@
       ? Math.ceil(Data_array.length / cols)
       : (Layout_dict.Col_break_number || Math.ceil(Data_array.length / cols));
     Layout_dict.Col_break_number = breakN;
-    console.log('[ListMapper] layout cols:', cols, 'breakN:', breakN);
 
     // Clear placeholder and any existing SVG before rendering
     $('#mapper-list-plot').empty();
@@ -325,10 +313,7 @@
         Data_array, Data_category_array, 'mapper-list-plot',
         Styling_Option_dict, Layout_dict, LabelConversionDicts, LabelNames
       );
-      console.log('[ListMapper] RenderListPlot_Labels OK — SVG present:',
-                  !!document.querySelector('#mapper-list-plot svg'));
     } catch (e) {
-      console.error('[ListMapper] RenderListPlot_Labels FAILED:', e);
       mapperListShowPlaceholder(); return;
     }
 
@@ -339,9 +324,7 @@
         Data_array, Data_category_array, breakN, cols,
         LabelConversionDicts, LabelNames, Styling_Option_dict
       );
-      console.log('[ListMapper] Calculate_dimension OK — spacing keys:', Object.keys(spacing));
     } catch (e) {
-      console.error('[ListMapper] Calculate_dimension FAILED:', e);
       spacing = {};
     }
 
@@ -351,10 +334,7 @@
         Data_array, Data_category_array, 'mapper-list-plot',
         Layout_dict, Data_styling, spacing, 30, 6, 14, Barlabels
       );
-      console.log('[ListMapper] data_visualization OK');
-    } catch (e) {
-      console.error('[ListMapper] data_visualization FAILED:', e);
-    }
+    } catch (e) {}
 
     // Gradient legend bars (numerical) — uses tree-style createListLegendBars
     if (!mapperListIsTextMode() && typeof createListLegendBars === 'function') {
@@ -368,18 +348,14 @@
           Layout_dict.legend_position || 'Top',
           Layout_dict.legend_top_space
         );
-        console.log('[ListMapper] createListLegendBars OK');
-      } catch (e) {
-        console.error('[ListMapper] createListLegendBars FAILED:', e);
-      }
+      } catch (e) {}
     }
 
     // Categorical legend
     if (mapperListIsTextMode() && ShowLegend) {
       try {
         CreateTextLegend_list('mapper-list-plot', built.list_data_wow, Textlegend_styling);
-        console.log('[ListMapper] CreateTextLegend_list OK');
-      } catch (e) { console.error('[ListMapper] CreateTextLegend_list FAILED:', e); }
+      } catch (e) {}
     }
 
     mapperListSyncColorDataRows();
@@ -497,6 +473,7 @@
     mapperListSyncColorsPanel();
     mapperListSyncFirstRowPlaceholder();
     mapperListScheduleRedraw();
+    if (typeof mapperListSyncClearDropdown === 'function') { mapperListSyncClearDropdown(); }
   }
 
   // ── Category cell orange hints ────────────────────────────────────────────────
@@ -1134,14 +1111,12 @@
       } else {
         $tr.find('.mapper20-in-receptor').val(r.receptor);
       }
-      if (!text) {
-        $tr.find('.mapper-list-val1').val(r.vals[0]);
-        $tr.find('.mapper-list-val2').val(r.vals[1]);
-        $tr.find('.mapper-list-val3').val(r.vals[2]);
-        $tr.find('.mapper-list-val4').val(r.vals[3]);
-      } else {
-        $tr.find('.mapper-list-cat').val(r.text);
-      }
+      // Always fill both so switching modes keeps the data
+      $tr.find('.mapper-list-val1').val(r.vals[0]);
+      $tr.find('.mapper-list-val2').val(r.vals[1]);
+      $tr.find('.mapper-list-val3').val(r.vals[2]);
+      $tr.find('.mapper-list-val4').val(r.vals[3]);
+      $tr.find('.mapper-list-cat').val(r.text);
     });
     suppressRedraw = false;
     $('#mapper-list-clear-rows').removeClass('mapper20-clear-clean');
@@ -1164,6 +1139,7 @@
 
   // ── Boot ──────────────────────────────────────────────────────────────────────
   function mapperListBoot() {
+    $('.mapper20-booting').removeClass('mapper20-booting');
     // Load receptor info from Django context
     ReceptorInfo = window.MAPPER_LIST_RECEPTOR_INFO || {};
     mapperListBuildLabelConversion();
@@ -1230,14 +1206,48 @@
     $('#mapper-list-demo-rows').on('click.mapperList', function () { mapperListFillDemo(); });
 
     // Clear
-    $('#mapper-list-clear-rows').on('click.mapperList', function () {
+    function mapperListDoWholeTableClear() {
       mapperListDestroyAllRows();
       $('#mapper-list-input-tbody').empty();
+      MAPPER_LIST_MODE_SNAPSHOTS.numeric = null;
+      MAPPER_LIST_MODE_SNAPSHOTS.categorical = null;
       mapperListAppendRow();
       mapperListCompactReceptors();
       mapperListSyncFirstRowPlaceholder();
-      $(this).addClass('mapper20-clear-clean').blur();
+      $('#mapper-list-clear-rows').addClass('mapper20-clear-clean').blur();
       mapperListRedrawNow();
+    }
+    function mapperListDoCurrentModeClear() {
+      var curKey = mapperListIsTextMode() ? 'categorical' : 'numeric';
+      mapperListDestroyAllRows();
+      $('#mapper-list-input-tbody').empty();
+      MAPPER_LIST_MODE_SNAPSHOTS[curKey] = null;
+      mapperListAppendRow();
+      mapperListCompactReceptors();
+      mapperListSyncFirstRowPlaceholder();
+      $('#mapper-list-clear-rows').addClass('mapper20-clear-clean').blur();
+      mapperListRedrawNow();
+    }
+    function mapperListSyncClearDropdown() {
+      var isText = mapperListIsTextMode();
+      $('#mapper-list-clear-mode-label').text(isText ? 'Categories' : 'Numbers');
+      $('.mapper-list-clear-col-num').toggle(!isText);
+      $('.mapper-list-clear-col-text').toggle(isText);
+    }
+    $('#mapper-list-clear-whole').on('click.mapperList', function(e) {
+      e.preventDefault(); mapperListDoWholeTableClear();
+    });
+    $('#mapper-list-clear-mode').on('click.mapperList', function(e) {
+      e.preventDefault(); mapperListDoCurrentModeClear();
+    });
+    $('.mapper20-clear-menu').on('click.mapperList', '[data-list-col]', function(e) {
+      e.preventDefault();
+      var col = $(this).data('list-col');
+      $('#mapper-list-input-tbody tr').each(function() {
+        $(this).find('.mapper-list-' + col).val('').trigger('input');
+      });
+      $('#mapper-list-clear-rows').removeClass('mapper20-clear-clean');
+      mapperListScheduleRedraw();
     });
 
     // Remove row
@@ -1249,6 +1259,30 @@
       mapperListEnsureTrailingBlankRow(); mapperListRefreshSwatches();
       mapperListCompactReceptors(); mapperListScheduleRedraw();
     });
+
+    // Click resolved chip to re-enter edit mode
+    $(document)
+      .off('click.mapperListHtmlEdit', '#mapper-list-input-tbody .mapper20-receptor-html-view')
+      .on('click.mapperListHtmlEdit', '#mapper-list-input-tbody .mapper20-receptor-html-view', function () {
+        var $tr    = $(this).closest('tr');
+        var $oldTa = $tr.find('.mapper20-in-receptor');
+        mapperListDestroyAc($oldTa);
+        var hid    = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+        $(this).hide().empty();
+        var $inp2  = $('<textarea class="form-control input-sm mapper20-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>');
+        var meta   = hid && window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[hid];
+        $inp2.val((meta && meta.name_plain) || '');
+        $tr.find('.mapper20-receptor-input-wrap .mapper20-in-receptor').remove();
+        $tr.find('.mapper20-receptor-input-wrap').prepend($inp2).addClass('is-empty');
+        $tr.find('.mapper20-receptor-entry').val('');
+        mapperListBindAc($inp2);
+        $inp2.show().focus();
+        mapperListSyncClearBtn($tr);
+        mapperListSyncRemoveButtons();
+        mapperListCompactReceptors();
+        mapperListEnsureTrailingBlankRow();
+        mapperListScheduleRedraw();
+      });
 
     // Sort headers
     $('#mapper-list-input-table').on('click.mapperListSort', 'th.mapper20-sortable-head', function () {
@@ -1359,6 +1393,7 @@
     }
 
     mapperListShowPlaceholder();
+    mapperListSyncClearDropdown();
   }
 
   // ── Entry point ───────────────────────────────────────────────────────────────

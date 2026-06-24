@@ -8,6 +8,11 @@
 <link rel="stylesheet" href="{% static 'home/css/select2_4.1.0-rc.0._full.css' %}" type="text/css">
 <link rel="stylesheet" href="{% static 'home/css/NewDrugsBrowser_datatables.min.css' %}" type="text/css" />
 <style>
+/* Clear table dropdown */
+.mapper20-clear-menu { min-width: 180px; }
+.mapper20-clear-menu > li > a { padding: 4px 16px; }
+.mapper20-clear-menu > li > a:hover { background-color: #fdecea; color: #a94442; }
+.mapper20-clear-menu > li:first-child > a:hover { background-color: #a94442 !important; color: #fff !important; }
 /* ── Layout ─────────────────────────────────────────────────────────── */
 .mapper20-wheel-wrap { margin-bottom: 24px; }
 .mapper20-wheel-wrap.row { display: flex; flex-wrap: wrap; align-items: flex-start; }
@@ -65,8 +70,8 @@
   color: #fff; background-color: #337ab7; border-color: #2e6da4; outline: none;
 }
 /* ── Input data label + static Numerical badge ─────────────────────── */
-.mapper20-input-mode-wrap { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; }
-.mapper20-input-mode-label { font-size: 9px; font-weight: 600; color: #555; letter-spacing: 0.04em; text-transform: uppercase; line-height: 1; user-select: none; }
+.mapper20-input-mode-wrap { display: inline-flex; flex-direction: row; align-items: center; gap: 5px; }
+.mapper20-input-mode-label { font-size: 13px; font-weight: 600; color: #555; line-height: 1; user-select: none; white-space: nowrap; }
 /* ── Left panel overrides ───────────────────────────────────────────── */
 .mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-primary-col { flex: 0 0 auto; min-width: 0; }
 .mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-plot-col { flex: 1 1 0; min-width: 0; }
@@ -166,10 +171,13 @@
 #mapper-heatmap-messages { margin-top: 8px; font-size: 10px; max-height: 160px; overflow: auto; color: #a94442; }
 #mapper-heatmap-messages:empty { display: none; }
 /* Picker modal */
-#mapper20-gpcrome-picker-modal .modal-dialog { width: 95%; max-width: 1200px; }
+#mapper20-gpcrome-picker-modal { padding-top: 30px !important; }
+#mapper20-gpcrome-picker-modal .modal-dialog { width: 95%; max-width: 1200px; margin: 0 auto; }
 #mapper20-gpcrome-picker-modal table.dataTable { font-size: 12px; }
 #mapper20-gpcrome-picker-modal .select2-container--open .select2-dropdown { z-index: 2060 !important; }
 #mapper20-gpcrome-picker-modal #mapper20-picker-filter-row th { padding: 3px 2px; }
+#mapper20-gpcrome-picker-modal .modal-content { display: flex; flex-direction: column; max-height: calc(100vh - 20px); }
+#mapper20-gpcrome-picker-modal .modal-body { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
 .mapper20-picker-gpcrdb-label { white-space: nowrap; }
 /* Right panel */
 .mapper20-plot-panel { background: transparent; border-radius: 12px; padding: 8px 8px 16px; border: none; max-width: 100%; box-sizing: border-box; }
@@ -191,35 +199,49 @@
 .mapper-heatmap-color-picker-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .mapper-heatmap-color-label-row  { display: flex; gap: 8px; justify-content: flex-end; font-size: 11px; margin-bottom: 3px; }
 .mapper-heatmap-color-label-row div, .mapper-heatmap-color-picker-row > div { width: 72px; text-align: center; }
+/* Loading overlay */
+.mapper20-wheel-wrap .mapper20-wheel-left { position: relative; }
+.mapper20-boot-overlay {
+  display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 10; background: rgba(255,255,255,0.80); border-radius: 10px;
+  align-items: center; justify-content: center; font-size: 13px; color: #666;
+  pointer-events: all;
+}
+.mapper20-booting .mapper20-boot-overlay { display: flex; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="mapper20-wheel-wrap row mapper-heatmap-page">
+<div class="mapper20-wheel-wrap row mapper-heatmap-page mapper20-booting">
   <div class="col-xs-12 mapper20-wheel-primary-col">
     <div class="mapper20-wheel-left">
+      <div class="mapper20-boot-overlay">Loading…</div>
       <div class="mapper20-wheel-top-row">
         <h2 class="mapper20-wheel-page-title">Heatmap</h2>
       </div>
-      <div class="mapper20-wheel-toolbar-stack">
-        <div class="mapper20-wheel-toolbar-grid">
-          <div class="mapper20-wheel-toolbar" aria-label="Mapper heatmap tools primary" style="align-items:flex-end;">
-            <button type="button" class="btn btn-default btn-xs" id="mapper-heatmap-howto-btn"
-                    data-toggle="modal" data-target="#mapper-heatmap-howto-modal"
-                    title="How to use the heatmap mapper">
-              How to<span class="mapper20-howto-mark" aria-hidden="true">?</span>
+      <div class="mapper20-wheel-toolbar-stack" style="width:100%;">
+        <div class="mapper20-wheel-toolbar" aria-label="Mapper heatmap tools" style="justify-content:center;">
+          <button type="button" class="btn btn-default btn-xs" id="mapper-heatmap-howto-btn"
+                  data-toggle="modal" data-target="#mapper-heatmap-howto-modal"
+                  title="How to use the heatmap mapper">
+            How to<span class="mapper20-howto-mark" aria-hidden="true">?</span>
+          </button>
+          <button type="button" class="btn btn-default btn-xs" id="mapper-heatmap-demo-rows">Demo</button>
+          <button type="button" class="btn btn-primary btn-xs" id="mapper-heatmap-open-picker"
+                  data-toggle="modal" data-target="#mapper20-gpcrome-picker-modal">Receptor lookup</button>
+          <div class="dropdown" style="position:relative;">
+            <button type="button" class="btn btn-default btn-xs dropdown-toggle" data-toggle="dropdown" id="mapper-heatmap-clear-rows">
+              Clear <span class="caret"></span>
             </button>
-            <div class="mapper20-input-mode-wrap">
-              <span class="mapper20-input-mode-label">Input data</span>
-              <span class="btn btn-primary btn-xs active"
-                    style="cursor:default; pointer-events:none;">Numerical</span>
-            </div>
-            <button type="button" class="btn btn-default btn-xs" id="mapper-heatmap-demo-rows">Demo</button>
-          </div>
-          <div class="mapper20-wheel-toolbar" aria-label="Table actions">
-            <button type="button" class="btn btn-primary btn-xs" id="mapper-heatmap-open-picker"
-                    data-toggle="modal" data-target="#mapper20-gpcrome-picker-modal">Receptor lookup</button>
-            <button type="button" class="btn btn-default btn-xs" id="mapper-heatmap-clear-rows">Clear table</button>
+            <ul class="dropdown-menu mapper20-clear-menu">
+              <li><a href="#" id="mapper-heatmap-clear-whole">Whole table</a></li>
+              <li class="divider"></li>
+              <li><a href="#" data-heatmap-col="val1">Column 1</a></li>
+              <li><a href="#" data-heatmap-col="val2">Column 2</a></li>
+              <li><a href="#" data-heatmap-col="val3">Column 3</a></li>
+              <li><a href="#" data-heatmap-col="val4">Column 4</a></li>
+              <li><a href="#" data-heatmap-col="val5">Column 5</a></li>
+            </ul>
           </div>
         </div>
       </div>
@@ -229,11 +251,11 @@
             <tr>
               <th class="mapper20-th-remove" aria-label="Remove row"></th>
               <th class="mapper20-th-receptor mapper20-sortable-head" data-mapper-heatmap-sort-col="receptor" tabindex="0" role="button" aria-sort="none">Receptor <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
-              <th class="mapper-heatmap-val-h mapper20-sortable-head" data-mapper-heatmap-sort-col="val1" tabindex="0" role="button" aria-sort="none">V1 <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
-              <th class="mapper-heatmap-val-h" data-mapper-heatmap-sort-col="val2">V2</th>
-              <th class="mapper-heatmap-val-h" data-mapper-heatmap-sort-col="val3">V3</th>
-              <th class="mapper-heatmap-val-h" data-mapper-heatmap-sort-col="val4">V4</th>
-              <th class="mapper-heatmap-val-h" data-mapper-heatmap-sort-col="val5">V5</th>
+              <th class="mapper-heatmap-val-h mapper20-sortable-head" data-mapper-heatmap-sort-col="val1" tabindex="0" role="button" aria-sort="none">Col 1 <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
+              <th class="mapper-heatmap-val-h" data-mapper-heatmap-sort-col="val2">Col 2</th>
+              <th class="mapper-heatmap-val-h" data-mapper-heatmap-sort-col="val3">Col 3</th>
+              <th class="mapper-heatmap-val-h" data-mapper-heatmap-sort-col="val4">Col 4</th>
+              <th class="mapper-heatmap-val-h" data-mapper-heatmap-sort-col="val5">Col 5</th>
             </tr>
           </thead>
           <tbody id="mapper-heatmap-input-tbody"></tbody>
@@ -337,24 +359,24 @@
             <div style="font-weight:600; margin-bottom:8px; border-bottom:1px solid #ddd; padding-bottom:5px;">Dataset label text</div>
             <div style="display:flex; flex-direction:column; gap:5px;">
               <div style="display:flex; align-items:center; gap:8px;">
-                <label style="width:24px; margin:0; flex-shrink:0;">V1</label>
-                <input type="text" id="mapper-heatmap-lbl-V1" class="form-control input-sm" maxlength="22" value="Value 1">
+                <label style="width:30px; margin:0; flex-shrink:0;">Col 1</label>
+                <input type="text" id="mapper-heatmap-lbl-V1" class="form-control input-sm" maxlength="22" value="Column 1">
               </div>
               <div style="display:flex; align-items:center; gap:8px;">
-                <label style="width:24px; margin:0; flex-shrink:0;">V2</label>
-                <input type="text" id="mapper-heatmap-lbl-V2" class="form-control input-sm" maxlength="22" value="Value 2">
+                <label style="width:30px; margin:0; flex-shrink:0;">Col 2</label>
+                <input type="text" id="mapper-heatmap-lbl-V2" class="form-control input-sm" maxlength="22" value="Column 2">
               </div>
               <div style="display:flex; align-items:center; gap:8px;">
-                <label style="width:24px; margin:0; flex-shrink:0;">V3</label>
-                <input type="text" id="mapper-heatmap-lbl-V3" class="form-control input-sm" maxlength="22" value="Value 3">
+                <label style="width:30px; margin:0; flex-shrink:0;">Col 3</label>
+                <input type="text" id="mapper-heatmap-lbl-V3" class="form-control input-sm" maxlength="22" value="Column 3">
               </div>
               <div style="display:flex; align-items:center; gap:8px;">
-                <label style="width:24px; margin:0; flex-shrink:0;">V4</label>
-                <input type="text" id="mapper-heatmap-lbl-V4" class="form-control input-sm" maxlength="22" value="Value 4">
+                <label style="width:30px; margin:0; flex-shrink:0;">Col 4</label>
+                <input type="text" id="mapper-heatmap-lbl-V4" class="form-control input-sm" maxlength="22" value="Column 4">
               </div>
               <div style="display:flex; align-items:center; gap:8px;">
-                <label style="width:24px; margin:0; flex-shrink:0;">V5</label>
-                <input type="text" id="mapper-heatmap-lbl-V5" class="form-control input-sm" maxlength="22" value="Value 5">
+                <label style="width:30px; margin:0; flex-shrink:0;">Col 5</label>
+                <input type="text" id="mapper-heatmap-lbl-V5" class="form-control input-sm" maxlength="22" value="Column 5">
               </div>
             </div>
           </div>
@@ -391,7 +413,7 @@
         <h4 class="modal-title">Heatmap mapper</h4>
       </div>
       <div class="modal-body">
-        <p>Enter one receptor per row and up to five numerical values (V1–V5). The heatmap renders a colour-coded grid where each column is a dataset and each row is a receptor.</p>
+        <p>Enter one receptor per row and up to five numerical values (Col 1–Col 5). The heatmap renders a colour-coded grid where each column is a dataset and each row is a receptor.</p>
         <p>Paste from Excel as receptor + TAB-separated values. Use <strong>Receptor lookup</strong> for searchable selection.</p>
         <p>Use the right toolbar to control colour gradient, label styling, and data display options.</p>
       </div>
@@ -449,7 +471,8 @@
 <script src="{% static 'home/js/mapper_gpcrome_picker_modal.js' %}"></script>
 
 <script>
-$('.dropdown-menu').on('click', function(e){ e.stopPropagation(); });
+$('.dropdown-menu:not(.mapper20-clear-menu)').on('click', function(e){ e.stopPropagation(); });
+$('.dropdown-menu input[type="range"]').on('mouseenter pointerdown', function() { this.focus(); });
 // Download dropdown manual toggle
 (function(){
   var btn = document.querySelector('#mapper-heatmap-download-btn');

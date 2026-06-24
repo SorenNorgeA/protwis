@@ -997,12 +997,18 @@ function createTraces(colorOption, showLabels, colorMapping, textColorEnabled) {
                         width: border_on ? stroke_width : 0,
                         color: 'black'
                     },
-                    color: clusterData.map(d => colorPalette[d.cluster % colorPalette.length]),  // Keep legend colors based on clusters
+                    color: clusterData.map(d => {
+                        const key = 'Cluster ' + (d.cluster + 1);
+                        if (CLUSTER_LABEL_COLORS && !CLUSTER_LABEL_COLORS[key]) {
+                            CLUSTER_LABEL_COLORS[key] = colorPalette[d.cluster % colorPalette.length];
+                        }
+                        return (CLUSTER_LABEL_COLORS && CLUSTER_LABEL_COLORS[key]) || colorPalette[d.cluster % colorPalette.length];
+                    }),
                 },
                 // Customize legend text color only when showLabels and textColorEnabled are both true
                 name: (showLabels && textColorEnabled)
-                ? `<span style="color:${colorPalette[cluster % colorPalette.length]}">Cluster ${cluster + 1}</span>`
-                : `Cluster ${cluster + 1}`  // Regular label if conditions are false
+                ? `<span style="color:${(CLUSTER_LABEL_COLORS && CLUSTER_LABEL_COLORS['Cluster ' + (cluster + 1)]) || colorPalette[cluster % colorPalette.length]}">Cluster ${cluster + 1}</span>`
+                : `Cluster ${cluster + 1}`
             };
 
             traces.push(markerTrace);
@@ -1028,9 +1034,15 @@ function createTraces(colorOption, showLabels, colorMapping, textColorEnabled) {
                     color: 'black'
                 },
                 color: currentClusterData.map(d => d.fill),
-                cmin: minFill,  // Set color axis minimum value
-                cmax: maxFill,  // Set color axis maximum value
-                colorscale: 'RdBu',  // Use RdBu color scale
+                cmin: minFill,
+                cmax: maxFill,
+                colorscale: (function() {
+                    if (!CLUSTER_GRADIENT_COLORS) return 'RdBu';
+                    var stops = window.CLUSTER_GRADIENT_STOPS || 3;
+                    if (stops === 1) return [[0, '#ffffff'], [1, CLUSTER_GRADIENT_COLORS.max]];
+                    if (stops === 2) return [[0, CLUSTER_GRADIENT_COLORS.min], [1, CLUSTER_GRADIENT_COLORS.max]];
+                    return [[0, CLUSTER_GRADIENT_COLORS.min], [0.5, CLUSTER_GRADIENT_COLORS.mid], [1, CLUSTER_GRADIENT_COLORS.max]];
+                })(),
                 colorbar: {
                     thickness: 20,
                     len: 0.5,
@@ -1042,7 +1054,7 @@ function createTraces(colorOption, showLabels, colorMapping, textColorEnabled) {
         traces.push(gradientTrace);
     }
     // Handle Class, Ligand type, or Receptor family color option
-    else if (['Class', 'Ligand type', 'Receptor family'].includes(colorOption)) {
+    else if (['Class', 'Ligand type', 'Receptor family', 'userCategory'].includes(colorOption)) {
 
         const uniqueEntries = new Set();
 
@@ -1094,20 +1106,34 @@ function createAnnotations(filteredData, colorOption, textColorEnabled, colorMap
     const minFill = Math.min(...fillValues);
     const maxFill = Math.max(...fillValues);
 
-    // Use d3.interpolateRdBu for the exact RdBu color scale in D3 v4
-    const rdBuColorScale = d3v4.scaleSequential(d3v4.interpolateRdBu)
-        .domain([maxFill, minFill]);  // Inverse the domain for red to blue coloring
-
+    // Build the gradient color scale (custom or default RdBu)
+    let gradColorScale;
+    if (!CLUSTER_GRADIENT_COLORS) {
+        gradColorScale = d3v4.scaleSequential(d3v4.interpolateRdBu).domain([maxFill, minFill]);
+    } else {
+        const gradStops = window.CLUSTER_GRADIENT_STOPS || 3;
+        if (gradStops === 1) {
+            gradColorScale = d3v4.scaleLinear().domain([minFill, maxFill])
+                .range(['#ffffff', CLUSTER_GRADIENT_COLORS.max]);
+        } else if (gradStops === 2) {
+            gradColorScale = d3v4.scaleLinear().domain([minFill, maxFill])
+                .range([CLUSTER_GRADIENT_COLORS.min, CLUSTER_GRADIENT_COLORS.max]);
+        } else {
+            gradColorScale = d3v4.scaleLinear().domain([minFill, (minFill + maxFill) / 2, maxFill])
+                .range([CLUSTER_GRADIENT_COLORS.min, CLUSTER_GRADIENT_COLORS.mid, CLUSTER_GRADIENT_COLORS.max]);
+        }
+    }
 
     filteredData.forEach((d) => {
         let textColor;
 
         if (textColorEnabled) {
             if (colorOption === 'cluster') {
-                textColor = colorPalette[d.cluster % colorPalette.length];
+                const clKey = 'Cluster ' + (d.cluster + 1);
+                textColor = (CLUSTER_LABEL_COLORS && CLUSTER_LABEL_COLORS[clKey]) || colorPalette[d.cluster % colorPalette.length];
             } else if (colorOption === 'gradient') {
-                textColor = rdBuColorScale(d.fill);  // Gradient-based coloring
-            } else if (['Class', 'Ligand type', 'Receptor family'].includes(colorOption)) {
+                textColor = gradColorScale(d.fill);
+            } else if (['Class', 'Ligand type', 'Receptor family', 'userCategory'].includes(colorOption)) {
                 const entry = d[colorOption] === 'Other GPCRs' ? 'Classless' : d[colorOption];
                 textColor = colorMapping[entry];
             } else {
@@ -1122,8 +1148,11 @@ function createAnnotations(filteredData, colorOption, textColorEnabled, colorMap
             y: d.y,
             xref: 'x',
             yref: 'y',
-            text: `${decodeHtmlEntities(d.label)}`,  // Combine label and fill for hover text
+            text: `${decodeHtmlEntities(d.label)}`,
             showarrow: false,
+            xanchor: 'center',
+            yanchor: 'middle',
+            xshift: 0,
             font: {
                 family: 'Arial',
                 size: cluster_DataStyling.labelFontSize,
@@ -1140,115 +1169,192 @@ function createAnnotations(filteredData, colorOption, textColorEnabled, colorMap
 
 // Function to update the plot with markers or labels
 function updatePlotWithAnnotations() {
-    const colorOption = getActiveColorOption();  // Get the active color option
+    const colorOption = getActiveColorOption();
     const showLabels = labelsVisible;
     const textColorEnabled = cluster_DataStyling.textColorEnabled;
 
-    const plotElement = document.getElementById('plotContainer_cluster');
-    const currentLayout = plotElement ? Plotly.d3.select('#plotContainer_cluster').node().layout : {};
+    // Data bounds
+    const xDataMin = Math.min(...currentClusterData.map(d => d.x));
+    const xDataMax = Math.max(...currentClusterData.map(d => d.x));
+    const yDataMin = Math.min(...currentClusterData.map(d => d.y));
+    const yDataMax = Math.max(...currentClusterData.map(d => d.y));
+    const xSpan = (xDataMax - xDataMin) || 1;
+    const ySpan = (yDataMax - yDataMin) || 1;
 
-    const xRange = (currentLayout && currentLayout.xaxis && currentLayout.xaxis.range) ? currentLayout.xaxis.range : [Math.min(...currentClusterData.map(d => d.x)), Math.max(...currentClusterData.map(d => d.x))];
-    const yRange = (currentLayout && currentLayout.yaxis && currentLayout.yaxis.range) ? currentLayout.yaxis.range : [Math.min(...currentClusterData.map(d => d.y)), Math.max(...currentClusterData.map(d => d.y))];
+    // Compute padding: in text mode measure real label pixel widths via canvas,
+    // then use closed-form to guarantee labels at extreme positions stay inside the viewport.
+    // Formula derivation: if plot area = P px and data span = S, then after adding xPad on each side
+    // the scale is P/(S+2*xPad) px/unit. We need halfLabelPx <= xPad * P/(S+2*xPad), which gives:
+    //   xPad = halfLabelPx * S / (P - fullLabelPx)
+    let xPad, yPad;
+    if (showLabels && !_clusterZoomRange) {
+        const _pGd = document.getElementById('plotContainer_cluster');
+        const _pW = (_pGd && _pGd.offsetWidth  > 50) ? _pGd.offsetWidth  : 600;
+        const _pH = (_pGd && _pGd.offsetHeight > 50) ? _pGd.offsetHeight : _pW * 0.75;
+        // Effective Plotly plot area: ~68% of container width (accounts for margins + legend),
+        // ~82% of container height (top/bottom margins)
+        const plotAreaW = _pW * 0.68;
+        const plotAreaH = _pH * 0.82;
+        let maxLabelPx = cluster_DataStyling.labelFontSize * 5;
+        try {
+            const _cv = document.createElement('canvas');
+            const _cx = _cv.getContext('2d');
+            _cx.font = `${cluster_DataStyling.labelFontSize}px Arial`;
+            maxLabelPx = Math.max(...currentClusterData.map(d => _cx.measureText(d.label || '').width));
+        } catch(e) {}
+        const labelH = cluster_DataStyling.labelFontSize * 1.2;
+        // Clamp denominator so it never goes below 10% of plot area (prevents explosion on very long labels)
+        const denomX = Math.max(plotAreaW - maxLabelPx, plotAreaW * 0.10);
+        const denomY = Math.max(plotAreaH - labelH,     plotAreaH * 0.10);
+        xPad = Math.max(xSpan * 0.08, (maxLabelPx / 2) * xSpan / denomX);
+        yPad = Math.max(ySpan * 0.08, (labelH     / 2) * ySpan / denomY);
+    } else {
+        xPad = xSpan * 0.08;
+        yPad = ySpan * 0.08;
+    }
+
+    // Axis viewport: preserve user zoom if active, else full data range with padding
+    const zoom = typeof _clusterZoomRange !== 'undefined' ? _clusterZoomRange : null;
+    const xRange = zoom ? zoom[0] : [xDataMin - xPad, xDataMax + xPad];
+    const yRange = zoom ? zoom[1] : [yDataMin - yPad, yDataMax + yPad];
+
+    const filterXRange = xRange;
+    const filterYRange = yRange;
 
     let colorMapping = {};
-    if (['Class', 'Ligand type', 'Receptor family'].includes(colorOption)) {
+    if (['Class', 'Ligand type', 'Receptor family', 'userCategory'].includes(colorOption)) {
         let uniqueValues = Array.from(new Set(currentClusterData.map(d => d[colorOption])));
         uniqueValues = uniqueValues.map(value => value === 'Other GPCRs' ? 'Classless' : value);
         uniqueValues.sort(naturalSort);
         uniqueValues.forEach((value, index) => {
-            colorMapping[value] = colorPalette[index % colorPalette.length];
+            if (CLUSTER_LABEL_COLORS && !CLUSTER_LABEL_COLORS[value]) {
+                CLUSTER_LABEL_COLORS[value] = colorPalette[index % colorPalette.length];
+            }
+            colorMapping[value] = (CLUSTER_LABEL_COLORS && CLUSTER_LABEL_COLORS[value])
+                || colorPalette[index % colorPalette.length];
         });
     }
 
-    // Generate the traces and pass the colorMapping
     const traces = createTraces(colorOption, showLabels, colorMapping, textColorEnabled);
 
-    // Add the color bar for gradient only if we're displaying annotations (text labels)
-    if (colorOption === 'gradient' && showLabels) {
+    // Color bar only shown in Text mode with gradient coloring AND text color enabled
+    if (colorOption === 'gradient' && showLabels && textColorEnabled) {
         const fillValues = currentClusterData.map(d => d.fill);
         const minFill = Math.min(...fillValues);
         const maxFill = Math.max(...fillValues);
-
-        const colorbarTrace = {
-            z: [[minFill, maxFill], [minFill, maxFill]],  // Use actual min/max values for z
-            x: [0, 1],
-            y: [0, 1],
+        traces.push({
+            z: [[minFill, maxFill], [minFill, maxFill]],
+            x: [0, 1], y: [0, 1],
             type: 'heatmap',
-            colorscale: 'RdBu',
-            showscale: true,  // Only show the color bar when annotations are visible
-            colorbar: {
-                thickness: 20,
-                len: 0.5,
-                // Removed title from the colorbar
-            },
-            opacity: 0  // Make the heatmap itself transparent
-        };
-
-        traces.push(colorbarTrace);
+            colorscale: (function() {
+                if (!CLUSTER_GRADIENT_COLORS) return 'RdBu';
+                var stops = window.CLUSTER_GRADIENT_STOPS || 3;
+                if (stops === 1) return [[0, '#ffffff'], [1, CLUSTER_GRADIENT_COLORS.max]];
+                if (stops === 2) return [[0, CLUSTER_GRADIENT_COLORS.min], [1, CLUSTER_GRADIENT_COLORS.max]];
+                return [[0, CLUSTER_GRADIENT_COLORS.min], [0.5, CLUSTER_GRADIENT_COLORS.mid], [1, CLUSTER_GRADIENT_COLORS.max]];
+            })(),
+            showscale: true,
+            colorbar: { thickness: 20, len: 0.5 },
+            opacity: 0
+        });
     }
 
-    // Filter the data for labels within the current zoom range
-    const filteredData = currentClusterData.filter(d => {
-        const inXRange = (d.x >= xRange[0] && d.x <= xRange[1]);
-        const inYRange = (d.y >= yRange[0] && d.y <= yRange[1]);
-        return inXRange && inYRange;
-    });
-
-    // Generate annotations based on filtered data, text coloring state, and shared colorMapping
+    // Annotations only in Text mode; filter to visible viewport
+    const filteredData = currentClusterData.filter(d =>
+        d.x >= filterXRange[0] && d.x <= filterXRange[1] &&
+        d.y >= filterYRange[0] && d.y <= filterYRange[1]
+    );
     const annotations = showLabels ? createAnnotations(filteredData, colorOption, textColorEnabled, colorMapping) : [];
 
-    // Define new layout with annotations
+    const xAxisCfg = { visible: false, showgrid: false, range: xRange };
+    const yAxisCfg = { visible: false, showgrid: false, range: yRange };
+
+    // Always read the container's current pixel width so Plotly.react
+    // doesn't reuse a stale stored width from a previous render.
+    const _plotGd = document.getElementById('plotContainer_cluster');
+    const _containerW = (_plotGd && _plotGd.offsetWidth > 50) ? _plotGd.offsetWidth : undefined;
+
     const layout = {
-        xaxis: {
-            visible: false,
-            showgrid: false,
-            range: xRange,
-            scaleanchor: 'y'
-        },
-        yaxis: {
-            visible: false,
-            showgrid: false,
-            range: yRange
-        },
+        xaxis: xAxisCfg,
+        yaxis: yAxisCfg,
         hovermode: 'closest',
-        showlegend: true,
-        annotations: annotations,  // Add annotations to the plot
+        showlegend: !(showLabels && !textColorEnabled),
+        annotations: annotations,
         legend: {
-            x: 1,
-            xanchor: 'left',
-            y: 0.5,
-            orientation: 'v'
+            x: 1.01, xanchor: 'left',
+            y: 0.5, yanchor: 'middle',
+            orientation: 'v', font: { size: 11 }, tracegroupgap: 2,
+            bgcolor: 'rgba(0,0,0,0)', borderwidth: 0
         },
         plot_bgcolor: '#FFFFFF',
-        autosize: false,
-        width: 1024,
-        height: 700,
-        margin: {
-            l: 100,
-            r: 350,
-            t: 50,
-            b: 50
-        },
-        // 👇 This is the added shape (rectangle border)
-        shapes: [
-            {
-            type: 'rect',
-            xref: 'x',
-            yref: 'y',
-            x0: xRange[0],
-            x1: xRange[1],
-            y0: yRange[0],
-            y1: yRange[1],
-            line: {
-                color: 'black',
-                width: 1
-            },
-            fillcolor: 'rgba(0,0,0,0)'  // transparent fill
-            }
-        ]
+        autosize: true,
+        width: _containerW,
+        height: 650,
+        margin: { l: 20, r: 80, t: 30, b: 20 },
+        shapes: [{
+            type: 'rect', xref: 'paper', yref: 'paper',
+            x0: 0, y0: 0, x1: 1, y1: 1,
+            line: { color: 'black', width: 1 },
+            fillcolor: 'rgba(0,0,0,0)'
+        }]
     };
 
-    Plotly.react('plotContainer_cluster', traces, layout);
+    Plotly.react('plotContainer_cluster', traces, layout, { responsive: true });
+
+    // Clip annotation text at the plot-area boundary — but NOT the legend.
+    // Both annotations and the legend live in .infolayer, so we clip the individual
+    // .annotation groups rather than the whole layer.
+    requestAnimationFrame(function () {
+        var gd = document.getElementById('plotContainer_cluster');
+        if (!gd || !gd._fullLayout) return;
+
+        // Measure the actual right-side element (legend for discrete modes,
+        // colorbar for gradient mode) and fit the right margin to it with a
+        // 12 px gap.  Only relayout when the difference is > 4 px to prevent
+        // an infinite loop.
+        var rightEl = gd.querySelector('g.legend') || gd.querySelector('g.colorbar');
+        if (rightEl) {
+            try {
+                var rBB = rightEl.getBBox();
+                if (rBB.width > 0) {
+                    var neededR = Math.ceil(rBB.width) + 12;
+                    if (Math.abs(neededR - gd._fullLayout.margin.r) > 4) {
+                        Plotly.relayout(gd, { 'margin.r': neededR });
+                        // Annotation clipping will run on the next call once the
+                        // margin has settled — skip it this frame.
+                        return;
+                    }
+                }
+            } catch (e) { /* getBBox can fail on hidden elements */ }
+        }
+
+        var fl = gd._fullLayout;
+        var l = fl.margin.l, t = fl.margin.t;
+        var w = fl.width - fl.margin.l - fl.margin.r;
+        var h = fl.height - fl.margin.t - fl.margin.b;
+        if (w <= 0 || h <= 0) return;
+        var svg = gd.querySelector('svg.main-svg');
+        if (!svg) return;
+        var clipId = 'cluster-annotation-clip';
+        var defs = svg.querySelector('defs') || svg.insertBefore(document.createElementNS('http://www.w3.org/2000/svg', 'defs'), svg.firstChild);
+        var cp = defs.querySelector('#' + clipId);
+        if (!cp) {
+            cp = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
+            cp.setAttribute('id', clipId);
+            defs.appendChild(cp);
+        }
+        cp.innerHTML = '<rect x="' + l + '" y="' + t + '" width="' + w + '" height="' + h + '"/>';
+        // Clip each annotation group individually — legend (.legend) is left untouched
+        gd.querySelectorAll('.infolayer .annotation').forEach(function (ann) {
+            ann.setAttribute('clip-path', 'url(#' + clipId + ')');
+        });
+        // Ensure the layer itself is never clipped (would cut the legend)
+        var infolayer = gd.querySelector('.infolayer');
+        if (infolayer) infolayer.removeAttribute('clip-path');
+    });
+
+    // Notify cluster page (Colors panel refresh, etc.)
+    if (typeof window.mapperClusterOnPlotUpdated === 'function') window.mapperClusterOnPlotUpdated();
 }
 
 
@@ -1654,12 +1760,12 @@ function Calculate_dimension(data, Category_data, Col_break_number, columns, lab
     let label_dim_counter = 0; // Counter for how many labels processed in the current column
     const { labelOffset } = computeDynamicOffsets(Data_styling);
 
-    // Initialize label max width tracking for up to 4 columns
+    // Initialize label max width tracking — store actual longest string per column/category
     let label_max_dict = {
-        col1_label_max: { 'Class': -Infinity, 'LigandType': -Infinity, 'ReceptorFamily': -Infinity, 'Receptor': -Infinity },
-        col2_label_max: { 'Class': -Infinity, 'LigandType': -Infinity, 'ReceptorFamily': -Infinity, 'Receptor': -Infinity },
-        col3_label_max: { 'Class': -Infinity, 'LigandType': -Infinity, 'ReceptorFamily': -Infinity, 'Receptor': -Infinity },
-        col4_label_max: { 'Class': -Infinity, 'LigandType': -Infinity, 'ReceptorFamily': -Infinity, 'Receptor': -Infinity }
+        col1_label_max: { 'Class': '', 'LigandType': '', 'ReceptorFamily': '', 'Receptor': '' },
+        col2_label_max: { 'Class': '', 'LigandType': '', 'ReceptorFamily': '', 'Receptor': '' },
+        col3_label_max: { 'Class': '', 'LigandType': '', 'ReceptorFamily': '', 'Receptor': '' },
+        col4_label_max: { 'Class': '', 'LigandType': '', 'ReceptorFamily': '', 'Receptor': '' }
     };
 
     let Col_spacing_dict = { 'Col1': -Infinity, 'Col2': -Infinity, 'Col3': -Infinity, 'Col4': -Infinity };
@@ -1696,8 +1802,8 @@ function Calculate_dimension(data, Category_data, Col_break_number, columns, lab
             label = label;
 
         } else if (category === 'ReceptorFamily') {
-            // Trimming ReceptorFamily (removing "receptors" or "neuropeptide" and trimming after "(")
-            label = label.replace(/( receptors|neuropeptide )/g, '').split(" (")[0];
+            // No trimming — matches RenderListPlot_Labels which shows full family names
+            label = label;
 
         } else if (category === 'Receptor') {
             // For Receptors, apply the label conversion based on 'label_names'
@@ -1721,10 +1827,10 @@ function Calculate_dimension(data, Category_data, Col_break_number, columns, lab
         // Determine current column
         const colKey = `col${temp_col_state}_label_max`;
 
-        // Measure the label length and update the max length for that column's category
-        const label_length = label.length;
-        if (label_max_dict[colKey][category] < label_length) {
-            label_max_dict[colKey][category] = label_length;
+        // Store the actual longest label string (strip HTML tags for length comparison)
+        const cleanLabel = label ? label.replace(/<[^>]*>/g, '') : '';
+        if (cleanLabel.length > label_max_dict[colKey][category].length) {
+            label_max_dict[colKey][category] = cleanLabel;
         }
     });
 
@@ -1738,28 +1844,29 @@ function Calculate_dimension(data, Category_data, Col_break_number, columns, lab
 
         categories.forEach(category => {
             const columnKey = cols[i];
+            const actualLabel = max_label_values[category];
 
-            if (max_label_values[category] !== -Infinity) {
-                // Create a dummy text element to measure the width based on the max label length
+            if (actualLabel !== '') {
+                // Measure the actual longest label string with real font settings
                 const dummyText = d3.select("body")
                     .append("svg")
-                    .attr("class", "dummy-text")
+                    .attr("class", "dummy-text-measure")
                     .append("text")
-                    .attr("font-size", styling_option[category].Fontsize) // Use the category as the key for styling_option
+                    .attr("font-size", styling_option[category].Fontsize)
                     .attr("font-weight", styling_option[category].Bold ? "bold" : "normal")
-                    .text("X".repeat(max_label_values[category]));
+                    .attr("font-style", styling_option[category].Italic ? "italic" : "normal")
+                    .text(actualLabel);
 
                 const bbox = dummyText.node().getBBox();
-                let estimatedLength = bbox.width * 0.8 + 20;
+                // Use actual measured width + generous padding to prevent overflow
+                let estimatedLength = bbox.width + 30;
 
                 if (category === 'Receptor') {
-                    estimatedLength += labelOffset; // Additional margin for Receptors
+                    estimatedLength += labelOffset; // Additional margin for data shapes
                 }
 
-                // Remove the dummy text element
-                d3.select(".dummy-text").remove();
+                d3.select(".dummy-text-measure").remove();
 
-                // Update the spacing dict if this label is the largest so far for this column
                 if (estimatedLength > Col_spacing_dict[columnKey]) {
                     Col_spacing_dict[columnKey] = estimatedLength;
                 }
@@ -1940,7 +2047,7 @@ function RenderListPlot_Labels(data, category_data, location, styling_option, La
 
         } else if (category === 'ReceptorFamily') {
             // Handle ReceptorFamily (subscript handling but no label_names logic)
-            label = label_key.replace(/( receptors|neuropeptide )/g, '').split(" (")[0];
+            label = label_key;
 
             // Create text element for ReceptorFamily
             const textElement = plotGroup.append('text')
@@ -2133,7 +2240,7 @@ function data_visualization(data, category_data, location, Layout_dict, data_sty
                     .style('fill', fillColor);
                 break;
             default:
-                console.log('Unknown shape type');
+                break;
         }
     }
 

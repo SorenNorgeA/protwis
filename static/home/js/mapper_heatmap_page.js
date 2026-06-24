@@ -23,7 +23,7 @@
   };
 
   /** V1-V5 column display labels */
-  var LabelXConverter = { Value1: 'Value 1', Value2: 'Value 2', Value3: 'Value 3', Value4: 'Value 4', Value5: 'Value 5' };
+  var LabelXConverter = { Value1: 'Column 1', Value2: 'Column 2', Value3: 'Column 3', Value4: 'Column 4', Value5: 'Column 5' };
 
   /** HeatmapDataStyling instance — initialised at boot from heatmap_DataStyling() */
   var HeatmapDataStyling;
@@ -131,7 +131,6 @@
     try {
       Heatmap(data, 'mapper-heatmap-plot', HeatmapDataStyling, LabelXConverter);
     } catch (e) {
-      console.error('[HeatmapMapper] Heatmap() FAILED:', e);
       mapperHeatmapShowPlaceholder();
     }
   }
@@ -479,6 +478,7 @@
 
   // ── Boot ──────────────────────────────────────────────────────────────────
   function mapperHeatmapBoot() {
+    $('.mapper20-booting').removeClass('mapper20-booting');
     // Build converters
     mapperHeatmapBuildLabelConverter();
 
@@ -572,14 +572,24 @@
     $('#mapper-heatmap-demo-rows').on('click.mapperHeatmap', function () { mapperHeatmapFillDemo(); });
 
     // Clear
-    $('#mapper-heatmap-clear-rows').on('click.mapperHeatmap', function () {
+    $('#mapper-heatmap-clear-whole').on('click.mapperHeatmap', function(e) {
+      e.preventDefault();
       mapperHeatmapDestroyAllRows();
       $('#mapper-heatmap-input-tbody').empty();
       mapperHeatmapAppendRow();
       mapperHeatmapCompactReceptors();
       mapperHeatmapSyncFirstRowPlaceholder();
-      $(this).addClass('mapper20-clear-clean').blur();
+      $('#mapper-heatmap-clear-rows').addClass('mapper20-clear-clean').blur();
       mapperHeatmapRedrawNow();
+    });
+    $('.mapper20-clear-menu').on('click.mapperHeatmap', '[data-heatmap-col]', function(e) {
+      e.preventDefault();
+      var col = $(this).data('heatmap-col');
+      $('#mapper-heatmap-input-tbody tr').each(function() {
+        $(this).find('.mapper-heatmap-' + col).val('').trigger('input');
+      });
+      $('#mapper-heatmap-clear-rows').removeClass('mapper20-clear-clean');
+      mapperHeatmapScheduleRedraw();
     });
 
     // Remove row

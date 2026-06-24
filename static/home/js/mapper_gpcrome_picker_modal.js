@@ -39,7 +39,7 @@
       return [];
     }
     var out = [];
-    pickerState.dt.rows({ search: 'applied' }).every(function () {
+    pickerState.dt.rows().every(function () {
       var $cb = $(this.node()).find('.mapper20-gpcrome-pick-cb');
       if ($cb.prop('checked')) {
         var v = $cb.val();
@@ -56,7 +56,10 @@
   }
 
   function buildPickerFilterRow(dt) {
-    var $filterCells = $('#mapper20-gpcrome-picker-table thead tr').last().find('th');
+    // DataTables 2.x moves the original <thead> into a fixed scrollHead wrapper and
+    // puts a visibility-hidden clone in the scrollBody. dt.column(0).header() always
+    // returns the TH from the live visible header, so we navigate from there.
+    var $filterCells = $(dt.column(0).header()).closest('thead').find('tr').last().find('th');
     var esc = $.fn.dataTable.util.escapeRegex;
     // Columns 2-6 get multi-select filters; 0-1 (checkbox, GPCRdb link) are left empty
     [2, 3, 4, 5, 6].forEach(function (colIdx) {
@@ -79,7 +82,7 @@
             dt.column(col).search('').draw();
           } else {
             var regex = vals.map(function (v) { return '^' + esc(v) + '$'; }).join('|');
-            dt.column(col).search(regex, true, false).draw();
+            dt.column(col).search(regex, { regex: true, smart: false }).draw();
           }
         });
       })(colIdx);
@@ -200,6 +203,12 @@
 
     $('#mapper20-gpcrome-picker-table').on('draw.dt', syncSelectAllCheckbox);
     $('#mapper20-gpcrome-picker-table tbody').on('change', '.mapper20-gpcrome-pick-cb', syncSelectAllCheckbox);
+    // Click anywhere on a row to toggle its checkbox
+    $('#mapper20-gpcrome-picker-table tbody').on('click', 'tr', function (e) {
+      if ($(e.target).is('input[type="checkbox"], a, img')) return;
+      var $cb = $(this).find('.mapper20-gpcrome-pick-cb');
+      $cb.prop('checked', !$cb.prop('checked')).trigger('change');
+    });
   }
 
   window.mapper20InitGpcromePickerModal = function (opts) {
@@ -210,11 +219,13 @@
 
     var rows = $.isArray(opts.pickerRows) ? opts.pickerRows : [];
 
+    // Pre-initialize immediately so the table is ready when the modal first opens
+    if (!pickerState.initialized) {
+      buildDataTable(rows);
+      pickerState.initialized = true;
+    }
+
     $('#mapper20-gpcrome-picker-modal').on('shown.bs.modal', function () {
-      if (!pickerState.initialized) {
-        buildDataTable(rows);
-        pickerState.initialized = true;
-      }
       if (pickerState.dt) {
         pickerState.dt.columns.adjust().draw(false);
       }

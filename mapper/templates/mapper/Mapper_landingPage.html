@@ -79,30 +79,12 @@
   object-fit: contain;
   margin-bottom: 14px;
 }
-.mapper20-badge {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #2c6ebd;
-  background: rgba(44, 110, 189, 0.1);
-  border-radius: 999px;
-  padding: 4px 10px;
-  margin-bottom: 10px;
-}
 .mapper20-card .btn {
   width: 100%;
   max-width: 180px;
   border-radius: 8px;
   font-weight: 600;
   padding: 9px 12px;
-}
-.mapper20-footnote {
-  text-align: center;
-  margin-top: 28px;
-  font-size: 12px;
-  color: #7a8b9a;
 }
 @media (max-width: 767px) {
   .mapper20-card {
@@ -116,47 +98,41 @@
 {% block content %}
 <div class="mapper20-wrap">
   <div class="mapper20-hero">
-    <h1>Data Mapper 2.0</h1>
-    <p>Choose a visualization to map your receptor-scale data onto the GPCRome. More plot types will light up here as they are migrated from the classic Data Mapper.</p>
+    <h1>Data mapper</h1>
+    <p>Choose a visualization to map your receptor data onto.</p>
   </div>
   <div class="mapper20-cards">
     <div class="mapper20-card">
-      <span class="mapper20-badge">Available</span>
-      <h2>GPCRome wheel</h2>
+<h2>GPCRome wheel</h2>
       <img src="{% static 'home/images/DataMapper/GPCRome_icon.png' %}" alt="" width="120" height="120">
       <p>Circular overview of class and family structure; map one dataset across the non-odorant human GPCRome.</p>
       <a href="{% url 'MapperGPCRomeWheel' %}" class="btn btn-primary">Open</a>
     </div>
     <div class="mapper20-card">
-      <span class="mapper20-badge">Available</span>
-      <h2>Tree</h2>
+<h2>Tree</h2>
       <img src="{% static 'home/images/DataMapper/Tree_icon.png' %}" alt="" width="120" height="120">
-      <p>Classification tree with branches from class to receptor; supports several datasets per receptor.</p>
+      <p>Classification tree with branches from class to receptor; supports up to 5 datasets per receptor.</p>
       <a href="{% url 'MapperTree' %}" class="btn btn-primary">Open</a>
     </div>
-    <div class="mapper20-card mapper20-card--muted">
-      <h2>Cluster</h2>
+    <div class="mapper20-card">
+<h2>Cluster</h2>
       <img src="{% static 'home/images/DataMapper/Cluster_icon.png' %}" alt="" width="120" height="120">
-      <p>Cluster receptors by sequence similarity or by a spatial column from your template.</p>
-      <button type="button" class="btn btn-default" disabled title="Coming soon">Coming soon</button>
+      <p>Cluster receptors by sequence similarity or by a spatial input.</p>
+      <a href="{% url 'MapperCluster' %}" class="btn btn-primary">Open</a>
     </div>
     <div class="mapper20-card">
-      <span class="mapper20-badge">Available</span>
-      <h2>List</h2>
+<h2>List</h2>
       <img src="{% static 'home/images/DataMapper/List_icon.png' %}" alt="" width="120" height="120">
-      <p>List receptors under configurable headings with up to four mapped shapes per receptor.</p>
+      <p>List receptors under configurable headings with up to four mapped per receptor.</p>
       <a href="{% url 'MapperList' %}" class="btn btn-primary">Open</a>
     </div>
     <div class="mapper20-card">
-      <span class="mapper20-badge">Available</span>
-      <h2>Heatmap</h2>
+<h2>Heatmap</h2>
       <img src="{% static 'home/images/DataMapper/Heatmap_icon.png' %}" alt="" width="120" height="120">
       <p>Grid of cells coloured by your numeric values for up to several data columns per receptor.</p>
       <a href="{% url 'MapperHeatmap' %}" class="btn btn-primary">Open</a>
     </div>
-      <button type="button" class="btn btn-default" disabled title="Coming soon">Coming soon</button>
-    </div>
   </div>
-  <p class="mapper20-footnote">Classic upload flow: <a href="{% url 'DataMapperHome' page='Numeric' %}">Numeric data</a> &middot; <a href="{% url 'DataMapperHome' page='Text' %}">Text data</a></p>
+
 </div>
 {% endblock %}

@@ -8,6 +8,11 @@
 <link rel="stylesheet" href="{% static 'home/css/select2_4.1.0-rc.0._full.css' %}" type="text/css" />
 <link rel="stylesheet" href="{% static 'home/css/NewDrugsBrowser_datatables.min.css' %}" type="text/css" />
 <style>
+/* Clear table dropdown */
+.mapper20-clear-menu { min-width: 180px; }
+.mapper20-clear-menu > li > a { padding: 4px 16px; }
+.mapper20-clear-menu > li > a:hover { background-color: #fdecea; color: #a94442; }
+.mapper20-clear-menu > li:first-child > a:hover { background-color: #a94442 !important; color: #fff !important; }
 .mapper20-wheel-wrap {
   margin-bottom: 24px;
 }
@@ -170,6 +175,21 @@
 }
 .mapper20-wheel-toolbar .btn-group[aria-label="Input mode"] .btn {
   min-width: 58px;
+  background-color: #c8c8c8; background-image: none;
+  border-color: #aaa; color: #555;
+}
+.mapper20-wheel-toolbar .btn-group[aria-label="Input mode"] .btn:hover,
+.mapper20-wheel-toolbar .btn-group[aria-label="Input mode"] .btn:focus {
+  background-color: #b8b8b8; border-color: #999; color: #333;
+}
+.mapper20-wheel-toolbar .btn-group[aria-label="Input mode"] .btn.active {
+  background-color: #337ab7; background-image: none;
+  border-color: #2e6da4; color: #fff;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,.12);
+}
+.mapper20-wheel-toolbar .btn-group[aria-label="Input mode"] .btn.active:hover,
+.mapper20-wheel-toolbar .btn-group[aria-label="Input mode"] .btn.active:focus {
+  background-color: #286090; border-color: #204d74; color: #fff;
 }
 .mapper20-wheel-toolbar #mapper20-clear-rows:not(.mapper20-clear-clean):hover {
   color: #fff;
@@ -276,17 +296,17 @@
   opacity: 1;
   white-space: pre-line;
 }
-/* Orange border on empty receptor cells; clears when filled */
-.mapper20-receptor-input-wrap.is-empty .mapper20-in-receptor {
+/* Orange border on empty receptor cells; clears when filled (compact mode = data present, no orange) */
+#mapper20-input-table:not(.mapper20-receptors-compact) .mapper20-receptor-input-wrap.is-empty .mapper20-in-receptor {
   border-color: #e0892e !important;
 }
-/* "Input data" label above the mode toggle */
+/* "Input data" label beside the mode toggle */
 .mapper20-input-mode-wrap {
-  display: inline-flex; flex-direction: column; align-items: center; gap: 2px;
+  display: inline-flex; flex-direction: row; align-items: center; gap: 5px;
 }
 .mapper20-input-mode-label {
-  font-size: 9px; font-weight: 600; color: #555;
-  letter-spacing: 0.04em; text-transform: uppercase; line-height: 1; user-select: none;
+  font-size: 13px; font-weight: 600; color: #555;
+  line-height: 1; user-select: none; white-space: nowrap;
 }
 /* Value column stays single-line; receptor is a textarea that grows with placeholder / text */
 .mapper20-wheel-left .mapper20-input-table .mapper20-in-value.form-control.input-sm {
@@ -498,9 +518,11 @@
 .mapper20-receptor-input-wrap.is-empty .mapper20-receptor-clear {
   display: none;
 }
+#mapper20-gpcrome-picker-modal { padding-top: 30px !important; }
 #mapper20-gpcrome-picker-modal .modal-dialog {
   width: 95%;
   max-width: 1200px;
+  margin: 0 auto;
 }
 #mapper20-gpcrome-picker-modal table.dataTable {
   font-size: 12px;
@@ -519,6 +541,9 @@
 #mapper20-gpcrome-picker-modal .select2-container--open .select2-dropdown {
   z-index: 2060 !important;
 }
+#mapper20-gpcrome-picker-modal #mapper20-picker-filter-row th { padding: 3px 2px; }
+#mapper20-gpcrome-picker-modal .modal-content { display: flex; flex-direction: column; max-height: calc(100vh - 20px); }
+#mapper20-gpcrome-picker-modal .modal-body { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
 
 /* ------- Text mode: swatch column + widen grid ------- */
 .mapper20-wheel-left .mapper20-input-table.mapper20-text-mode {
@@ -709,34 +734,56 @@
 .mapper20-colors-panel-wrap.mapper20-colors-show-text #mapper20-colors-panel-text {
   display: block;
 }
+/* Loading overlay */
+.mapper20-wheel-wrap .mapper20-wheel-left { position: relative; }
+.mapper20-boot-overlay {
+  display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 10; background: rgba(255,255,255,0.80); border-radius: 10px;
+  align-items: center; justify-content: center; font-size: 13px; color: #666;
+  pointer-events: all;
+}
+.mapper20-booting .mapper20-boot-overlay { display: flex; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="mapper20-wheel-wrap row">
+<div class="mapper20-wheel-wrap row mapper20-booting">
   <div class="col-xs-12 mapper20-wheel-primary-col">
     <div class="mapper20-wheel-left">
+      <div class="mapper20-boot-overlay">Loading…</div>
       <div class="mapper20-wheel-top-row">
         <h2 class="mapper20-wheel-page-title">GPCRome wheel</h2>
       </div>
       <div class="mapper20-wheel-toolbar-stack">
         <div class="mapper20-wheel-toolbar-grid">
           <div class="mapper20-wheel-toolbar" aria-label="Mapper tools primary" style="align-items:flex-end;">
-            <button type="button" class="btn btn-default btn-xs" id="mapper20-howto-btn" data-toggle="modal" data-target="#mapper20-howto-modal" title="How to use the mapper">
-              How to<span class="mapper20-howto-mark" aria-hidden="true">?</span>
-            </button>
             <div class="mapper20-input-mode-wrap">
-              <span class="mapper20-input-mode-label">Input data</span>
+              <span class="mapper20-input-mode-label">Input data:</span>
               <div class="btn-group btn-group-xs" role="group" aria-label="Input mode">
-                <button type="button" class="btn btn-default btn-xs active" id="mapper20-mode-numeric-btn" aria-pressed="true">Numerical</button>
-                <button type="button" class="btn btn-default btn-xs" id="mapper20-mode-labels-btn" aria-pressed="false">Categorical</button>
+                <button type="button" class="btn btn-default btn-xs active" id="mapper20-mode-numeric-btn" aria-pressed="true">Numbers</button>
+                <button type="button" class="btn btn-default btn-xs" id="mapper20-mode-labels-btn" aria-pressed="false">Categories</button>
               </div>
             </div>
             <button type="button" class="btn btn-default btn-xs" id="mapper20-demo-rows">Demo</button>
           </div>
           <div class="mapper20-wheel-toolbar" aria-label="Table actions">
+            <button type="button" class="btn btn-default btn-xs" id="mapper20-howto-btn" data-toggle="modal" data-target="#mapper20-howto-modal" title="How to use the mapper">
+              How to<span class="mapper20-howto-mark" aria-hidden="true">?</span>
+            </button>
             <button type="button" class="btn btn-primary btn-xs" id="mapper20-open-gpcrome-picker" data-toggle="modal" data-target="#mapper20-gpcrome-picker-modal">Receptor lookup</button>
-            <button type="button" class="btn btn-default btn-xs" id="mapper20-clear-rows">Clear table</button>
+            <div class="dropdown" style="position:relative;">
+              <button type="button" class="btn btn-default btn-xs dropdown-toggle" data-toggle="dropdown" id="mapper20-clear-rows">
+                Clear <span class="caret"></span>
+              </button>
+              <ul class="dropdown-menu mapper20-clear-menu">
+                <li><a href="#" id="mapper20-clear-whole">Whole table</a></li>
+                <li class="divider"></li>
+                <li><a href="#" id="mapper20-clear-mode">Current mode (<span id="mapper20-clear-mode-label">Numbers</span>)</a></li>
+                <li class="divider"></li>
+                <li class="mapper20-clear-col-num"><a href="#" data-col="val">Number</a></li>
+                <li class="mapper20-clear-col-text" style="display:none;"><a href="#" data-col="val">Category</a></li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>
@@ -968,9 +1015,10 @@
 <script src="{% static 'home/js/mapper_gpcrome_picker_modal.js' %}"></script>
 
 <script>
-$('.dropdown-menu').on('click', function(event){
+$('.dropdown-menu:not(.mapper20-clear-menu)').on('click', function(event){
   event.stopPropagation();
 });
+$('.dropdown-menu input[type="range"]').on('mouseenter pointerdown', function() { this.focus(); });
 
 var MAPPER20_MAX_ROWS = 500;
 /** Hint on the top receptor cell only */
@@ -1785,6 +1833,7 @@ function mapper20ApplyChromeForInputMode() {
   // Update value column header label
   $('.mapper20-value-col-label').text(text ? 'Category' : 'Number');
   mapper20UpdateSortHeaders();
+  if (typeof mapper20SyncClearDropdown === 'function') { mapper20SyncClearDropdown(); }
 }
 
 function mapper20GraphicalLegendSyncActiveButtons() {
@@ -3082,6 +3131,23 @@ function mapper20FillDemoRows() {
   mapper20RefreshAllLabelSwatches();
   mapper20RebuildLabelColorCustomizePanel(false);
   mapper20CaptureSnapshotForActiveMode();
+  // Seed opposite mode snapshot with demo values so switching modes keeps the data
+  var _dOppMode = mapper20IsTextMode() ? 'numeric' : 'text';
+  if (!MAPPER20_MODE_SNAPSHOTS[_dOppMode]) {
+    mapper20EnsureOppositeModeSeed(_dOppMode);
+    var _dOppSnap = MAPPER20_MODE_SNAPSHOTS[_dOppMode];
+    if (_dOppSnap && _dOppSnap.rows) {
+      var _dEntryMap = {};
+      Object.keys(MAPPER20_DEMO_ROWS).forEach(function (k) {
+        var e = MAPPER20_RESOLVE && MAPPER20_RESOLVE[k.toUpperCase()];
+        if (e) _dEntryMap[e] = MAPPER20_DEMO_ROWS[k];
+      });
+      _dOppSnap.rows.forEach(function (r) {
+        var dr = r.entry && _dEntryMap[r.entry];
+        if (dr) r.value = _dOppMode === 'text' ? String(dr.text || '') : String(dr.numeric != null ? dr.numeric : '');
+      });
+    }
+  }
   mapper20RebuildPlotImmediate();
 }
 
@@ -3988,19 +4054,44 @@ $(document).ready(function() {
     mapper20FocusNextTableCellFrom($target);
   });
 
-  $('#mapper20-clear-rows').on('click', function() {
-    var $clearButton = $(this);
+  function mapper20ClearWhole() {
     mapper20ReceptorTallPlaceholderIntro = true;
     mapper20DestroyRowReceptorWidgets();
     $('#mapper20-input-tbody').empty();
     $('#mapper20-wheel-errors').empty();
-    if (mapper20IsTextMode()) {
-      MAPPER20_LABEL_COLORS = {};
-      MAPPER20_LABEL_ENABLED = {};
-    }
+    MAPPER20_MODE_SNAPSHOTS.numeric = null;
+    MAPPER20_MODE_SNAPSHOTS.text = null;
+    if (mapper20IsTextMode()) { MAPPER20_LABEL_COLORS = {}; MAPPER20_LABEL_ENABLED = {}; }
     mapper20AppendRow('', '');
-    $clearButton.addClass('mapper20-clear-clean').blur();
+    $('#mapper20-clear-rows').addClass('mapper20-clear-clean').blur();
+  }
+  function mapper20ClearCurrentMode() {
+    var curKey = mapper20IsTextMode() ? 'text' : 'numeric';
+    mapper20ReceptorTallPlaceholderIntro = true;
+    mapper20DestroyRowReceptorWidgets();
+    $('#mapper20-input-tbody').empty();
+    $('#mapper20-wheel-errors').empty();
+    MAPPER20_MODE_SNAPSHOTS[curKey] = null;
+    if (mapper20IsTextMode()) { MAPPER20_LABEL_COLORS = {}; MAPPER20_LABEL_ENABLED = {}; }
+    mapper20AppendRow('', '');
+    $('#mapper20-clear-rows').addClass('mapper20-clear-clean').blur();
+  }
+  function mapper20SyncClearDropdown() {
+    var isText = mapper20IsTextMode();
+    $('#mapper20-clear-mode-label').text(isText ? 'Categories' : 'Numbers');
+    $('.mapper20-clear-col-num').toggle(!isText);
+    $('.mapper20-clear-col-text').toggle(isText);
+  }
+  $('#mapper20-clear-whole').on('click', function(e) { e.preventDefault(); mapper20ClearWhole(); });
+  $('#mapper20-clear-mode').on('click', function(e) { e.preventDefault(); mapper20ClearCurrentMode(); });
+  $('.mapper20-clear-menu').on('click', '[data-col]', function(e) {
+    e.preventDefault();
+    $('#mapper20-input-tbody tr').each(function() {
+      $(this).find('.mapper20-in-value').val('').trigger('input');
+    });
+    $('#mapper20-clear-rows').removeClass('mapper20-clear-clean');
   });
+  mapper20SyncClearDropdown();
 
   $('#mapper20-input-table').on('input change', '.mapper20-receptor-input, .mapper20-value-input, .mapper20-row-color-picker', function() {
     $('#mapper20-clear-rows').removeClass('mapper20-clear-clean');
@@ -4177,6 +4268,7 @@ $(document).ready(function() {
       }
     });
   }
+  $('.mapper20-booting').removeClass('mapper20-booting');
 });
 </script>
 {% endblock %}

@@ -8,6 +8,11 @@
 <link rel="stylesheet" href="{% static 'home/css/select2_4.1.0-rc.0._full.css' %}" type="text/css">
 <link rel="stylesheet" href="{% static 'home/css/NewDrugsBrowser_datatables.min.css' %}" type="text/css" />
 <style>
+/* Clear table dropdown */
+.mapper20-clear-menu { min-width: 180px; }
+.mapper20-clear-menu > li > a { padding: 4px 16px; }
+.mapper20-clear-menu > li > a:hover { background-color: #fdecea; color: #a94442; }
+.mapper20-clear-menu > li:first-child > a:hover { background-color: #a94442 !important; color: #fff !important; }
 .mapper20-wheel-wrap { margin-bottom: 24px; }
 .mapper20-wheel-wrap.row {
   display: flex; flex-wrap: wrap; align-items: flex-start;
@@ -84,6 +89,21 @@
 }
 .mapper20-wheel-toolbar .btn-group[aria-label="Input mode"] .btn {
   min-width: 58px;
+  background-color: #c8c8c8; background-image: none;
+  border-color: #aaa; color: #555;
+}
+.mapper20-wheel-toolbar .btn-group[aria-label="Input mode"] .btn:hover,
+.mapper20-wheel-toolbar .btn-group[aria-label="Input mode"] .btn:focus {
+  background-color: #b8b8b8; border-color: #999; color: #333;
+}
+.mapper20-wheel-toolbar .btn-group[aria-label="Input mode"] .btn.active {
+  background-color: #337ab7; background-image: none;
+  border-color: #2e6da4; color: #fff;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,.12);
+}
+.mapper20-wheel-toolbar .btn-group[aria-label="Input mode"] .btn.active:hover,
+.mapper20-wheel-toolbar .btn-group[aria-label="Input mode"] .btn.active:focus {
+  background-color: #286090; border-color: #204d74; color: #fff;
 }
 .mapper20-wheel-toolbar #mapper-tree-clear-rows:not(.mapper20-clear-clean):hover {
   color: #fff; background-color: #a94442; border-color: #843534;
@@ -513,10 +533,13 @@
   padding-top: 5px;
   padding-bottom: 5px;
 }
-#mapper20-gpcrome-picker-modal .modal-dialog { width: 95%; max-width: 1200px; }
+#mapper20-gpcrome-picker-modal { padding-top: 30px !important; }
+#mapper20-gpcrome-picker-modal .modal-dialog { width: 95%; max-width: 1200px; margin: 0 auto; }
 #mapper20-gpcrome-picker-modal table.dataTable { font-size: 12px; }
 #mapper20-gpcrome-picker-modal .select2-container--open .select2-dropdown { z-index: 2060 !important; }
 #mapper20-gpcrome-picker-modal #mapper20-picker-filter-row th { padding: 3px 2px; }
+#mapper20-gpcrome-picker-modal .modal-content { display: flex; flex-direction: column; max-height: calc(100vh - 20px); }
+#mapper20-gpcrome-picker-modal .modal-body { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
 #mapper-tree-messages.mapper-tree-soft-warn {
   background: rgba(232, 194, 80, 0.12); color: #7a6310;
   padding: 6px 10px;
@@ -619,17 +642,17 @@
 .mapper20-in-receptor:-ms-input-placeholder {
   color: #8a9399; opacity: 1; white-space: pre-line;
 }
-/* Orange border on empty receptor cells */
-.mapper20-receptor-input-wrap.is-empty .mapper20-in-receptor {
+/* Orange border on empty receptor cells — only when table has no data yet */
+#mapper-tree-input-table:not(.mapper20-receptors-compact) .mapper20-receptor-input-wrap.is-empty .mapper20-in-receptor {
   border-color: #e0892e !important;
 }
-/* "Input data" label above the mode toggle */
+/* "Input data" label beside the mode toggle */
 .mapper20-input-mode-wrap {
-  display: inline-flex; flex-direction: column; align-items: center; gap: 2px;
+  display: inline-flex; flex-direction: row; align-items: center; gap: 5px;
 }
 .mapper20-input-mode-label {
-  font-size: 9px; font-weight: 600; color: #555;
-  letter-spacing: 0.04em; text-transform: uppercase; line-height: 1; user-select: none;
+  font-size: 13px; font-weight: 600; color: #555;
+  line-height: 1; user-select: none; white-space: nowrap;
 }
 /* Categorical mode: JS sets .mapper20-wheel-left to 356px inline; CSS constrains toolbar + table */
 .mapper20-wheel-wrap.mapper-tree-page.mapper-tree-catmode .mapper20-wheel-toolbar-stack {
@@ -641,34 +664,60 @@
 .mapper20-wheel-wrap.mapper-tree-page.mapper-tree-catmode .mapper20-wheel-left #mapper-tree-input-table.mapper20-text-mode {
   width: 322px; /* 356px wrapper - 20px padding (L+R) - 14px remove-button offset = 322px */
 }
+/* Loading overlay */
+.mapper20-wheel-wrap .mapper20-wheel-left { position: relative; }
+.mapper20-boot-overlay {
+  display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 10; background: rgba(255,255,255,0.80); border-radius: 10px;
+  align-items: center; justify-content: center; font-size: 13px; color: #666;
+  pointer-events: all;
+}
+.mapper20-booting .mapper20-boot-overlay { display: flex; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="mapper20-wheel-wrap row mapper-tree-page">
+<div class="mapper20-wheel-wrap row mapper-tree-page mapper20-booting">
   <div class="col-xs-12 mapper20-wheel-primary-col">
     <div class="mapper20-wheel-left">
+      <div class="mapper20-boot-overlay">Loading…</div>
       <div class="mapper20-wheel-top-row">
         <h2 class="mapper20-wheel-page-title">Classification tree</h2>
       </div>
       <div class="mapper20-wheel-toolbar-stack">
         <div class="mapper20-wheel-toolbar-grid">
           <div class="mapper20-wheel-toolbar" aria-label="Mapper tree tools primary" style="align-items:flex-end;">
-            <button type="button" class="btn btn-default btn-xs" id="mapper-tree-howto-btn" data-toggle="modal" data-target="#mapper-tree-howto-modal" title="How to use the tree mapper">
-              How to<span class="mapper20-howto-mark" aria-hidden="true">?</span>
-            </button>
             <div class="mapper20-input-mode-wrap">
-              <span class="mapper20-input-mode-label">Input data</span>
+              <span class="mapper20-input-mode-label">Input data:</span>
               <div class="btn-group btn-group-xs" role="group" aria-label="Input mode">
-                <button type="button" class="btn btn-default btn-xs active" id="mapper-tree-mode-numeric-btn" aria-pressed="true">Numerical</button>
-                <button type="button" class="btn btn-default btn-xs" id="mapper-tree-mode-labels-btn" aria-pressed="false">Categorical</button>
+                <button type="button" class="btn btn-default btn-xs active" id="mapper-tree-mode-numeric-btn" aria-pressed="true">Numbers</button>
+                <button type="button" class="btn btn-default btn-xs" id="mapper-tree-mode-labels-btn" aria-pressed="false">Categories</button>
               </div>
             </div>
             <button type="button" class="btn btn-default btn-xs" id="mapper-tree-demo-rows">Demo</button>
           </div>
           <div class="mapper20-wheel-toolbar" aria-label="Table actions">
+            <button type="button" class="btn btn-default btn-xs" id="mapper-tree-howto-btn" data-toggle="modal" data-target="#mapper-tree-howto-modal" title="How to use the tree mapper">
+              How to<span class="mapper20-howto-mark" aria-hidden="true">?</span>
+            </button>
             <button type="button" class="btn btn-primary btn-xs" id="mapper-tree-open-picker" data-toggle="modal" data-target="#mapper20-gpcrome-picker-modal">Receptor lookup</button>
-            <button type="button" class="btn btn-default btn-xs" id="mapper-tree-clear-rows">Clear table</button>
+            <div class="dropdown" style="position:relative;">
+              <button type="button" class="btn btn-default btn-xs dropdown-toggle" data-toggle="dropdown" id="mapper-tree-clear-rows">
+                Clear <span class="caret"></span>
+              </button>
+              <ul class="dropdown-menu mapper20-clear-menu">
+                <li><a href="#" id="mapper-tree-clear-whole">Whole table</a></li>
+                <li class="divider"></li>
+                <li><a href="#" id="mapper-tree-clear-mode">Current mode (<span id="mapper-tree-clear-mode-label">Numbers</span>)</a></li>
+                <li class="divider"></li>
+                <li class="mapper-tree-clear-col-num"><a href="#" data-tree-col="inner">Dot 1</a></li>
+                <li class="mapper-tree-clear-col-num"><a href="#" data-tree-col="o1">Dot 2</a></li>
+                <li class="mapper-tree-clear-col-num"><a href="#" data-tree-col="o2">Dot 3</a></li>
+                <li class="mapper-tree-clear-col-num"><a href="#" data-tree-col="o3">Dot 4</a></li>
+                <li class="mapper-tree-clear-col-num"><a href="#" data-tree-col="o4">Dot 5</a></li>
+                <li class="mapper-tree-clear-col-text" style="display:none;"><a href="#" data-tree-col="inner">Category</a></li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>
@@ -678,11 +727,11 @@
             <tr>
               <th class="mapper20-th-remove" aria-label="Remove row"></th>
               <th class="mapper20-th-receptor mapper20-sortable-head" data-mapper-tree-sort-col="receptor" tabindex="0" role="button" aria-sort="none">Receptor <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
-              <th class="mapper-tree-inner-h mapper20-sortable-head" data-mapper-tree-sort-col="inner" tabindex="0" role="button" aria-sort="none"><span class="mapper-tree-inner-header-label">Inner</span> <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
-              <th class="mapper-tree-o-head mapper-tree-outer-col" title="Outer ring 1">O1</th>
-              <th class="mapper-tree-o-head mapper-tree-outer-col" title="Outer ring 2">O2</th>
-              <th class="mapper-tree-o-head mapper-tree-outer-col" title="Outer ring 3">O3</th>
-              <th class="mapper-tree-o-head mapper-tree-outer-col" title="Outer ring 4">O4</th>
+              <th class="mapper-tree-inner-h mapper20-sortable-head" data-mapper-tree-sort-col="inner" tabindex="0" role="button" aria-sort="none"><span class="mapper-tree-inner-header-label">Dot 1</span> <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
+              <th class="mapper-tree-o-head mapper-tree-outer-col" title="Dot 2">Dot 2</th>
+              <th class="mapper-tree-o-head mapper-tree-outer-col" title="Dot 3">Dot 3</th>
+              <th class="mapper-tree-o-head mapper-tree-outer-col" title="Dot 4">Dot 4</th>
+              <th class="mapper-tree-o-head mapper-tree-outer-col" title="Dot 5">Dot 5</th>
               <th class="mapper20-th-swatch" title="Text mode colour">Color</th>
             </tr>
           </thead>
@@ -718,7 +767,7 @@
             <div id="mapper-tree-colors-numeric">
               <!-- header -->
               <div class="mapper-tree-color-ring-grid" style="font-weight:600; border-bottom:1px solid #ddd; padding-bottom:6px; margin-bottom:8px;">
-                <div class="mapper-tree-color-ring-label">Ring</div>
+                <div class="mapper-tree-color-ring-label">Dots</div>
                 <div class="mapper-tree-color-style-wrap" style="text-align:center;">Style</div>
                 <div class="mapper-tree-color-picker-wrap">Min</div>
                 <div class="mapper-tree-color-picker-wrap">Mid</div>
@@ -728,7 +777,7 @@
               <!-- Inner -->
               <div class="mapper-tree-color-ring-row" id="mapper-tree-color-row-Inner" style="display:none; margin-bottom:6px;">
                 <div class="mapper-tree-color-ring-grid">
-                  <div class="mapper-tree-color-ring-label">Inner</div>
+                  <div class="mapper-tree-color-ring-label">Dot 1</div>
                   <div class="mapper-tree-color-style-wrap"><select id="mapper-tree-cstyle-Inner" class="form-control input-sm" style="width:100%;"><option value="One">One</option><option value="Two">Two</option><option value="Three_RWB">Three</option><option value="Three_TWM">Three</option></select></div>
                   <div class="mapper-tree-cpicker-min-wrap mapper-tree-color-picker-wrap"><input type="text" id="mapper-tree-cpicker-min-Inner"></div>
                   <div class="mapper-tree-cpicker-mid-wrap mapper-tree-color-picker-wrap" style="visibility:hidden;"><input type="text" id="mapper-tree-cpicker-mid-Inner"></div>
@@ -739,7 +788,7 @@
               <!-- O1 -->
               <div class="mapper-tree-color-ring-row" id="mapper-tree-color-row-O1" style="display:none; margin-bottom:6px;">
                 <div class="mapper-tree-color-ring-grid">
-                  <div class="mapper-tree-color-ring-label">Outer 1</div>
+                  <div class="mapper-tree-color-ring-label">Dot 2</div>
                   <div class="mapper-tree-color-style-wrap"><select id="mapper-tree-cstyle-O1" class="form-control input-sm" style="width:100%;"><option value="One">One</option><option value="Two">Two</option><option value="Three_RWB">Three</option><option value="Three_TWM">Three</option></select></div>
                   <div class="mapper-tree-cpicker-min-wrap mapper-tree-color-picker-wrap"><input type="text" id="mapper-tree-cpicker-min-O1"></div>
                   <div class="mapper-tree-cpicker-mid-wrap mapper-tree-color-picker-wrap" style="visibility:hidden;"><input type="text" id="mapper-tree-cpicker-mid-O1"></div>
@@ -750,7 +799,7 @@
               <!-- O2 -->
               <div class="mapper-tree-color-ring-row" id="mapper-tree-color-row-O2" style="display:none; margin-bottom:6px;">
                 <div class="mapper-tree-color-ring-grid">
-                  <div class="mapper-tree-color-ring-label">Outer 2</div>
+                  <div class="mapper-tree-color-ring-label">Dot 3</div>
                   <div class="mapper-tree-color-style-wrap"><select id="mapper-tree-cstyle-O2" class="form-control input-sm" style="width:100%;"><option value="One">One</option><option value="Two">Two</option><option value="Three_RWB">Three</option><option value="Three_TWM">Three</option></select></div>
                   <div class="mapper-tree-cpicker-min-wrap mapper-tree-color-picker-wrap"><input type="text" id="mapper-tree-cpicker-min-O2"></div>
                   <div class="mapper-tree-cpicker-mid-wrap mapper-tree-color-picker-wrap" style="visibility:hidden;"><input type="text" id="mapper-tree-cpicker-mid-O2"></div>
@@ -761,7 +810,7 @@
               <!-- O3 -->
               <div class="mapper-tree-color-ring-row" id="mapper-tree-color-row-O3" style="display:none; margin-bottom:6px;">
                 <div class="mapper-tree-color-ring-grid">
-                  <div class="mapper-tree-color-ring-label">Outer 3</div>
+                  <div class="mapper-tree-color-ring-label">Dot 4</div>
                   <div class="mapper-tree-color-style-wrap"><select id="mapper-tree-cstyle-O3" class="form-control input-sm" style="width:100%;"><option value="One">One</option><option value="Two">Two</option><option value="Three_RWB">Three</option><option value="Three_TWM">Three</option></select></div>
                   <div class="mapper-tree-cpicker-min-wrap mapper-tree-color-picker-wrap"><input type="text" id="mapper-tree-cpicker-min-O3"></div>
                   <div class="mapper-tree-cpicker-mid-wrap mapper-tree-color-picker-wrap" style="visibility:hidden;"><input type="text" id="mapper-tree-cpicker-mid-O3"></div>
@@ -772,7 +821,7 @@
               <!-- O4 -->
               <div class="mapper-tree-color-ring-row" id="mapper-tree-color-row-O4" style="display:none; margin-bottom:6px;">
                 <div class="mapper-tree-color-ring-grid">
-                  <div class="mapper-tree-color-ring-label">Outer 4</div>
+                  <div class="mapper-tree-color-ring-label">Dot 5</div>
                   <div class="mapper-tree-color-style-wrap"><select id="mapper-tree-cstyle-O4" class="form-control input-sm" style="width:100%;"><option value="One">One</option><option value="Two">Two</option><option value="Three_RWB">Three</option><option value="Three_TWM">Three</option></select></div>
                   <div class="mapper-tree-cpicker-min-wrap mapper-tree-color-picker-wrap"><input type="text" id="mapper-tree-cpicker-min-O4"></div>
                   <div class="mapper-tree-cpicker-mid-wrap mapper-tree-color-picker-wrap" style="visibility:hidden;"><input type="text" id="mapper-tree-cpicker-mid-O4"></div>
@@ -780,7 +829,7 @@
                 </div>
               </div>
 
-              <p id="mapper-tree-colors-no-data" style="margin:6px 0 0; color:#888; font-size:11px; text-align:center;">Enter numerical data to configure ring colours.</p>
+              <p id="mapper-tree-colors-no-data" style="margin:6px 0 0; color:#888; font-size:11px; text-align:center;">Enter numbers data to configure dot colours.</p>
             </div>
 
             <!-- Categorical mode colour pickers panel (matches wheel) -->
@@ -802,31 +851,31 @@
               <div style="font-weight:600; margin-bottom:8px; border-bottom:1px solid #ddd; padding-bottom:5px;">Gradient bar labels</div>
               <div style="display:flex; flex-direction:column; gap:5px;">
                 <div style="display:flex; align-items:center; gap:8px;">
-                  <label style="width:54px; margin:0; font-weight:normal; flex-shrink:0;">Inner</label>
-                  <input type="text" id="mapper-tree-lbl-Inner" class="form-control input-sm" maxlength="22" value="Inner">
+                  <label style="width:54px; margin:0; font-weight:normal; flex-shrink:0;">Dot 1</label>
+                  <input type="text" id="mapper-tree-lbl-Inner" class="form-control input-sm" maxlength="22" value="Dot 1">
                 </div>
                 <div style="display:flex; align-items:center; gap:8px;">
-                  <label style="width:54px; margin:0; font-weight:normal; flex-shrink:0;">Outer 1</label>
-                  <input type="text" id="mapper-tree-lbl-O1" class="form-control input-sm" maxlength="22" value="Outer 1">
+                  <label style="width:54px; margin:0; font-weight:normal; flex-shrink:0;">Dot 2</label>
+                  <input type="text" id="mapper-tree-lbl-O1" class="form-control input-sm" maxlength="22" value="Dot 2">
                 </div>
                 <div style="display:flex; align-items:center; gap:8px;">
-                  <label style="width:54px; margin:0; font-weight:normal; flex-shrink:0;">Outer 2</label>
-                  <input type="text" id="mapper-tree-lbl-O2" class="form-control input-sm" maxlength="22" value="Outer 2">
+                  <label style="width:54px; margin:0; font-weight:normal; flex-shrink:0;">Dot 3</label>
+                  <input type="text" id="mapper-tree-lbl-O2" class="form-control input-sm" maxlength="22" value="Dot 3">
                 </div>
                 <div style="display:flex; align-items:center; gap:8px;">
-                  <label style="width:54px; margin:0; font-weight:normal; flex-shrink:0;">Outer 3</label>
-                  <input type="text" id="mapper-tree-lbl-O3" class="form-control input-sm" maxlength="22" value="Outer 3">
+                  <label style="width:54px; margin:0; font-weight:normal; flex-shrink:0;">Dot 4</label>
+                  <input type="text" id="mapper-tree-lbl-O3" class="form-control input-sm" maxlength="22" value="Dot 4">
                 </div>
                 <div style="display:flex; align-items:center; gap:8px;">
-                  <label style="width:54px; margin:0; font-weight:normal; flex-shrink:0;">Outer 4</label>
-                  <input type="text" id="mapper-tree-lbl-O4" class="form-control input-sm" maxlength="22" value="Outer 4">
+                  <label style="width:54px; margin:0; font-weight:normal; flex-shrink:0;">Dot 5</label>
+                  <input type="text" id="mapper-tree-lbl-O4" class="form-control input-sm" maxlength="22" value="Dot 5">
                 </div>
               </div>
             </div>
 
             <!-- Text mode notice -->
             <div id="mapper-tree-labels-text" style="display:none; color:#666; font-size:11px; padding:4px 0;">
-              Labels apply to numeric mode only.
+              Labels apply to numbers mode only.
             </div>
           </div>
         </div>
@@ -841,7 +890,7 @@
               <div class="small"><span id="classFontSizeValue">16</span> px</div>
             </div>
             <div class="form-group text-center" style="margin-bottom:10px;">
-              <label class="small" for="ligandTypeFontSizeSlider">Ligand type</label>
+              <label class="small" for="ligandTypeFontSizeSlider">Chemotype</label>
               <input type="range" class="form-control" style="width:90%" min="11" max="24" value="14" id="ligandTypeFontSizeSlider">
               <div class="small"><span id="ligandTypeFontSizeValue">14</span> px</div>
             </div>
@@ -859,7 +908,7 @@
         </div>
 
         <div class="dropdown mapper20-dropdown-anchor-topleft" style="position: relative;">
-          <button type="button" class="btn btn-primary dropdown-toggle btn-sm" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Circles</button>
+          <button type="button" class="btn btn-primary dropdown-toggle btn-sm" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Dots</button>
           <div class="dropdown-menu dropdown-menu-listplot mapper20-dropdown-menu-topleft p-2 text-center"
                style="min-width:200px; padding: 10px 15px; font-size:11px; left: 100%; margin-left: 5px; position: absolute;">
             <label for="mapper-tree-circle-size-slider" id="mapper-tree-circle-size-label">Size</label>
@@ -896,7 +945,7 @@
             Download <span class="caret"></span>
           </button>
           <div class="dropdown-menu p-2"
-               style="min-width: 160px; padding: 10px 15px; left: 100%; top: 50%; margin-left: 5px; position: absolute; transform: translateY(-25%); display: none;">
+               style="min-width: 160px; padding: 10px 15px; left: 100%; top: 50%; margin-left: 5px; position: absolute; transform: translateY(-25%);">
             <button type="button" class="btn btn-primary btn-block mb-1" onclick="saveSvgAsPngTree(document.getElementById('tree_plot_svg'), 'Tree.jpg');">JPG</button>
             <button type="button" class="btn btn-primary btn-block mb-1" onclick="saveSvgAsPngTree(document.getElementById('tree_plot_svg'), 'Tree.png');">PNG</button>
             <button type="button" class="btn btn-primary btn-block mb-1" onclick="saveSvg(document.getElementById('tree_plot_svg'), 'Tree.svg');">SVG</button>
@@ -921,8 +970,8 @@
       </div>
       <div class="modal-body">
         <p>Enter one receptor per row (search, paste UniProt/accession synonyms, or <strong>Select from table</strong>). The tree is filtered to those receptors the same way as classic Data Mapper, using phylogenetic leaf names from GPCRdb.</p>
-        <p><strong>Numeric</strong> mode fills <strong>Inner</strong> and up to four <strong>O1–O4</strong> circles (spreadsheet paste: receptor TAB inner TAB outer1 TAB …).</p>
-        <p><strong>Text</strong> colours the <strong>inner</strong> ring only from categorical labels; outer-circle inputs stay disabled.</p>
+        <p><strong>Numbers</strong> mode fills <strong>Dot 1</strong> and up to four <strong>Dot 2–Dot 5</strong> dots (spreadsheet paste: receptor TAB dot1 TAB dot2 TAB …).</p>
+        <p><strong>Categories</strong> colours the <strong>Dot 1</strong> ring only from categorical labels; outer dot inputs stay disabled.</p>
         <p>Use the right toolbar for leaf label type (Protein / Gene / UniProt), circle sizing, and exports.</p>
       </div>
       <div class="modal-footer">
@@ -990,9 +1039,10 @@
 <script src="{% static 'home/js/mapper_classification_tree.js' %}"></script>
 
 <script>
-$('.dropdown-menu').on('click', function(event){
+$('.dropdown-menu:not(.mapper20-clear-menu)').on('click', function(event){
   event.stopPropagation();
 });
+$('.dropdown-menu input[type="range"]').on('mouseenter pointerdown', function() { this.focus(); });
 
 var receptorSelect2Data = {{ receptor_select2_json|safe }};
 var MAPPER20_RESOLVE = {{ gpcrome_resolve_json|safe }};
