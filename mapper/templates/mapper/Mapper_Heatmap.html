@@ -243,6 +243,7 @@
               <li><a href="#" data-heatmap-col="val5">Column 5</a></li>
             </ul>
           </div>
+          <button type="button" class="btn btn-default btn-xs" onclick="mapperHeatmapDownloadTable()" title="Download input table as Excel (.xlsx)"><span class="glyphicon glyphicon-save" aria-hidden="true"></span> Download</button>
         </div>
       </div>
       <div class="table-responsive">
@@ -469,6 +470,7 @@
 <script src="{% static 'home/js/NewDrugsBrowser_datatables.min.js' %}"></script>
 <script src="{% static 'home/js/NorgesDTFilterBuilder.js' %}"></script>
 <script src="{% static 'home/js/mapper_gpcrome_picker_modal.js' %}"></script>
+<script src="{% static 'home/js/xlsx.full.min.js' %}"></script>
 
 <script>
 $('.dropdown-menu:not(.mapper20-clear-menu)').on('click', function(e){ e.stopPropagation(); });
@@ -506,4 +508,42 @@ window.MAPPER20_ENTRY_META = {};
 })();
 </script>
 <script src="{% static 'home/js/mapper_heatmap_page.js' %}"></script>
+<script>
+function mapperHeatmapDownloadTable() {
+  var c1Label = ($('#mapper-heatmap-lbl-V1').val() || 'Col 1').trim();
+  var c2Label = ($('#mapper-heatmap-lbl-V2').val() || 'Col 2').trim();
+  var c3Label = ($('#mapper-heatmap-lbl-V3').val() || 'Col 3').trim();
+  var c4Label = ($('#mapper-heatmap-lbl-V4').val() || 'Col 4').trim();
+  var c5Label = ($('#mapper-heatmap-lbl-V5').val() || 'Col 5').trim();
+  var headers = ['Receptor', c1Label, c2Label, c3Label, c4Label, c5Label];
+  var rows = [headers];
+  $('#mapper-heatmap-input-tbody tr').each(function() {
+    var $tr = $(this);
+    var entryId = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+    var unmatched = $tr.data('mapper20UnmatchedRaw');
+    var ta = ($tr.find('.mapper20-in-receptor').val() || '').trim();
+    var receptor = '';
+    if (entryId && window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[entryId]) {
+      receptor = window.MAPPER20_ENTRY_META[entryId].name_plain || window.MAPPER20_ENTRY_META[entryId].text || entryId;
+    } else if (unmatched != null && String(unmatched).trim()) {
+      receptor = String(unmatched).trim();
+    } else {
+      receptor = ta;
+    }
+    if (!receptor) return;
+    rows.push([
+      receptor,
+      ($tr.find('.mapper-heatmap-val1').val() || '').trim(),
+      ($tr.find('.mapper-heatmap-val2').val() || '').trim(),
+      ($tr.find('.mapper-heatmap-val3').val() || '').trim(),
+      ($tr.find('.mapper-heatmap-val4').val() || '').trim(),
+      ($tr.find('.mapper-heatmap-val5').val() || '').trim()
+    ]);
+  });
+  var wb = XLSX.utils.book_new();
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, ws, 'Heatmap');
+  XLSX.writeFile(wb, 'Heatmap_data.xlsx');
+}
+</script>
 {% endblock %}

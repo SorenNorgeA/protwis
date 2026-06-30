@@ -784,6 +784,7 @@
                 <li class="mapper20-clear-col-text" style="display:none;"><a href="#" data-col="val">Category</a></li>
               </ul>
             </div>
+            <button type="button" class="btn btn-default btn-xs" onclick="mapper20DownloadTable()" title="Download input table as Excel (.xlsx)"><span class="glyphicon glyphicon-save" aria-hidden="true"></span> Download</button>
           </div>
         </div>
       </div>
@@ -1013,6 +1014,7 @@
 <script src="{% static 'home/js/NewDrugsBrowser_datatables.min.js' %}"></script>
 <script src="{% static 'home/js/NorgesDTFilterBuilder.js' %}"></script>
 <script src="{% static 'home/js/mapper_gpcrome_picker_modal.js' %}"></script>
+<script src="{% static 'home/js/xlsx.full.min.js' %}"></script>
 
 <script>
 $('.dropdown-menu:not(.mapper20-clear-menu)').on('click', function(event){
@@ -4270,5 +4272,33 @@ $(document).ready(function() {
   }
   $('.mapper20-booting').removeClass('mapper20-booting');
 });
+</script>
+<script>
+function mapper20DownloadTable() {
+  var isText = $('#mapper20-input-table').hasClass('mapper20-text-mode');
+  var headers = ['Receptor', isText ? 'Category' : 'Number'];
+  var rows = [headers];
+  $('#mapper20-input-tbody tr').each(function() {
+    var $tr = $(this);
+    var entryId = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+    var unmatched = $tr.data('mapper20UnmatchedRaw');
+    var ta = ($tr.find('.mapper20-in-receptor').val() || '').trim();
+    var receptor = '';
+    if (entryId && MAPPER20_ENTRY_META && MAPPER20_ENTRY_META[entryId]) {
+      receptor = MAPPER20_ENTRY_META[entryId].name_plain || MAPPER20_ENTRY_META[entryId].text || entryId;
+    } else if (unmatched != null && String(unmatched).trim()) {
+      receptor = String(unmatched).trim();
+    } else {
+      receptor = ta;
+    }
+    if (!receptor) return;
+    var val = ($tr.find('.mapper20-in-value').val() || '').trim();
+    rows.push([receptor, val]);
+  });
+  var wb = XLSX.utils.book_new();
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, ws, 'GPCRome Wheel');
+  XLSX.writeFile(wb, 'GPCRome_Wheel_data.xlsx');
+}
 </script>
 {% endblock %}
