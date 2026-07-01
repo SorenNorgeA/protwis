@@ -26,7 +26,8 @@
   /** Stem-upper → label arrays for SVG leaf relabelling (`custom_changeLeavesLabels`). */
   window.mapperTreeStemLabelDicts = { IUPHAR: {}, Gene: {}, UniProt: {} };
 
-  var MAPPER_TREE_MAX_ROWS = 500;
+  var MAPPER_TREE_MAX_ROWS = 150;
+  var MAPPER_TREE_MAX_RECEPTORS = 150;
   var MAPPER_TREE_PLACEHOLDER_NUMERIC  = 'Paste in 1–6 columns of data\nor type';
   var MAPPER_TREE_PLACEHOLDER_CATMODE  = 'Paste in 1–2 columns of data\nor type';
   /** Mapper tree page uses circular layout only (no curved/straight dendrogram UI). */
@@ -69,6 +70,9 @@
   var styling_circles;
   var maxLeafNodeLength_scaler;
   var mapperTreeLastLabelSet = '';
+
+  var mapperTreeSpeciesActive = false;
+  var mapperTreeSpeciesNameFormat = 'common'; // 'common' | 'latin' | 'both'
 
   function deepClone(obj) {
     return JSON.parse(JSON.stringify(obj));
@@ -285,6 +289,192 @@
     });
   }
 
+  function mapperTreeBareStemUpper(entryId) {
+    return String(entryId || '').trim().split('_')[0].toUpperCase();
+  }
+
+  // Returns the dedup key for a row (matches mapperTreeBuildTreeCircles key logic).
+  // Returns null for blank / unresolvable rows.
+  function mapperTreeRowUniKey($tr) {
+    var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+    var ta    = (($tr.find('.mapper20-in-receptor').val() || '') + '').trim();
+    var unmatched = ($tr.data('mapper20UnmatchedRaw') || '') + '';
+    if (!entry && !ta && !String(unmatched).trim()) { return null; }
+    var id = entry || (window.MAPPER20_RESOLVE &&
+             window.MAPPER20_RESOLVE[String(ta || unmatched).trim().toUpperCase()]) || '';
+    if (!id) { return null; }
+    if (mapperTreeSpeciesActive) {
+      var specVal = ($tr.find('.mapper-tree-species-select').val() || '').trim();
+      return specVal ? specVal.toUpperCase() : mapperTreeBareStemUpper(id);
+    }
+    return mapperTreeBareStemUpper(id);
+  }
+
+  // Mark rows that are duplicates or push the unique-leaf count past MAPPER_TREE_MAX_RECEPTORS.
+  // Runs synchronously (fast DOM scan) for immediate visual feedback.
+  function mapperTreeUpdateOverLimitMarks() {
+    var seen = {};
+    var unique = 0;
+    $('#mapper-tree-input-tbody tr').each(function () {
+      var $tr = $(this);
+      var key = mapperTreeRowUniKey($tr);
+      var over = false;
+      if (key !== null) {
+        if (Object.prototype.hasOwnProperty.call(seen, key) || unique >= MAPPER_TREE_MAX_RECEPTORS) {
+          over = true;
+        } else {
+          seen[key] = true;
+          unique++;
+        }
+      }
+      $tr.toggleClass('mapper20-row-over-limit', over);
+    });
+  }
+
+  function mapperTreeFormatSpeciesTag(specInfo) {
+    if (!specInfo) return '';
+    var c = (specInfo.common || '').trim();
+    var l = (specInfo.latin || '').trim();
+    if (mapperTreeSpeciesNameFormat === 'latin') return l ? '(' + l + ')' : '';
+    if (mapperTreeSpeciesNameFormat === 'both') {
+      if (c && l && c !== l) return '(' + c + ', ' + l + ')';
+      return (c || l) ? '(' + (c || l) + ')' : '';
+    }
+    return (c || l) ? '(' + (c || l) + ')' : '';
+  }
+
+  function mapperTreeSpeciesLabel(speciesObj) {
+    if (!speciesObj) return '';
+    var c = (speciesObj.common || '').trim();
+    var l = (speciesObj.latin || '').trim();
+    if (mapperTreeSpeciesNameFormat === 'latin') return l || c;
+    if (mapperTreeSpeciesNameFormat === 'both') {
+      if (c && l && c !== l) return c + ' (' + l + ')';
+      return c || l;
+    }
+    return c || l;
+  }
+
+  function mapperTreeExtendLabelDictsForSpecies() {
+    if (!window.MAPPER_TREE_SPECIES_DATA) return;
+    var sld = window.mapperTreeStemLabelDicts;
+    if (!sld) return;
+    var allEntries = window.MAPPER_TREE_SPECIES_DATA.entry_to_species || {};
+    Object.keys(allEntries).forEach(function (entryName) {
+      var specInfo = allEntries[entryName];
+      var stemKey = entryName.toUpperCase();
+      var baseStem = entryName.split('_')[0].toUpperCase();
+      var tag = mapperTreeFormatSpeciesTag(specInfo);
+      var suffix = tag ? ' ' + tag : '';
+      var iup = sld.IUPHAR[baseStem];
+      sld.IUPHAR[stemKey] = [iup ? iup[0] + suffix : baseStem + suffix];
+      var gen = sld.Gene[baseStem];
+      sld.Gene[stemKey] = [gen ? gen[0] + suffix : baseStem + suffix];
+      var uni = sld.UniProt[baseStem];
+      sld.UniProt[stemKey] = [uni ? uni[0] + suffix : baseStem + suffix];
+    });
+    (window.MAPPER_TREE_SPECIES_DATA.nonhuman_only || []).forEach(function (nho) {
+      var stemKey = nho.entry.toUpperCase();
+      var baseStem = nho.entry.split('_')[0].toUpperCase();
+      var tag = mapperTreeFormatSpeciesTag({ common: nho.common, latin: nho.latin });
+      var suffix = tag ? ' ' + tag : '';
+      var iup = sld.IUPHAR[baseStem];
+      sld.IUPHAR[stemKey] = [iup ? iup[0] + suffix : baseStem + suffix];
+      var gen = sld.Gene[baseStem];
+      sld.Gene[stemKey] = [gen ? gen[0] + suffix : baseStem + suffix];
+      var uni = sld.UniProt[baseStem];
+      sld.UniProt[stemKey] = [uni ? uni[0] + suffix : baseStem + suffix];
+    });
+  }
+
+  function mapperTreePopulateSpeciesSelect($tr, entryId, preserveSelection) {
+    var $sel = $tr.find('.mapper-tree-species-select');
+    if (!$sel.length || !entryId || !window.MAPPER_TREE_SPECIES_DATA) return;
+    var prevVal = preserveSelection ? ($sel.val() || '').trim() : '';
+    if ($sel.data('select2')) { $sel.select2('destroy'); }
+    $sel.empty();
+    var stem = entryId.split('_')[0];
+    var orthologs = (window.MAPPER_TREE_SPECIES_DATA.by_stem[stem] || []).slice();
+    if (!orthologs.length) {
+      // non-human-only: collect ALL species for this stem (not just the stored entry)
+      (window.MAPPER_TREE_SPECIES_DATA.nonhuman_only || []).forEach(function (nho) {
+        if (nho.stem === stem) orthologs.push(nho);
+      });
+    }
+    orthologs.forEach(function (o) {
+      $('<option>').val(o.entry).text(mapperTreeSpeciesLabel(o)).appendTo($sel);
+    });
+    var validPrev = prevVal && orthologs.some(function (o) { return o.entry === prevVal; });
+    if (validPrev) {
+      $sel.val(prevVal);
+    } else {
+      var humanOpt = null;
+      orthologs.forEach(function (o) { if (o.is_human) humanOpt = o; });
+      $sel.val(humanOpt ? humanOpt.entry : (orthologs[0] ? orthologs[0].entry : ''));
+    }
+    $sel.select2({
+      width: 'resolve',
+      dropdownAutoWidth: true,
+      minimumResultsForSearch: 6,
+      dropdownParent: $('body')
+    });
+  }
+
+  function mapperTreeInitAllSpeciesDropdowns() {
+    $('#mapper-tree-input-tbody tr').each(function () {
+      var $tr = $(this);
+      var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+      if (entry) mapperTreePopulateSpeciesSelect($tr, entry, true);
+    });
+  }
+
+  function mapperTreeInjectSpeciesLeavesForStem(node, baseStem, speciesEntries) {
+    var ch = node.children;
+    if (!ch || !ch.length) return false;
+    for (var i = 0; i < ch.length; i++) {
+      var child = ch[i];
+      if (!child.children || !child.children.length) {
+        var leafName = String(child.name || '').trim();
+        if (leafName.toLowerCase() === baseStem.toLowerCase()) {
+          ch[i] = $.extend(true, {}, child, { name: baseStem + '_human' });
+          var insertIdx = i + 1;
+          speciesEntries.forEach(function (spEntry) {
+            if (spEntry.toLowerCase() !== baseStem.toLowerCase() + '_human') {
+              var newLeaf = $.extend(true, {}, child, { name: spEntry });
+              ch.splice(insertIdx, 0, newLeaf);
+              insertIdx++;
+            }
+          });
+          return true;
+        }
+      } else {
+        if (mapperTreeInjectSpeciesLeavesForStem(child, baseStem, speciesEntries)) return true;
+      }
+    }
+    return false;
+  }
+
+  function mapperTreeBuildLiveSkelWithSpecies() {
+    var stemSpeciesMap = {};
+    $('#mapper-tree-input-tbody tr').each(function () {
+      var $tr = $(this);
+      var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+      if (!entry) return;
+      var specVal = ($tr.find('.mapper-tree-species-select').val() || '').trim() || entry;
+      var baseStem = entry.split('_')[0];
+      if (!stemSpeciesMap[baseStem]) stemSpeciesMap[baseStem] = [];
+      if (stemSpeciesMap[baseStem].indexOf(specVal) === -1) stemSpeciesMap[baseStem].push(specVal);
+    });
+    var liveSkel = deepClone(ORIG_SKEL);
+    Object.keys(stemSpeciesMap).forEach(function (baseStem) {
+      var entries = stemSpeciesMap[baseStem];
+      // Always rename/inject so the leaf name matches the species-suffixed circles key.
+      // Human-only: renames bare leaf 5ht1a -> 5ht1a_human (no siblings added).
+      mapperTreeInjectSpeciesLeavesForStem(liveSkel, baseStem, entries);
+    });
+    return liveSkel;
+  }
+
   function mapperTreeFindLeafNameExact(skel, entryId, taRaw, unmatchedRaw) {
     var prefer = mapperStemFromEntry(entryId);
     if (prefer && skel) {
@@ -307,6 +497,24 @@
       walk(skel);
       if (found) {
         return found;
+      }
+      // Fallback: try bare stem for non-human entries (e.g. 5ht5b_mouse -> leaf 5ht5b)
+      var bareStem = tgt.split('_')[0];
+      if (bareStem !== tgt) {
+        var walkBare = function (node) {
+          if (!node) return;
+          var bch = node.children;
+          if (!bch || !bch.length) {
+            var bnm = node.name != null ? String(node.name).trim() : '';
+            if (bnm.replace(/_human$/i, '').toLowerCase() === bareStem) {
+              found = bnm;
+            }
+            return;
+          }
+          bch.forEach(walkBare);
+        };
+        walkBare(skel);
+        if (found) return found;
       }
     }
     var rawCandidate = unmatchedRaw || taRaw || '';
@@ -335,11 +543,16 @@
       if (!entry && !ta && !String(unmatched).trim()) {
         return;
       }
-      var ln = mapperTreeFindLeafNameExact(skel, entry, ta, unmatched);
+      var effectiveEntry = entry;
+      if (mapperTreeSpeciesActive && entry) {
+        var specValC = ($tr.find('.mapper-tree-species-select').val() || '').trim();
+        if (specValC) effectiveEntry = specValC;
+      }
+      var ln = mapperTreeFindLeafNameExact(skel, effectiveEntry, ta, unmatched);
       if (!ln) {
         return;
       }
-      var keyUpper = ln.replace(/_human$/i, '').toUpperCase();
+      var keyUpper = mapperTreeSpeciesActive ? ln.toUpperCase() : ln.replace(/_human$/i, '').toUpperCase();
       var cir = circlesObj[keyUpper];
       if (!cir) {
         return;
@@ -398,6 +611,7 @@
     var textMode = mapperTreeIsTextMode();
     $('#mapper-tree-input-tbody tr').each(function () {
       var $tr = $(this);
+      if ($tr.hasClass('mapper20-row-over-limit')) { return; }
       var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
       var ta = (($tr.find('.mapper20-in-receptor').val() || '') + '').trim();
       var unmatched = ($tr.data('mapper20UnmatchedRaw') || '') + '';
@@ -412,7 +626,13 @@
       if (!id) {
         return;
       }
-      var uniKey = mapperTreeStemKeyUpper(id);
+      var uniKey;
+      if (mapperTreeSpeciesActive) {
+        var specValB = ($tr.find('.mapper-tree-species-select').val() || '').trim();
+        uniKey = specValB ? specValB.toUpperCase() : mapperTreeBareStemUpper(id);
+      } else {
+        uniKey = mapperTreeBareStemUpper(id);
+      }
       if (!uniKey) {
         return;
       }
@@ -652,6 +872,7 @@
       return;
     }
 
+    mapperTreeUpdateOverLimitMarks();
     $('#mapper-tree-messages').empty();
 
     Tree_circles = mapperTreeBuildTreeCircles();
@@ -664,7 +885,8 @@
 
     $('#tree_plot').empty();
 
-    var namesPayload = mapperTreeCollectNamesPayload(ORIG_SKEL, Tree_circles);
+    var workSkel = mapperTreeSpeciesActive ? mapperTreeBuildLiveSkelWithSpecies() : ORIG_SKEL;
+    var namesPayload = mapperTreeCollectNamesPayload(workSkel, Tree_circles);
 
     /** Values present but no leaves resolved on the scaffold (wrong / unresolved receptors). */
     if (!Object.keys(namesPayload).length) {
@@ -675,7 +897,7 @@
       return;
     }
 
-    var filteredSk = mapperTreeFilterSkeleton(ORIG_SKEL, namesPayload);
+    var filteredSk = mapperTreeFilterSkeleton(workSkel, namesPayload);
 
     // Auto-manage class level: hide when only 1 class present, restore when 2+ appear
     var rawClassCount = (filteredSk && filteredSk.children) ? filteredSk.children.length : 0;
@@ -725,6 +947,10 @@
     }
 
     var btnVal = mapperTreeActiveLeafDropdownVal();
+
+    if (mapperTreeSpeciesActive) {
+      mapperTreeExtendLabelDictsForSpecies();
+    }
 
     window.TREE_UI = window.TREE_UI || {};
     window.TREE_UI.layout = MAPPER_TREE_LAYOUT;
@@ -839,6 +1065,7 @@
     if (suppressRedraw) {
       return;
     }
+    mapperTreeUpdateOverLimitMarks();
     window.clearTimeout(redrawTimer);
     redrawTimer = window.setTimeout(mapperTreeRedrawNow, DEBOUNCE_MS);
   }
@@ -881,6 +1108,15 @@
       });
       MAPPER20_MODE_SNAPSHOTS_TREE.numeric = { rows: seed2 };
     }
+  }
+
+  function mapperTreeApplyLeftPanelWidth() {
+    var text = mapperTreeIsTextMode();
+    var speciesExtra = mapperTreeSpeciesActive ? 88 : 0;
+    $('.mapper20-wheel-wrap.mapper-tree-page .mapper20-wheel-left').css(
+      'width', text ? (400 + speciesExtra) + 'px' : ''
+    );
+    $('.mapper20-wheel-wrap.mapper-tree-page').toggleClass('mapper-tree-species-active', mapperTreeSpeciesActive);
   }
 
   function mapperTreeSetInputMode(mode) {
@@ -935,7 +1171,7 @@
     $('#mapper-tree-spacer-section').toggle(!text);
     $('.mapper20-wheel-wrap.mapper-tree-page').toggleClass('mapper-tree-catmode', text);
     // Drive the left panel to an explicit pixel width so the flex column actually shrinks
-    $('.mapper20-wheel-wrap.mapper-tree-page .mapper20-wheel-left').css('width', text ? '356px' : '');
+    mapperTreeApplyLeftPanelWidth();
 
     // Resize colors menu and sync categorical colours panel + placeholder
     $('#mapper-tree-colors-menu').toggleClass('mapper-tree-colors-text-mode', text);
@@ -1306,6 +1542,9 @@
     mapperTreeSyncClearBtn($tr);
     mapperTreeSyncRemoveButtons();
     mapperTreeCompactReceptorRowsAfterInput();
+    if (mapperTreeSpeciesActive && sid) {
+      mapperTreePopulateSpeciesSelect($tr, sid);
+    }
     if (!suppressRedraw) {
       mapperTreeFocusInnerCell($tr);
     }
@@ -1380,6 +1619,9 @@
           .append($('<div class="mapper20-ac-item-label">').html(inner))
           .appendTo(ul);
       };
+      if (w.menu && w.menu.element) {
+        w.menu.element.addClass('mapper-tree-ac-menu');
+      }
     }
 
     $inp.on('keyup', function () {
@@ -1476,6 +1718,11 @@
     var $tdR = $('<td class="mapper20-receptor-cell">');
     var $inp = mapperTreeCreateReceptorTd($tdR);
     tr.append($tdR);
+    tr.append(
+      $('<td class="mapper-tree-species-cell">').append(
+        $('<select class="form-control input-sm mapper-tree-species-select"></select>')
+      ).css('display', mapperTreeSpeciesActive ? 'table-cell' : 'none')
+    );
     tr.append(
       $('<td class="mapper-tree-cell-inner mapper20-value-cell">').append(
         $('<input type="text" class="form-control input-sm mapper-tree-inner" autocomplete="off">')
@@ -1593,7 +1840,8 @@
         o1: (($tr.find('.mapper-tree-o1').val() || '') + '').trim(),
         o2: (($tr.find('.mapper-tree-o2').val() || '') + '').trim(),
         o3: (($tr.find('.mapper-tree-o3').val() || '') + '').trim(),
-        o4: (($tr.find('.mapper-tree-o4').val() || '') + '').trim()
+        o4: (($tr.find('.mapper-tree-o4').val() || '') + '').trim(),
+        speciesEntry: ($tr.find('.mapper-tree-species-select').val() || '').trim()
       });
     });
     return rows;
@@ -1626,6 +1874,11 @@
   function mapperTreePopulateRow($tr, row) {
     if (row.entry) {
       mapperTreeSetResolved($tr, row.entry);
+      if (row.speciesEntry && mapperTreeSpeciesActive) {
+        var $specSel = $tr.find('.mapper-tree-species-select');
+        $specSel.val(row.speciesEntry);
+        if ($specSel.data('select2')) { $specSel.trigger('change.select2'); }
+      }
     } else {
       var $inp = $tr.find('.mapper20-in-receptor');
       $inp.val(row.receptorText || row.unmatched || '');
@@ -2006,6 +2259,51 @@
     mapperTreeBuildStemLabelDicts();
     mapperTreeLeafLabelLookupBuild();
 
+    // Extend autocomplete and resolve map with non-human-only receptors.
+    // One autocomplete entry per stem (first species entry as id); all species
+    // entries share the same "(no human ortholog)" display across all label modes.
+    if (window.MAPPER_TREE_SPECIES_DATA && window.MAPPER_TREE_SPECIES_DATA.nonhuman_only) {
+      var addedNhoStems = {};
+      window.MAPPER_TREE_SPECIES_DATA.nonhuman_only.forEach(function (nho) {
+        var stemU = nho.stem.toUpperCase();
+        var TAG = '(no human ortholog)';
+        var dispText = stemU + ' ' + TAG;
+        var nhoHtml = '<span>' + $('<span>').text(stemU).html() + ' <em>' + TAG + '</em></span>';
+
+        // Register MAPPER20_ENTRY_META for every individual species entry so that
+        // whichever species is later picked in the dropdown, the cell always shows
+        // "STEM (no human ortholog)" in all Receptor Names modes.
+        if (window.MAPPER20_ENTRY_META && !window.MAPPER20_ENTRY_META[nho.entry]) {
+          window.MAPPER20_ENTRY_META[nho.entry] = {
+            name_html:  nhoHtml,
+            name_plain: dispText,
+            uniprot:    dispText   // UniProt mode also shows "(no human ortholog)"
+          };
+        }
+        if (window.MAPPER20_RESOLVE) {
+          window.MAPPER20_RESOLVE[nho.entry.toUpperCase()] = nho.entry;
+        }
+
+        // Only one autocomplete item per stem (keyed on the first species entry)
+        if (addedNhoStems[stemU]) { return; }
+        addedNhoStems[stemU] = true;
+
+        var alreadyIn = (window.receptorSelect2Data || []).some(function (x) { return x.id === nho.entry; });
+        if (!alreadyIn) {
+          window.receptorSelect2Data = window.receptorSelect2Data || [];
+          window.receptorSelect2Data.push({
+            id: nho.entry,
+            text: dispText,
+            name_plain: dispText,
+            name_html: nhoHtml
+          });
+          if (window.MAPPER20_RESOLVE) {
+            window.MAPPER20_RESOLVE[stemU] = nho.entry;
+          }
+        }
+      });
+    }
+
     Tree_circles = {};
     Tree_colors = {
       Inner: ['#FFFFFF', '#000000'],
@@ -2235,6 +2533,42 @@
       .on('click.mapperTree', function (eDemo) {
         eDemo.preventDefault();
         mapperTreeFillDemoRows();
+      });
+
+    $('#mapper-tree-species-toggle')
+      .off('click.mapperTreeSpecies')
+      .on('click.mapperTreeSpecies', function () {
+        mapperTreeSpeciesActive = !mapperTreeSpeciesActive;
+        $(this).toggleClass('btn-primary', mapperTreeSpeciesActive).toggleClass('btn-default', !mapperTreeSpeciesActive);
+        var speciesCellDisp = mapperTreeSpeciesActive ? 'table-cell' : 'none';
+        $('.mapper-tree-species-cell').css('display', speciesCellDisp);
+        $('.mapper-tree-species-th').css('display', speciesCellDisp);
+        $('#mapper-tree-species-names-wrap').toggle(mapperTreeSpeciesActive);
+        mapperTreeApplyLeftPanelWidth();
+        if (mapperTreeSpeciesActive) {
+          mapperTreeInitAllSpeciesDropdowns();
+        }
+        mapperTreeScheduleRedraw();
+      });
+
+    $('.mapper-tree-species-name-btn')
+      .off('click.mapperTreeSpeciesName')
+      .on('click.mapperTreeSpeciesName', function (eSpec) {
+        eSpec.preventDefault();
+        mapperTreeSpeciesNameFormat = $(this).attr('data-value') || 'common';
+        $('.mapper-tree-species-name-btn').each(function () {
+          var isActive = $(this).attr('data-value') === mapperTreeSpeciesNameFormat;
+          $(this).toggleClass('btn-primary', isActive).toggleClass('btn-outline-primary', !isActive);
+          if (isActive) { $(this).addClass('active'); } else { $(this).removeClass('active'); }
+        });
+        mapperTreeInitAllSpeciesDropdowns();
+        mapperTreeScheduleRedraw();
+      });
+
+    $(document)
+      .off('change.mapperTreeSpeciesSel', '#mapper-tree-input-tbody .mapper-tree-species-select')
+      .on('change.mapperTreeSpeciesSel', '#mapper-tree-input-tbody .mapper-tree-species-select', function () {
+        mapperTreeScheduleRedraw();
       });
 
     $('#mapper-tree-input-table')

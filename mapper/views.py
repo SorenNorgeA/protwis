@@ -777,6 +777,86 @@ class DataMapperHome(TemplateView):
         return result
 
     @staticmethod
+    def build_ortholog_species_map():
+        """
+        Groups all SWISSPROT GPCR proteins by family to build a per-receptor
+        species availability map for the Tree page species feature.
+        Returns dict with:
+          by_stem:          human_stem -> list of ortholog dicts (all species incl. human)
+          nonhuman_only:    list of receptor dicts that have no human equivalent
+          entry_to_species: entry_name -> {common, latin, label, is_human}
+        """
+        proteins = list(
+            Protein.objects.filter(
+                source__name='SWISSPROT',
+                accession__isnull=False,
+                parent_id__isnull=True,
+                family__slug__startswith='0',
+            ).values(
+                'entry_name', 'family_id', 'species_id',
+                'species__common_name', 'species__latin_name',
+            ).order_by('family_id', 'species_id')
+        )
+
+        family_map = {}
+        for p in proteins:
+            fid = p['family_id']
+            if fid not in family_map:
+                family_map[fid] = []
+            family_map[fid].append(p)
+
+        by_stem = {}
+        nonhuman_only = []
+        entry_to_species = {}
+
+        for _family_id, members in family_map.items():
+            human_members = [m for m in members if m['species_id'] == 1]
+            member_infos = []
+            for m in members:
+                common = (m['species__common_name'] or '').strip() or (m['species__latin_name'] or '').strip()
+                latin = (m['species__latin_name'] or '').strip()
+                if common and latin and common != latin:
+                    label = '{} ({})'.format(common, latin)
+                elif latin:
+                    label = latin
+                else:
+                    label = m['entry_name']
+                is_human = (m['species_id'] == 1)
+                stem = m['entry_name'].split('_')[0]
+                info = {
+                    'entry': m['entry_name'],
+                    'stem': stem,
+                    'common': common,
+                    'latin': latin,
+                    'label': label,
+                    'is_human': is_human,
+                }
+                member_infos.append(info)
+                entry_to_species[m['entry_name']] = {
+                    'common': common,
+                    'latin': latin,
+                    'label': label,
+                    'is_human': is_human,
+                }
+
+            if human_members:
+                human_stem = human_members[0]['entry_name'].split('_')[0]
+                if human_stem not in by_stem:
+                    by_stem[human_stem] = member_infos
+            else:
+                for info in member_infos:
+                    info['label_suffix'] = '({} only)'.format(
+                        info['common'] or info['latin'] or 'Unknown'
+                    )
+                    nonhuman_only.append(info)
+
+        return {
+            'by_stem': by_stem,
+            'nonhuman_only': nonhuman_only,
+            'entry_to_species': entry_to_species,
+        }
+
+    @staticmethod
     def generate_tree_plot(input_data): #ADD AN INPUT FILTER DICTIONARY
         ### TREE SECTION
         tree = PhylogeneticTreeGenerator()
@@ -1939,6 +2019,9 @@ class MapperTreeView(TemplateView):
         )
         context['gpcrome_picker_rows_json'] = json.dumps(
             DataMapperHome.gpcrome_receptor_picker_table_rows(maps=maps)
+        )
+        context['ortholog_species_json'] = json.dumps(
+            DataMapperHome.build_ortholog_species_map()
         )
         return context
 

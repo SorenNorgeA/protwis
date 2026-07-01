@@ -926,24 +926,32 @@ function CreateTextLegend(location, circle_data, Layout) {
         if (vb) {
             const parts = vb.split(" ").map(Number);
 
-            // Always increase viewBox height
-            parts[3] += extraHeight;
-            svg.attr("viewBox", parts.join(" "));
-
             if (TreeLegendPosition === "Bottom") {
-                yOffset = parts[3] - extraHeight; // Push legend to bottom
+                // Expand viewBox downward, place legend below tree
+                parts[3] += extraHeight;
+                svg.attr("viewBox", parts.join(" "));
+                yOffset = parts[3] - extraHeight;
             } else {
-                // Push the tree group down instead, so legend appears at top
+                // Top: place legend above tree's actual bounding box.
+                // Use svg.select('g') — same approach as createLegendBars which is known to work.
                 const treeGroup = svg.select('g');
-                const currentTransform = treeGroup.attr("transform");
-                const match = currentTransform?.match(/translate\(([^,]+),([^)]+)\)/);
-                if (match) {
-                    const currentX = parseFloat(match[1]);
-                    const currentY = parseFloat(match[2]);
-                    treeGroup.attr("transform", `translate(${currentX},${currentY + extraHeight})`);
+                const treeBBoxTop = treeGroup.node() ? treeGroup.node().getBBox() : null;
+                let translateX = 0, translateY = 0;
+                const treeTransform = treeGroup.attr('transform');
+                const treeMatch = treeTransform && treeTransform.match(/translate\(([^,]+),([^)]+)\)/);
+                if (treeMatch) {
+                    translateX = parseFloat(treeMatch[1]);
+                    translateY = parseFloat(treeMatch[2]);
                 }
-
-                yOffset = 0;
+                // Expand viewBox upward so legend is visible above the tree
+                parts[1] -= extraHeight;
+                parts[3] += extraHeight;
+                svg.attr("viewBox", parts.join(" "));
+                // treeTop is the topmost Y of all tree content in SVG coordinates.
+                // legendBBox.y is the local offset of legend content within the group (~28-40px),
+                // so we must subtract it to correctly align the legend bottom with treeTop - gap.
+                const treeTop = (treeBBoxTop ? treeBBoxTop.y : 0) + translateY;
+                yOffset = treeTop - legendBBox.y - legendBBox.height - 10;
             }
         }
 

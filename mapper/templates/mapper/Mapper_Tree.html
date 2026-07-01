@@ -412,6 +412,12 @@
 .mapper20-input-table tbody tr.mapper20-row-invalid td.mapper20-receptor-cell {
   border: 2px solid #a94442 !important; background-color: rgba(169, 68, 66, 0.06);
 }
+.mapper20-input-table tbody tr.mapper20-row-over-limit td.mapper20-receptor-cell {
+  border: 2px solid #d97706 !important; background-color: rgba(217, 119, 6, 0.07);
+}
+.mapper20-input-table tbody tr.mapper20-row-over-limit td:not(.mapper-tree-species-cell) {
+  opacity: 0.5;
+}
 .mapper20-wheel-left #mapper-tree-input-table:not(.mapper20-text-mode) .mapper20-th-swatch,
 .mapper20-wheel-left #mapper-tree-input-table:not(.mapper20-text-mode) td.mapper20-swatch-cell {
   display: none;
@@ -654,7 +660,7 @@
   font-size: 13px; font-weight: 600; color: #555;
   line-height: 1; user-select: none; white-space: nowrap;
 }
-/* Categorical mode: JS sets .mapper20-wheel-left to 356px inline; CSS constrains toolbar + table */
+/* Categorical mode: JS sets .mapper20-wheel-left to 400px inline; CSS constrains toolbar + table */
 .mapper20-wheel-wrap.mapper-tree-page.mapper-tree-catmode .mapper20-wheel-toolbar-stack {
   width: 100%;
 }
@@ -662,7 +668,17 @@
   width: 100%;
 }
 .mapper20-wheel-wrap.mapper-tree-page.mapper-tree-catmode .mapper20-wheel-left #mapper-tree-input-table.mapper20-text-mode {
-  width: 322px; /* 356px wrapper - 20px padding (L+R) - 14px remove-button offset = 322px */
+  width: 366px; /* 400px wrapper - 20px padding (L+R) - 14px remove-button offset = 366px */
+}
+/* Species column: widen panel and tables when active (+88px for species column) */
+.mapper20-wheel-wrap.mapper-tree-page.mapper-tree-species-active .mapper20-wheel-left {
+  max-width: min(568px, calc(100vw - 48px));
+}
+.mapper20-wheel-wrap.mapper-tree-page.mapper-tree-species-active .mapper20-wheel-left #mapper-tree-input-table {
+  width: 526px; /* 438 + 88 */
+}
+.mapper20-wheel-wrap.mapper-tree-page.mapper-tree-species-active.mapper-tree-catmode .mapper20-wheel-left #mapper-tree-input-table.mapper20-text-mode {
+  width: 454px; /* 366 + 88 */
 }
 /* Loading overlay */
 .mapper20-wheel-wrap .mapper20-wheel-left { position: relative; }
@@ -673,6 +689,54 @@
   pointer-events: all;
 }
 .mapper20-booting .mapper20-boot-overlay { display: flex; }
+/* Species column */
+.mapper-tree-species-th,
+.mapper-tree-species-cell {
+  display: none;
+  width: 88px;
+  min-width: 88px;
+  max-width: 88px;
+  vertical-align: middle;
+  text-align: center;
+  box-sizing: border-box;
+}
+.mapper20-wheel-wrap.mapper-tree-species-active .mapper-tree-species-th,
+.mapper20-wheel-wrap.mapper-tree-species-active .mapper-tree-species-cell {
+  display: table-cell;
+}
+.mapper-tree-species-cell .select2-container {
+  max-width: 100%;
+  min-width: 0;
+  font-size: 11px;
+  box-sizing: border-box;
+}
+.mapper-tree-species-cell .select2-container .select2-selection--single {
+  height: 26px;
+  line-height: 24px;
+}
+.mapper-tree-species-cell .select2-container .select2-selection__rendered {
+  line-height: 24px;
+  padding-left: 4px;
+  padding-right: 18px;
+}
+.mapper-tree-species-cell .select2-container .select2-selection__arrow {
+  height: 24px;
+}
+ul.ui-autocomplete.mapper-tree-ac-menu {
+  max-height: 210px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+#mapper-tree-species-toggle.mapper-tree-species-on {
+  color: #fff;
+  background-color: #337ab7;
+  border-color: #2e6da4;
+}
+#mapper-tree-species-toggle.mapper-tree-species-on:hover,
+#mapper-tree-species-toggle.mapper-tree-species-on:focus {
+  background-color: #286090;
+  border-color: #204d74;
+}
 </style>
 {% endblock %}
 
@@ -695,6 +759,7 @@
               </div>
             </div>
             <button type="button" class="btn btn-default btn-xs" id="mapper-tree-demo-rows">Demo</button>
+            <button type="button" class="btn btn-default btn-xs" id="mapper-tree-species-toggle">Species</button>
           </div>
           <div class="mapper20-wheel-toolbar" aria-label="Table actions">
             <button type="button" class="btn btn-default btn-xs" id="mapper-tree-howto-btn" data-toggle="modal" data-target="#mapper-tree-howto-modal" title="How to use the tree mapper">
@@ -728,6 +793,7 @@
             <tr>
               <th class="mapper20-th-remove" aria-label="Remove row"></th>
               <th class="mapper20-th-receptor mapper20-sortable-head" data-mapper-tree-sort-col="receptor" tabindex="0" role="button" aria-sort="none">Receptor <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
+              <th class="mapper-tree-species-th" title="Species / ortholog">Species</th>
               <th class="mapper-tree-inner-h mapper20-sortable-head" data-mapper-tree-sort-col="inner" tabindex="0" role="button" aria-sort="none"><span class="mapper-tree-inner-header-label">Dot 1</span> <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
               <th class="mapper-tree-o-head mapper-tree-outer-col" title="Dot 2">Dot 2</th>
               <th class="mapper-tree-o-head mapper-tree-outer-col" title="Dot 3">Dot 3</th>
@@ -756,6 +822,17 @@
             <button type="button" class="btn btn-outline-primary btn-block mb-1 mapper-tree-leaf-btn btn-primary active" data-value="IUPHAR">Protein</button>
             <button type="button" class="btn btn-outline-primary btn-block mb-1 mapper-tree-leaf-btn" data-value="Gene">Gene</button>
             <button type="button" class="btn btn-outline-primary btn-block mapper-tree-leaf-btn" data-value="UniProt">UniProt</button>
+          </div>
+        </div>
+
+        <div class="dropdown mapper20-dropdown-anchor-topleft" id="mapper-tree-species-names-wrap" style="display:none; position:relative;">
+          <button type="button" class="btn btn-primary dropdown-toggle btn-sm" id="mapper-tree-species-names-btn"
+                  data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Species names</button>
+          <div class="dropdown-menu dropdown-menu-listplot mapper20-dropdown-menu-topleft"
+               style="min-width:160px; padding:10px 14px; left:100%; margin-left:5px; position:absolute; font-size:11px;">
+            <button type="button" class="btn btn-primary btn-block mb-1 mapper-tree-species-name-btn active" data-value="common">Common name</button>
+            <button type="button" class="btn btn-outline-primary btn-block mb-1 mapper-tree-species-name-btn" data-value="latin">Latin name</button>
+            <button type="button" class="btn btn-outline-primary btn-block mapper-tree-species-name-btn" data-value="both">Both</button>
           </div>
         </div>
 
@@ -1049,6 +1126,7 @@ $('.dropdown-menu input[type="range"]').on('mouseenter pointerdown', function() 
 var receptorSelect2Data = {{ receptor_select2_json|safe }};
 var MAPPER20_RESOLVE = {{ gpcrome_resolve_json|safe }};
 var MAPPER20_GPCROME_PICKER_ROWS = {{ gpcrome_picker_rows_json|safe }};
+var MAPPER_TREE_SPECIES_DATA = {{ ortholog_species_json|safe }};
 
 window.MAPPER20_ENTRY_META = {};
 (function () {
