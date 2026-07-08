@@ -318,12 +318,32 @@
 }
 .mapper20-swatch-cell .mapper20-row-swatch-replacer .sp-preview { width: 18px; height: 18px; margin: 0; border: 0; }
 .mapper20-swatch-cell .mapper20-row-swatch-replacer .sp-dd { display: none; }
-/* Catmode: left panel shrinks */
-.mapper20-wheel-wrap.mapper-list-page.mapper-list-catmode .mapper20-wheel-left { min-width: 356px; }
+/* Catmode: left panel shrinks to 400px so primary toolbar wraps to two rows */
+.mapper20-wheel-wrap.mapper-list-page.mapper-list-catmode .mapper20-wheel-left { min-width: 400px; }
 .mapper20-wheel-wrap.mapper-list-page.mapper-list-catmode .mapper20-wheel-toolbar-stack { width: 100%; }
 .mapper20-wheel-wrap.mapper-list-page.mapper-list-catmode .mapper20-wheel-toolbar-grid { width: 100%; }
 .mapper20-wheel-wrap.mapper-list-page.mapper-list-catmode .mapper20-wheel-left .table-responsive { width: fit-content; }
-.mapper20-wheel-wrap.mapper-list-page.mapper-list-catmode .mapper20-wheel-left #mapper-list-input-table.mapper20-text-mode { width: 322px; }
+.mapper20-wheel-wrap.mapper-list-page.mapper-list-catmode .mapper20-wheel-left #mapper-list-input-table.mapper20-text-mode {
+  width: 366px; /* 400px wrapper - 20px padding - 14px remove = 366px */
+}
+.mapper20-wheel-wrap.mapper-list-page.mapper-list-catmode.mapper-list-species-active .mapper20-wheel-left #mapper-list-input-table.mapper20-text-mode {
+  width: 454px; /* 366px + 88px species column */
+}
+/* Species column */
+.mapper20-wheel-wrap.mapper-list-page #mapper-list-input-table .mapper-list-species-h,
+.mapper20-wheel-wrap.mapper-list-page #mapper-list-input-table .mapper-list-species-cell {
+  width: 88px; min-width: 88px; max-width: 88px;
+}
+/* Species-active: wider panel + tables */
+.mapper20-wheel-wrap.mapper-list-page.mapper-list-species-active .mapper20-wheel-left {
+  max-width: min(600px, calc(100vw - 48px));
+}
+.mapper20-wheel-wrap.mapper-list-page.mapper-list-species-active #mapper-list-input-table {
+  width: 548px; /* 460 + 88 */
+}
+.mapper20-wheel-wrap.mapper-list-page.mapper-list-species-active #mapper-list-input-table.mapper20-text-mode {
+  width: 398px; /* 310 + 88 */
+}
 /* Categorical colours panel in Colors dropdown */
 #mapper-list-colors-menu.mapper-list-colors-text-mode {
   width: max-content; min-width: 120px !important; max-width: min(320px, 92vw); padding: 8px !important;
@@ -417,6 +437,7 @@
               </div>
             </div>
             <button type="button" class="btn btn-default btn-xs" id="mapper-list-demo-rows">Demo</button>
+            <button type="button" class="btn btn-default btn-xs" id="mapper-list-species-toggle">Species</button>
           </div>
           <div class="mapper20-wheel-toolbar" aria-label="Table actions">
             <button type="button" class="btn btn-default btn-xs" id="mapper-list-howto-btn" data-toggle="modal" data-target="#mapper-list-howto-modal" title="How to use the list mapper">
@@ -449,6 +470,7 @@
             <tr>
               <th class="mapper20-th-remove" aria-label="Remove row"></th>
               <th class="mapper20-th-receptor mapper20-sortable-head" data-mapper-list-sort-col="receptor" tabindex="0" role="button" aria-sort="none">Receptor <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
+              <th class="mapper-list-species-h" style="display:none;">Species</th>
               <th class="mapper-list-val-h mapper20-sortable-head" data-mapper-list-sort-col="val1" tabindex="0" role="button" aria-sort="none">Dot 1 <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
               <th class="mapper-list-val-h mapper20-sortable-head" data-mapper-list-sort-col="val2">Dot 2</th>
               <th class="mapper-list-val-h mapper20-sortable-head" data-mapper-list-sort-col="val3">Dot 3</th>
@@ -475,6 +497,16 @@
             <button type="button" class="btn btn-outline-primary btn-block mb-1 mapper-list-leaf-btn btn-primary active" data-value="Protein">Protein</button>
             <button type="button" class="btn btn-outline-primary btn-block mb-1 mapper-list-leaf-btn" data-value="Gene">Gene</button>
             <button type="button" class="btn btn-outline-primary btn-block mapper-list-leaf-btn" data-value="UniProt">UniProt</button>
+          </div>
+        </div>
+
+        <!-- Species names (only when species toggle is on) -->
+        <div id="mapper-list-species-names-wrap" style="display:none; position:relative;" class="dropdown mapper20-dropdown-anchor-topleft">
+          <button type="button" class="btn btn-primary dropdown-toggle btn-sm" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Species names</button>
+          <div class="dropdown-menu" style="min-width:160px; padding:10px 14px; left:100%; top:50%; margin-left:5px; position:absolute; transform:translateY(-30%); font-size:11px;">
+            <button class="btn btn-primary btn-block mb-1 mapper-list-species-name-btn" data-value="common">Common name</button>
+            <button class="btn btn-outline-primary btn-block mb-1 mapper-list-species-name-btn" data-value="latin">Latin name</button>
+            <button class="btn btn-outline-primary btn-block mapper-list-species-name-btn" data-value="both">Both</button>
           </div>
         </div>
 
@@ -821,6 +853,7 @@ var receptorSelect2Data = {{ receptor_select2_json|safe }};
 var MAPPER20_RESOLVE    = {{ gpcrome_resolve_json|safe }};
 var MAPPER20_GPCROME_PICKER_ROWS = {{ gpcrome_picker_rows_json|safe }};
 var MAPPER_LIST_RECEPTOR_INFO    = {{ receptor_info_json|safe }};
+window.MAPPER_LIST_SPECIES_DATA  = {{ ortholog_species_json|safe }};
 
 window.MAPPER20_ENTRY_META = {};
 (function(){

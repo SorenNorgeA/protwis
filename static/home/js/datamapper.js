@@ -1818,7 +1818,7 @@ function Calculate_dimension(data, Category_data, Col_break_number, columns, lab
             if (label_names === 'UniProt') {
                 // Convert based on UniProt data
                 label = label_conversion_dicts.IUPHAR_to_UniProt_converter[label];
-                label = label ? label.replace(/_human/g, '').toUpperCase() : label; // Clean up UniProt receptor names
+                label = label ? label.toUpperCase() : label;
             } else if (label_names === 'Protein') {
                 // Apply IUPHAR-specific replacements and clean up
                 label = replaceHtmlEntities(label)
@@ -2023,7 +2023,7 @@ function RenderListPlot_Labels(data, category_data, location, styling_option, La
 
             } else if (label_names === 'UniProt') {
                 // Handle UniProt receptor labels
-                label = label_conversion_dicts.IUPHAR_to_UniProt_converter[label_key]?.replace(/_human/g, '').toUpperCase() || label_key;
+                label = (label_conversion_dicts.IUPHAR_to_UniProt_converter[label_key] || label_key).toUpperCase();
                 plotGroup.append('text')
                     .attr('x', margin.left + xOffset + labelOffset)
                     .attr('y', yOffset)
@@ -2800,7 +2800,7 @@ function handleRowLabels(textElement, label, labelType, fontSize) {
     let transformedLabel = label; // Initialize transformedLabel with the original label
 
     if (labelType === 'UniProt') {
-        transformedLabel = label.replace(/_human/g, '').toUpperCase();
+        transformedLabel = label.toUpperCase();
         textElement.text(transformedLabel);
     } else if (labelType === 'Gene') {
         transformedLabel = label_converter.UniProt_to_Gene_converter[label];
@@ -2984,13 +2984,32 @@ function Heatmap(data, location, heatmap_DataStyling,label_x_converter) {
         legend_y_position = 0;
     }
 
+    // Measure the longest Y-axis (receptor) label to set left margin dynamically
+    let longestRowLabelPx = 0;
+    rows.forEach(function(row) {
+        var lbl;
+        if (labelType === 'UniProt') {
+            lbl = row.toUpperCase();
+        } else if (labelType === 'Gene') {
+            lbl = (window.label_converter && window.label_converter.UniProt_to_Gene_converter &&
+                   window.label_converter.UniProt_to_Gene_converter[row]) || row;
+        } else {
+            lbl = (window.label_converter && window.label_converter.UniProt_to_IUPHAR_converter &&
+                   window.label_converter.UniProt_to_IUPHAR_converter[row]) || row;
+            lbl = String(lbl).replace(/<\/?(?:sub|i)>/g, '');
+        }
+        var w = measureTextSize(String(lbl || row), receptor_fontsize).width;
+        if (w > longestRowLabelPx) longestRowLabelPx = w;
+    });
+    const yAxisAreaWidth = Math.max(60, Math.ceil(longestRowLabelPx) + 12);
+
     const width = (rowLabelWidth * cols.length) + rowLabelWidth;
     const height = (20 * rows.length);
     const adjustedTopMargin = (rotation === 90 && label_position === 'Top') ? longestLabelSize.width + 20 : margin.top;
 
     const svg_home = d3.select("#" + location)
         .append("svg")
-        .attr("width", width + margin.left + margin.right)
+        .attr("width", yAxisAreaWidth + width + margin.right)
         .attr("height", height + adjustedTopMargin * 2)
         .attr("id", "Heatmap_plot_svg");
 
@@ -3014,7 +3033,7 @@ function Heatmap(data, location, heatmap_DataStyling,label_x_converter) {
     }
 
     const svg = svg_home.append("g")
-        .attr("transform", `translate(${margin.left * 2}, ${margin.top})`);
+        .attr("transform", `translate(${yAxisAreaWidth}, ${margin.top})`);
 
     let xAxis;
     if (label_position === 'Bottom') {

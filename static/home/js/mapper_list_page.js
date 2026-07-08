@@ -33,6 +33,9 @@
   window.MAPPER20_LABEL_COLORS  = window.MAPPER20_LABEL_COLORS  || {};
   window.MAPPER20_LABEL_ENABLED = window.MAPPER20_LABEL_ENABLED || {};
 
+  var mapperListSpeciesActive = false;
+  var mapperListSpeciesNameFormat = 'common';
+
   // ── Persistent config ────────────────────────────────────────────────────────
   /** Receptor info from Django: entry_name → {class, ligandtype, family, name_plain, gene, uniprot} */
   var ReceptorInfo = {};
@@ -149,6 +152,107 @@
     });
   }
 
+  // ── Species helpers ───────────────────────────────────────────────────────────
+  function mapperListSpeciesLabel(o) {
+    if (mapperListSpeciesNameFormat === 'latin') return o.latin || o.common || '';
+    if (mapperListSpeciesNameFormat === 'both') {
+      var c = (o.common || '').trim(), l = (o.latin || '').trim();
+      return (c && l && c !== l) ? c + ' (' + l + ')' : c || l;
+    }
+    return o.common || o.latin || '';
+  }
+
+  function mapperListFormatSpeciesTag(o) {
+    var c = (o.common || '').trim(), l = (o.latin || '').trim();
+    if (mapperListSpeciesNameFormat === 'latin') return l ? '(' + l + ')' : '';
+    if (mapperListSpeciesNameFormat === 'both') {
+      if (c && l && c !== l) return '(' + c + ', ' + l + ')';
+      return (c || l) ? '(' + (c || l) + ')' : '';
+    }
+    return (c || l) ? '(' + (c || l) + ')' : '';
+  }
+
+  function mapperListSpeciesLabelForEntry(specEntry) {
+    var sd = window.MAPPER_LIST_SPECIES_DATA;
+    if (!sd) return '';
+    var stem = String(specEntry || '').split('_')[0];
+    var pools = (sd.by_stem[stem] || []).concat(sd.nonhuman_only || []);
+    for (var i = 0; i < pools.length; i++) {
+      if (pools[i].entry === specEntry) return mapperListSpeciesLabel(pools[i]);
+    }
+    return '';
+  }
+
+  function mapperListPopulateSpeciesSelect($tr, entryId, preserveSelection) {
+    var $sel = $tr.find('.mapper-list-species-select');
+    if (!$sel.length || !entryId || !window.MAPPER_LIST_SPECIES_DATA) return;
+    var prevVal = preserveSelection ? ($sel.val() || '').trim() : '';
+    if ($sel.data('select2')) { try { $sel.select2('destroy'); } catch (e) {} }
+    $sel.empty();
+    var sd   = window.MAPPER_LIST_SPECIES_DATA;
+    var stem = String(entryId).split('_')[0];
+    var orthologs = (sd.by_stem[stem] || []).slice();
+    if (!orthologs.length) {
+      (sd.nonhuman_only || []).forEach(function (nho) { if (nho.stem === stem) orthologs.push(nho); });
+    }
+    orthologs.forEach(function (o) {
+      $('<option>').val(o.entry).text(mapperListSpeciesLabel(o)).appendTo($sel);
+    });
+    var validPrev = prevVal && orthologs.some(function (o) { return o.entry === prevVal; });
+    if (validPrev) {
+      $sel.val(prevVal);
+    } else {
+      var humanOpt = null;
+      orthologs.forEach(function (o) { if (o.is_human) humanOpt = o; });
+      $sel.val(humanOpt ? humanOpt.entry : (orthologs[0] ? orthologs[0].entry : ''));
+    }
+    $sel.select2({ width: 'resolve', dropdownAutoWidth: true, minimumResultsForSearch: 6, dropdownParent: $('body') });
+  }
+
+  function mapperListInitAllSpeciesDropdowns() {
+    $('#mapper-list-input-tbody tr').each(function () {
+      var entry = ($(this).find('.mapper20-receptor-entry').val() || '').trim();
+      if (entry) mapperListPopulateSpeciesSelect($(this), entry, true);
+    });
+  }
+
+  function mapperListApplyLeftPanelWidth() {
+    var text = window.mapperListInputMode === 'text';
+    var speciesExtra = mapperListSpeciesActive ? 88 : 0;
+    $('.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left').css(
+      'width', text ? (400 + speciesExtra) + 'px' : ''
+    );
+    $('.mapper20-wheel-wrap.mapper-list-page').toggleClass('mapper-list-species-active', mapperListSpeciesActive);
+  }
+
+  function mapperListApplySpeciesPanelClass() {
+    mapperListApplyLeftPanelWidth();
+  }
+
+  function mapperListExtendLabelConversionForSpecies() {
+    var sd = window.MAPPER_LIST_SPECIES_DATA;
+    if (!sd || !sd.by_stem) return;
+    function addEntry(o) {
+      var stem = o.stem;
+      var humanOrthologs = (sd.by_stem[stem] || []).filter(function (x) { return x.is_human; });
+      var humanEntry = humanOrthologs.length ? humanOrthologs[0].entry : null;
+      var baseMeta = humanEntry && window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[humanEntry];
+      var baseIUPHAR = (baseMeta && baseMeta.name_plain) || stem.toUpperCase();
+      var gene = (baseMeta && baseMeta.gene) || '';
+      var tag  = mapperListSpeciesActive ? mapperListFormatSpeciesTag(o) : (o.is_human ? '' : mapperListFormatSpeciesTag(o));
+      var fullName = tag ? baseIUPHAR + ' ' + tag : baseIUPHAR;
+      LabelConversionDicts.UniProt_to_IUPHAR_converter[o.entry] = fullName;
+      LabelConversionDicts.IUPHAR_to_UniProt_converter[fullName] = o.entry;
+      if (gene) {
+        var geneLbl = tag ? gene + ' ' + tag : gene;
+        LabelConversionDicts.UniProt_to_Gene_converter[o.entry]  = geneLbl;
+        LabelConversionDicts.IUPHAR_to_Gene_converter[fullName]  = geneLbl;
+      }
+    }
+    Object.keys(sd.by_stem).forEach(function (stem) { (sd.by_stem[stem] || []).forEach(addEntry); });
+    (sd.nonhuman_only || []).forEach(addEntry);
+  }
+
   // ── Data construction ─────────────────────────────────────────────────────────
   /**
    * Builds the two data structures the list plot JS needs:
@@ -172,15 +276,27 @@
       }
       if (!entry) return;
       var info = ReceptorInfo[entry];
+      if (!info) {
+        // Non-human entries (e.g. 5ht5b_mouse) may not be in ReceptorInfo — try human stem fallback
+        var stemFallback = entry.split('_')[0] + '_human';
+        info = ReceptorInfo[stemFallback] || null;
+      }
       if (!info) return;
 
       var cls     = info['class']   || 'Other';
       var ligtype = info.ligandtype || 'Other';
       var family  = info.family     || 'Other';
-      // nameKey must match the key in LabelConversionDicts.IUPHAR_to_Gene_converter (= name_plain).
-      // Use MAPPER20_ENTRY_META as authoritative source, same as the wheel/tree.
+      // nameKey: species-aware when species mode is active
       var metaEntry = (window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[entry]) || {};
-      var nameKey = metaEntry.name_plain || info.name_plain || entry;
+      var baseNamePlain = metaEntry.name_plain || info.name_plain || entry;
+      var nameKey;
+      if (mapperListSpeciesActive) {
+        var specVal = ($tr.find('.mapper-list-species-select').val() || '').trim();
+        var dataEntryId = specVal || entry;
+        nameKey = LabelConversionDicts.UniProt_to_IUPHAR_converter[dataEntryId] || baseNamePlain;
+      } else {
+        nameKey = baseNamePlain;
+      }
 
       // Validate values BEFORE touching listdata — family level is an ARRAY of names
       // (Data_resorter expects familyObj.receptors.forEach, so must be an array)
@@ -465,7 +581,7 @@
 
     // Shrink/grow left panel
     $('.mapper20-wheel-wrap.mapper-list-page').toggleClass('mapper-list-catmode', text);
-    $('.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left').css('width', text ? '356px' : '');
+    mapperListApplyLeftPanelWidth();
 
     // Category hints
     mapperListSyncCatHints();
@@ -830,6 +946,9 @@
     var $tdR = $('<td class="mapper20-receptor-cell mapper20-value-cell">');
     var $inp = mapperListCreateReceptorTd($tdR);
     $tr.append($tdR);
+    // Species cell (hidden until species toggle is active)
+    var $specSel = $('<select class="form-control input-sm mapper-list-species-select">');
+    $tr.append($('<td class="mapper-list-species-cell">').css('display', mapperListSpeciesActive ? '' : 'none').append($specSel));
 
     // Val 1-4
     ['val1','val2','val3','val4'].forEach(function (suf) {
@@ -874,6 +993,8 @@
   function mapperListDestroyRowAc($tr) {
     mapperListDestroyAc($tr.find('.mapper20-in-receptor'));
     $tr.find('.mapper20-row-color-picker').each(function () { mapperListDestroySwatchSpectrum($(this)); });
+    var $ss = $tr.find('.mapper-list-species-select');
+    if ($ss.length && $ss.data('select2')) { try { $ss.select2('destroy'); } catch (e) {} }
   }
   function mapperListDestroyAllRows() {
     $('#mapper-list-input-tbody tr').each(function () { mapperListDestroyRowAc($(this)); });
@@ -885,6 +1006,14 @@
     if (LabelNames === 'Gene' && meta.gene) return $('<span/>').text(meta.gene).html();
     if (LabelNames === 'UniProt' && meta.uniprot) return $('<span/>').text(meta.uniprot).html();
     return meta.name_html ? String(meta.name_html) : $('<span/>').text(entryId || '').html();
+  }
+
+  function mapperListEditSeed(entryId) {
+    var sid = entryId != null ? String(entryId).trim() : '';
+    var meta = (window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[sid]) || {};
+    if (LabelNames === 'Gene' && meta.gene) { return meta.gene; }
+    if (LabelNames === 'UniProt' && meta.uniprot) { return meta.uniprot; }
+    return meta.name_plain || '';
   }
 
   function mapperListSetResolved($tr, id) {
@@ -901,8 +1030,10 @@
       mapperListScheduleRedraw(); return;
     }
     $hid.val(sid);
+    if (mapperListSpeciesActive) mapperListPopulateSpeciesSelect($tr, sid, false);
     $view.html(mapperListResolvedDisplay(sid)).show();
     $inp.val('').hide();
+    mapperListBindAc($inp);
     $tr.removeClass('mapper20-row-invalid').removeData('mapper20UnmatchedRaw');
     mapperListSyncClearBtn($tr); mapperListSyncRemoveButtons(); mapperListCompactReceptors();
     if (!suppressRedraw) {
@@ -917,15 +1048,25 @@
   function mapperListFilterLocal(term) {
     var t = (term || '').trim().toUpperCase();
     if (!t || !window.receptorSelect2Data) return [];
-    var filtered = window.receptorSelect2Data.filter(function (item) {
-      var st = (item.search_text || item.text || '').toUpperCase();
-      return st.indexOf(t) !== -1 || (item.id && String(item.id).toUpperCase().indexOf(t) !== -1);
+    var meta = window.MAPPER20_ENTRY_META || {};
+    var results = [];
+    window.receptorSelect2Data.forEach(function (item) {
+      var m = meta[item.id] || {};
+      var searchIn = [(m.name_plain || item.name_plain || item.text || ''), (m.gene || ''), (m.uniprot || ''), item.id].join(' ').toUpperCase();
+      if (searchIn.indexOf(t) === -1) return;
+      var dispHtml;
+      if (LabelNames === 'Gene' && m.gene) {
+        dispHtml = $('<span/>').text(m.gene).html();
+      } else if (LabelNames === 'UniProt' && m.uniprot) {
+        dispHtml = $('<span/>').text(m.uniprot).html();
+      } else {
+        dispHtml = m.name_html || item.name_html || $('<span/>').text(m.name_plain || item.text || item.id).html();
+      }
+      results.push({ label: m.name_plain || item.name_plain || item.text || item.id,
+        value: item.id, id: item.id, html: dispHtml, name_html: item.name_html || '', name_plain: item.name_plain || '' });
     });
-    if (filtered.length > 80) filtered = filtered.slice(0, 80);
-    return filtered.map(function (item) {
-      return { label: item.name_plain || item.text || item.id, value: item.id, id: item.id,
-                name_html: item.name_html || '', name_plain: item.name_plain || '' };
-    });
+    if (results.length > 80) results = results.slice(0, 80);
+    return results;
   }
 
   function mapperListBindAc($inp) {
@@ -939,7 +1080,8 @@
     var w = $inp.data('ui-autocomplete');
     if (w) {
       w._renderItem = function (ul, item) {
-        return $('<li>').append($('<div class="mapper20-ac-item-label">').html(item.name_html || $('<span/>').text(item.label||'').html())).appendTo(ul);
+        var inner = item.html || item.name_html || $('<span/>').text(item.label || '').html();
+        return $('<li>').append($('<div class="mapper20-ac-item-label">').html(inner)).appendTo(ul);
       };
       if (w.menu && w.menu.element) w.menu.element.addClass('mapper20-receptor-ac-menu');
     }
@@ -1143,6 +1285,49 @@
     // Load receptor info from Django context
     ReceptorInfo = window.MAPPER_LIST_RECEPTOR_INFO || {};
     mapperListBuildLabelConversion();
+    try { mapperListExtendLabelConversionForSpecies(); } catch (e) { /* non-critical */ }
+
+    // Extend autocomplete with non-human-only entries (receptors with no human ortholog)
+    try {
+      if (window.MAPPER_LIST_SPECIES_DATA) {
+        var _seenNhoStems = {};
+        (window.MAPPER_LIST_SPECIES_DATA.nonhuman_only || []).forEach(function (nho) {
+          var stem = nho.stem;
+
+          // Register MAPPER20_ENTRY_META for every individual species entry so that
+          // whichever species is later picked in the row's species dropdown, the cell
+          // always shows "STEM (no human ortholog)" in all Receptor Names modes.
+          var stemU = stem.toUpperCase();
+          var TAG = '(no human ortholog)';
+          var dispText = stemU + ' ' + TAG;
+          var nhoHtml = '<span>' + $('<span>').text(stemU).html() + ' <em>' + TAG + '</em></span>';
+          if (window.MAPPER20_ENTRY_META && !window.MAPPER20_ENTRY_META[nho.entry]) {
+            window.MAPPER20_ENTRY_META[nho.entry] = {
+              name_html:  nhoHtml,
+              name_plain: dispText,
+              uniprot:    dispText
+            };
+          }
+
+          if (_seenNhoStems[stem]) return;
+          _seenNhoStems[stem] = true;
+          if (window.MAPPER20_RESOLVE && (window.MAPPER20_RESOLVE[stem.toUpperCase()] ||
+              window.MAPPER20_RESOLVE[(stem + '_human').toUpperCase()])) return;
+          var entryText = (nho.common || stem) + ' (no human ortholog)';
+          if (window.receptorSelect2Data) {
+            window.receptorSelect2Data.push({
+              id: nho.entry, text: entryText, name_plain: entryText,
+              name_html: $('<span>').text(entryText).html(),
+              search_text: (stem + ' ' + (nho.common || '') + ' ' + (nho.latin || '')).toUpperCase()
+            });
+          }
+          if (window.MAPPER20_RESOLVE) {
+            window.MAPPER20_RESOLVE[stem.toUpperCase()] = nho.entry;
+            window.MAPPER20_RESOLVE[nho.entry.toUpperCase()] = nho.entry;
+          }
+        });
+      }
+    } catch (e) { /* non-critical */ }
 
     // Set up initial table
     $('#mapper-list-input-tbody').empty();
@@ -1264,19 +1449,23 @@
     $(document)
       .off('click.mapperListHtmlEdit', '#mapper-list-input-tbody .mapper20-receptor-html-view')
       .on('click.mapperListHtmlEdit', '#mapper-list-input-tbody .mapper20-receptor-html-view', function () {
-        var $tr    = $(this).closest('tr');
-        var $oldTa = $tr.find('.mapper20-in-receptor');
-        mapperListDestroyAc($oldTa);
-        var hid    = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+        var $tr  = $(this).closest('tr');
+        mapperListDestroyAc($tr.find('.mapper20-in-receptor'));
+        var hid  = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
         $(this).hide().empty();
-        var $inp2  = $('<textarea class="form-control input-sm mapper20-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>');
-        var meta   = hid && window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[hid];
-        $inp2.val((meta && meta.name_plain) || '');
+        var $inp2 = $('<textarea class="form-control input-sm mapper20-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>');
+        var seed  = mapperListEditSeed(hid);
+        $inp2.val(seed);
+        if (!seed) { $tr.find('.mapper20-receptor-input-wrap').addClass('is-empty'); }
         $tr.find('.mapper20-receptor-input-wrap .mapper20-in-receptor').remove();
-        $tr.find('.mapper20-receptor-input-wrap').prepend($inp2).addClass('is-empty');
+        $tr.find('.mapper20-receptor-input-wrap').prepend($inp2);
         $tr.find('.mapper20-receptor-entry').val('');
         mapperListBindAc($inp2);
         $inp2.show().focus();
+        window.setTimeout(function () {
+          var t = ($inp2.val() || '').trim();
+          if (t.length >= 1 && $inp2.data('ui-autocomplete')) { $inp2.autocomplete('search', t); }
+        }, 0);
         mapperListSyncClearBtn($tr);
         mapperListSyncRemoveButtons();
         mapperListCompactReceptors();
@@ -1391,6 +1580,40 @@
         }
       });
     }
+
+    // Species toggle
+    $('#mapper-list-species-toggle').on('click.mapperList', function () {
+      mapperListSpeciesActive = !mapperListSpeciesActive;
+      $(this).toggleClass('btn-primary', mapperListSpeciesActive)
+             .toggleClass('btn-default', !mapperListSpeciesActive);
+      mapperListApplySpeciesPanelClass();
+      $('#mapper-list-input-tbody .mapper-list-species-cell').toggle(mapperListSpeciesActive);
+      $('.mapper-list-species-h').toggle(mapperListSpeciesActive);
+      $('#mapper-list-species-names-wrap').toggle(mapperListSpeciesActive);
+      mapperListExtendLabelConversionForSpecies();
+      if (mapperListSpeciesActive) mapperListInitAllSpeciesDropdowns();
+      mapperListScheduleRedraw();
+    });
+
+    // Species dropdown change
+    $(document).on('change.mapperListSpecies',
+      '#mapper-list-input-tbody .mapper-list-species-select',
+      function () { mapperListScheduleRedraw(); }
+    );
+
+    // Species name format buttons — use direct binding (document delegation is blocked by
+    // the stopPropagation on .dropdown-menu at line 835 of Mapper_List.html)
+    $('.mapper-list-species-name-btn').off('click.mapperListSpeciesName').on('click.mapperListSpeciesName', function (eSpec) {
+      eSpec.preventDefault();
+      mapperListSpeciesNameFormat = $(this).data('value');
+      $('.mapper-list-species-name-btn').each(function () {
+        var ok = $(this).data('value') === mapperListSpeciesNameFormat;
+        $(this).toggleClass('btn-primary', ok).toggleClass('btn-outline-primary', !ok);
+      });
+      mapperListExtendLabelConversionForSpecies();
+      mapperListInitAllSpeciesDropdowns();
+      mapperListScheduleRedraw();
+    });
 
     mapperListShowPlaceholder();
     mapperListSyncClearDropdown();

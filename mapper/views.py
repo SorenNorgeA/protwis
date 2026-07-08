@@ -698,14 +698,56 @@ class DataMapperHome(TemplateView):
         return tmp.name if tmp.name else ''
 
     @staticmethod
-    def gpcrome_receptor_picker_table_rows(maps=None):
-        """Plain JSON rows for GPCR picker (wheel receptor set). Single batched Protein query."""
+    def gpcrome_collapse_nonhuman_only(nonhuman_only):
+        """One representative entry per stem (first species encountered), matching the
+        receptor input table's collapsed-species convention: a single pick per receptor
+        labeled "STEM (no human ortholog)" instead of one row per species suffixed
+        "(Mouse only)" / "(Rat only)". Returns (extra_entry_names, stem_by_entry) for
+        use with gpcrome_receptor_picker_table_rows.
+        """
+        seen_stems = set()
+        extra_entry_names = []
+        stem_by_entry = {}
+        for info in nonhuman_only:
+            stem = info['stem']
+            if stem in seen_stems:
+                continue
+            seen_stems.add(stem)
+            extra_entry_names.append(info['entry'])
+            stem_by_entry[info['entry']] = stem.upper()
+        return extra_entry_names, stem_by_entry
+
+    @staticmethod
+    def gpcrome_receptor_picker_table_rows(maps=None, extra_entry_names=None, entry_label_overrides=None):
+        """Plain JSON rows for GPCR picker (wheel receptor set). Single batched Protein query.
+
+        extra_entry_names: optional entry_names to include in addition to the human
+            gpcrome tree (e.g. non-human-ortholog-only receptors for Tree/Heatmap/List).
+        entry_label_overrides: optional {entry_name: STEM_UPPER} — for those entries the
+            GtoPdb name column is fully replaced with "STEM (no human ortholog)", matching
+            the receptor input table's collapsed-species convention.
+        """
         if maps is None:
             maps = DataMapperHome.build_gpcrome_receptor_normalization_maps()
-        entry_to_gene = maps['entry_to_gene']
-        tree = sorted(maps['proteins_gpcrome_tree'])
+        entry_to_gene = dict(maps['entry_to_gene'])
+        tree = set(maps['proteins_gpcrome_tree'])
+        if extra_entry_names:
+            tree |= set(extra_entry_names)
+        tree = sorted(tree)
         if not tree:
             return []
+
+        missing_gene_entries = [e for e in tree if e not in entry_to_gene]
+        if missing_gene_entries:
+            for protein in Protein.objects.prefetch_related('genes').filter(
+                entry_name__in=missing_gene_entries
+            ):
+                entry_to_gene[protein.entry_name] = next(
+                    (g.name for g in protein.genes.all() if g.position == 0), None
+                )
+
+        entry_label_overrides = entry_label_overrides or {}
+        NHO_TAG = '(no human ortholog)'
 
         qs = Protein.objects.filter(entry_name__in=tree).select_related(
             DataMapperHome._GPCROME_FAM_PARENT_CHAIN
@@ -720,6 +762,11 @@ class DataMapperHome(TemplateView):
             gene = entry_to_gene.get(entry_name) or ''
             raw_name = p.name or ''
             plain_name = DataMapperHome._gpcrome_strip_markup(raw_name)
+
+            override_stem = entry_label_overrides.get(entry_name)
+            if override_stem:
+                plain_name = '{} {}'.format(override_stem, NHO_TAG)
+                raw_name = '{} <em>{}</em>'.format(override_stem, NHO_TAG)
 
             rfam = p.family
             family = DataMapperHome._gpcrome_strip_markup(
@@ -746,13 +793,38 @@ class DataMapperHome(TemplateView):
         return rows
 
     @staticmethod
-    def gpcrome_receptor_info_for_list(maps=None):
+    def gpcrome_receptor_info_for_list(maps=None, extra_entry_names=None, entry_label_overrides=None):
         """Returns dict of entry_name → {class, ligandtype, family, name_plain, gene, uniprot}
-        for all human non-odorant GPCRs, for building list plot data in the browser."""
+        for all human non-odorant GPCRs, for building list plot data in the browser.
+
+        extra_entry_names: optional entry_names to include in addition to the human
+            gpcrome tree (e.g. non-human-ortholog-only receptors). Without an entry here,
+            mapperListBuildData() has no class/ligandtype/family to bucket the receptor
+            under and silently drops it from the plot.
+        entry_label_overrides: optional {entry_name: STEM_UPPER}, mirrors
+            gpcrome_receptor_picker_table_rows — replaces name_plain with
+            "STEM (no human ortholog)" for those entries.
+        """
         if maps is None:
             maps = DataMapperHome.build_gpcrome_receptor_normalization_maps()
-        gpcrome_set = maps.get('proteins_gpcrome_tree', set())
+        gpcrome_set = set(maps.get('proteins_gpcrome_tree', set()))
+        if extra_entry_names:
+            gpcrome_set |= set(extra_entry_names)
         select2_opts = {o['id']: o for o in DataMapperHome.gpcrome_receptor_select2_options(maps=maps)}
+        entry_label_overrides = entry_label_overrides or {}
+        NHO_TAG = '(no human ortholog)'
+
+        entry_to_gene = dict(maps['entry_to_gene'])
+        entry_short_by_name = {}
+        missing_gene_entries = [e for e in gpcrome_set if e not in entry_to_gene]
+        if missing_gene_entries:
+            for protein in Protein.objects.prefetch_related('genes').filter(
+                entry_name__in=missing_gene_entries
+            ):
+                entry_to_gene[protein.entry_name] = next(
+                    (g.name for g in protein.genes.all() if g.position == 0), None
+                )
+                entry_short_by_name[protein.entry_name] = protein.entry_short()
 
         qs = Protein.objects.filter(
             entry_name__in=list(gpcrome_set)
@@ -766,13 +838,15 @@ class DataMapperHome(TemplateView):
         result = {}
         for entry_name, cls, ligandtype, family in qs:
             opt = select2_opts.get(entry_name, {})
+            override_stem = entry_label_overrides.get(entry_name)
+            name_plain = '{} {}'.format(override_stem, NHO_TAG) if override_stem else opt.get('name_plain', '')
             result[entry_name] = {
                 'class':      cls        or 'Other',
                 'ligandtype': ligandtype or 'Other',
                 'family':     family     or 'Other',
-                'name_plain': opt.get('name_plain', ''),
-                'gene':       opt.get('gene', ''),
-                'uniprot':    opt.get('uniprot', ''),
+                'name_plain': name_plain,
+                'gene':       opt.get('gene') or entry_to_gene.get(entry_name) or '',
+                'uniprot':    opt.get('uniprot') or entry_short_by_name.get(entry_name, ''),
             }
         return result
 
@@ -2017,11 +2091,15 @@ class MapperTreeView(TemplateView):
         context['gpcrome_resolve_json'] = json.dumps(
             DataMapperHome.gpcrome_receptor_client_resolve_map(maps=maps)
         )
-        context['gpcrome_picker_rows_json'] = json.dumps(
-            DataMapperHome.gpcrome_receptor_picker_table_rows(maps=maps)
+        ortholog_map = DataMapperHome.build_ortholog_species_map()
+        context['ortholog_species_json'] = json.dumps(ortholog_map)
+        nonhuman_entries, nonhuman_stem_by_entry = DataMapperHome.gpcrome_collapse_nonhuman_only(
+            ortholog_map['nonhuman_only']
         )
-        context['ortholog_species_json'] = json.dumps(
-            DataMapperHome.build_ortholog_species_map()
+        context['gpcrome_picker_rows_json'] = json.dumps(
+            DataMapperHome.gpcrome_receptor_picker_table_rows(
+                maps=maps, extra_entry_names=nonhuman_entries, entry_label_overrides=nonhuman_stem_by_entry
+            )
         )
         return context
 
@@ -2038,8 +2116,15 @@ class MapperHeatmapView(TemplateView):
         context['gpcrome_resolve_json'] = json.dumps(
             DataMapperHome.gpcrome_receptor_client_resolve_map(maps=maps)
         )
+        ortholog_map = DataMapperHome.build_ortholog_species_map()
+        context['ortholog_species_json'] = json.dumps(ortholog_map)
+        nonhuman_entries, nonhuman_stem_by_entry = DataMapperHome.gpcrome_collapse_nonhuman_only(
+            ortholog_map['nonhuman_only']
+        )
         context['gpcrome_picker_rows_json'] = json.dumps(
-            DataMapperHome.gpcrome_receptor_picker_table_rows(maps=maps)
+            DataMapperHome.gpcrome_receptor_picker_table_rows(
+                maps=maps, extra_entry_names=nonhuman_entries, entry_label_overrides=nonhuman_stem_by_entry
+            )
         )
         return context
 
@@ -2056,11 +2141,20 @@ class MapperListView(TemplateView):
         context['gpcrome_resolve_json'] = json.dumps(
             DataMapperHome.gpcrome_receptor_client_resolve_map(maps=maps)
         )
+        ortholog_map = DataMapperHome.build_ortholog_species_map()
+        context['ortholog_species_json'] = json.dumps(ortholog_map)
+        nonhuman_entries, nonhuman_stem_by_entry = DataMapperHome.gpcrome_collapse_nonhuman_only(
+            ortholog_map['nonhuman_only']
+        )
         context['gpcrome_picker_rows_json'] = json.dumps(
-            DataMapperHome.gpcrome_receptor_picker_table_rows(maps=maps)
+            DataMapperHome.gpcrome_receptor_picker_table_rows(
+                maps=maps, extra_entry_names=nonhuman_entries, entry_label_overrides=nonhuman_stem_by_entry
+            )
         )
         context['receptor_info_json'] = json.dumps(
-            DataMapperHome.gpcrome_receptor_info_for_list(maps=maps)
+            DataMapperHome.gpcrome_receptor_info_for_list(
+                maps=maps, extra_entry_names=nonhuman_entries, entry_label_overrides=nonhuman_stem_by_entry
+            )
         )
         return context
 

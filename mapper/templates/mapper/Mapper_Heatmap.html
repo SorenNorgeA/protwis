@@ -105,6 +105,18 @@
 .mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table td.mapper-heatmap-val-cell {
   width: 65px;
 }
+/* Species column */
+.mapper20-wheel-wrap.mapper-heatmap-page #mapper-heatmap-input-table .mapper-heatmap-species-h,
+.mapper20-wheel-wrap.mapper-heatmap-page #mapper-heatmap-input-table .mapper-heatmap-species-cell {
+  width: 88px; min-width: 88px; max-width: 88px;
+}
+/* Species-active: wider panel + table */
+.mapper20-wheel-wrap.mapper-heatmap-page.mapper-heatmap-species-active .mapper20-wheel-left {
+  max-width: min(660px, calc(100vw - 48px));
+}
+.mapper20-wheel-wrap.mapper-heatmap-page.mapper-heatmap-species-active #mapper-heatmap-input-table {
+  width: 598px; /* 510 + 88 */
+}
 .mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table tbody td.mapper20-receptor-cell,
 .mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table tbody td.mapper20-value-cell {
   max-width: 0;
@@ -227,6 +239,7 @@
             How to<span class="mapper20-howto-mark" aria-hidden="true">?</span>
           </button>
           <button type="button" class="btn btn-default btn-xs" id="mapper-heatmap-demo-rows">Demo</button>
+          <button type="button" class="btn btn-default btn-xs" id="mapper-heatmap-species-toggle">Species</button>
           <button type="button" class="btn btn-primary btn-xs" id="mapper-heatmap-open-picker"
                   data-toggle="modal" data-target="#mapper20-gpcrome-picker-modal">Receptor lookup</button>
           <div class="dropdown" style="position:relative;">
@@ -252,6 +265,7 @@
             <tr>
               <th class="mapper20-th-remove" aria-label="Remove row"></th>
               <th class="mapper20-th-receptor mapper20-sortable-head" data-mapper-heatmap-sort-col="receptor" tabindex="0" role="button" aria-sort="none">Receptor <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
+              <th class="mapper-heatmap-species-h" style="display:none;">Species</th>
               <th class="mapper-heatmap-val-h mapper20-sortable-head" data-mapper-heatmap-sort-col="val1" tabindex="0" role="button" aria-sort="none">Col 1 <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
               <th class="mapper-heatmap-val-h" data-mapper-heatmap-sort-col="val2">Col 2</th>
               <th class="mapper-heatmap-val-h" data-mapper-heatmap-sort-col="val3">Col 3</th>
@@ -277,6 +291,16 @@
             <button type="button" class="btn btn-outline-primary btn-block mb-1 mapper-heatmap-leaf-btn btn-primary active" data-value="IUPHAR">Protein</button>
             <button type="button" class="btn btn-outline-primary btn-block mb-1 mapper-heatmap-leaf-btn" data-value="Gene">Gene</button>
             <button type="button" class="btn btn-outline-primary btn-block mapper-heatmap-leaf-btn" data-value="UniProt">UniProt</button>
+          </div>
+        </div>
+
+        <!-- Species names (only when species toggle is on) -->
+        <div id="mapper-heatmap-species-names-wrap" style="display:none; position:relative;" class="dropdown mapper20-dropdown-anchor-topleft">
+          <button type="button" class="btn btn-primary dropdown-toggle btn-sm" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Species names</button>
+          <div class="dropdown-menu" style="min-width:160px; padding:10px 14px; left:100%; top:50%; margin-left:5px; position:absolute; transform:translateY(-30%); font-size:11px;">
+            <button class="btn btn-primary btn-block mb-1 mapper-heatmap-species-name-btn" data-value="common">Common name</button>
+            <button class="btn btn-outline-primary btn-block mb-1 mapper-heatmap-species-name-btn" data-value="latin">Latin name</button>
+            <button class="btn btn-outline-primary btn-block mapper-heatmap-species-name-btn" data-value="both">Both</button>
           </div>
         </div>
 
@@ -354,30 +378,30 @@
 
         <!-- Labels -->
         <div class="dropdown mapper20-dropdown-anchor-topleft" style="position:relative;">
-          <button type="button" class="btn btn-primary dropdown-toggle btn-sm" data-toggle="dropdown">Legend labels</button>
+          <button type="button" class="btn btn-primary dropdown-toggle btn-sm" data-toggle="dropdown">Column labels</button>
           <div class="dropdown-menu dropdown-menu-listplot mapper20-dropdown-menu-topleft"
-               style="min-width:280px; padding:10px 14px; left:100%; margin-left:5px; position:absolute; font-size:11px;">
+               style="min-width:280px; padding:10px 14px; right:0; left:auto; position:absolute; font-size:11px;">
             <div style="font-weight:600; margin-bottom:8px; border-bottom:1px solid #ddd; padding-bottom:5px;">Dataset label text</div>
             <div style="display:flex; flex-direction:column; gap:5px;">
               <div style="display:flex; align-items:center; gap:8px;">
                 <label style="width:30px; margin:0; flex-shrink:0;">Col 1</label>
-                <input type="text" id="mapper-heatmap-lbl-V1" class="form-control input-sm" maxlength="22" value="Column 1">
+                <input type="text" id="mapper-heatmap-lbl-V1" class="form-control input-sm" maxlength="22" value="Dataset 1">
               </div>
               <div style="display:flex; align-items:center; gap:8px;">
                 <label style="width:30px; margin:0; flex-shrink:0;">Col 2</label>
-                <input type="text" id="mapper-heatmap-lbl-V2" class="form-control input-sm" maxlength="22" value="Column 2">
+                <input type="text" id="mapper-heatmap-lbl-V2" class="form-control input-sm" maxlength="22" value="Dataset 2">
               </div>
               <div style="display:flex; align-items:center; gap:8px;">
                 <label style="width:30px; margin:0; flex-shrink:0;">Col 3</label>
-                <input type="text" id="mapper-heatmap-lbl-V3" class="form-control input-sm" maxlength="22" value="Column 3">
+                <input type="text" id="mapper-heatmap-lbl-V3" class="form-control input-sm" maxlength="22" value="Dataset 3">
               </div>
               <div style="display:flex; align-items:center; gap:8px;">
                 <label style="width:30px; margin:0; flex-shrink:0;">Col 4</label>
-                <input type="text" id="mapper-heatmap-lbl-V4" class="form-control input-sm" maxlength="22" value="Column 4">
+                <input type="text" id="mapper-heatmap-lbl-V4" class="form-control input-sm" maxlength="22" value="Dataset 4">
               </div>
               <div style="display:flex; align-items:center; gap:8px;">
                 <label style="width:30px; margin:0; flex-shrink:0;">Col 5</label>
-                <input type="text" id="mapper-heatmap-lbl-V5" class="form-control input-sm" maxlength="22" value="Column 5">
+                <input type="text" id="mapper-heatmap-lbl-V5" class="form-control input-sm" maxlength="22" value="Dataset 5">
               </div>
             </div>
           </div>
@@ -487,7 +511,8 @@ $('.dropdown-menu input[type="range"]').on('mouseenter pointerdown', function() 
 
 var receptorSelect2Data = {{ receptor_select2_json|safe }};
 var MAPPER20_RESOLVE    = {{ gpcrome_resolve_json|safe }};
-var MAPPER20_GPCROME_PICKER_ROWS = {{ gpcrome_picker_rows_json|safe }};
+var MAPPER20_GPCROME_PICKER_ROWS    = {{ gpcrome_picker_rows_json|safe }};
+window.MAPPER_HEATMAP_SPECIES_DATA  = {{ ortholog_species_json|safe }};
 
 window.MAPPER20_ENTRY_META = {};
 (function(){
@@ -510,11 +535,11 @@ window.MAPPER20_ENTRY_META = {};
 <script src="{% static 'home/js/mapper_heatmap_page.js' %}"></script>
 <script>
 function mapperHeatmapDownloadTable() {
-  var c1Label = ($('#mapper-heatmap-lbl-V1').val() || 'Col 1').trim();
-  var c2Label = ($('#mapper-heatmap-lbl-V2').val() || 'Col 2').trim();
-  var c3Label = ($('#mapper-heatmap-lbl-V3').val() || 'Col 3').trim();
-  var c4Label = ($('#mapper-heatmap-lbl-V4').val() || 'Col 4').trim();
-  var c5Label = ($('#mapper-heatmap-lbl-V5').val() || 'Col 5').trim();
+  var c1Label = ($('#mapper-heatmap-lbl-V1').val() || 'Dataset 1').trim();
+  var c2Label = ($('#mapper-heatmap-lbl-V2').val() || 'Dataset 2').trim();
+  var c3Label = ($('#mapper-heatmap-lbl-V3').val() || 'Dataset 3').trim();
+  var c4Label = ($('#mapper-heatmap-lbl-V4').val() || 'Dataset 4').trim();
+  var c5Label = ($('#mapper-heatmap-lbl-V5').val() || 'Dataset 5').trim();
   var headers = ['Receptor', c1Label, c2Label, c3Label, c4Label, c5Label];
   var rows = [headers];
   $('#mapper-heatmap-input-tbody tr').each(function() {

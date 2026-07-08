@@ -55,6 +55,14 @@
     return String(val == null ? '' : val).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   }
 
+  // Column data (e.g. GtoPdb names) can contain markup/entities (<sub>, &alpha;, ...).
+  // Filtering still matches on the raw value, but the dropdown label should show the
+  // decoded, human-readable text — same as the table cell itself renders it.
+  var $htmlDecodeScratch = $('<div>');
+  function decodeHtmlToText(str) {
+    return $htmlDecodeScratch.html(str == null ? '' : String(str)).text();
+  }
+
   function buildPickerFilterRow(dt) {
     // DataTables 2.x moves the original <thead> into a fixed scrollHead wrapper and
     // puts a visibility-hidden clone in the scrollBody. dt.column(0).header() always
@@ -68,9 +76,17 @@
       var $sel = $('<select multiple="multiple" style="width:100%;">')
         .attr('id', filterId);
 
-      dt.column(colIdx).data().unique().sort().each(function (d) {
-        var str = String(d == null ? '' : d).trim();
-        if (str) { $sel.append($('<option>').val(str).text(str)); }
+      var seen = {};
+      var options = [];
+      dt.column(colIdx).data().unique().each(function (d) {
+        var raw = String(d == null ? '' : d).trim();
+        if (!raw || seen[raw]) { return; }
+        seen[raw] = true;
+        options.push({ value: raw, label: decodeHtmlToText(raw) });
+      });
+      options.sort(function (a, b) { return a.label.localeCompare(b.label); });
+      options.forEach(function (o) {
+        $sel.append($('<option>').val(o.value).text(o.label));
       });
 
       $th.append($sel);
@@ -217,15 +233,15 @@
       return;
     }
 
-    var rows = $.isArray(opts.pickerRows) ? opts.pickerRows : [];
-
-    // Pre-initialize immediately so the table is ready when the modal first opens
-    if (!pickerState.initialized) {
-      buildDataTable(rows);
-      pickerState.initialized = true;
-    }
+    pickerState.pendingRows = $.isArray(opts.pickerRows) ? opts.pickerRows : [];
 
     $('#mapper20-gpcrome-picker-modal').on('shown.bs.modal', function () {
+      // Build lazily on first open (while the modal is actually visible) so DataTables/
+      // select2 measure real widths instead of the 0-width hidden container at page load.
+      if (!pickerState.initialized) {
+        buildDataTable(pickerState.pendingRows);
+        pickerState.initialized = true;
+      }
       if (pickerState.dt) {
         pickerState.dt.columns.adjust().draw(false);
       }
