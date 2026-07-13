@@ -2700,8 +2700,12 @@
       window.mapper20InitGpcromePickerModal({
         pickerRows: $.isArray(window.MAPPER20_GPCROME_PICKER_ROWS) ? window.MAPPER20_GPCROME_PICKER_ROWS : [],
         maxRows: MAPPER_TREE_MAX_ROWS,
-        onAdd: function (entryIds) {
+        onAdd: function (entryIds, meta) {
           suppressRedraw = true;
+          var isNumberMode = !mapperTreeIsTextMode();
+          var numberMap = (meta && meta.groupNameById && isNumberMode)
+            ? window.mapper20BuildSequentialNumberMap(meta.groupNameById)
+            : null;
           for (var ix = 0; ix < (entryIds || []).length; ix++) {
             var idPz = entryIds[ix];
             if ($('#mapper-tree-input-tbody tr').length >= MAPPER_TREE_MAX_ROWS && !mapperTreeFindBlankRow().length) {
@@ -2713,6 +2717,12 @@
               $rowPz = $('#mapper-tree-input-tbody tr').last();
             }
             mapperTreeSetResolved($rowPz, idPz);
+            if (meta && meta.groupNameById && meta.groupNameById[idPz] != null) {
+              var assignedValue = isNumberMode ? numberMap[idPz] : meta.groupNameById[idPz];
+              if (assignedValue != null) {
+                $rowPz.find('.mapper-tree-inner').val(String(assignedValue)).trigger('input');
+              }
+            }
           }
           suppressRedraw = false;
           $('#mapper-tree-clear-rows').removeClass('mapper20-clear-clean');

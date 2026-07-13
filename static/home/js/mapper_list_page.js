@@ -1565,12 +1565,23 @@
       window.mapper20InitGpcromePickerModal({
         pickerRows: $.isArray(window.MAPPER20_GPCROME_PICKER_ROWS) ? window.MAPPER20_GPCROME_PICKER_ROWS : [],
         maxRows: MAPPER_LIST_MAX_ROWS,
-        onAdd: function (entryIds) {
+        onAdd: function (entryIds, meta) {
           suppressRedraw = true;
+          var isNumberMode = !mapperListIsTextMode();
+          var numberMap = (meta && meta.groupNameById && isNumberMode)
+            ? window.mapper20BuildSequentialNumberMap(meta.groupNameById)
+            : null;
           (entryIds || []).forEach(function (id) {
             var $row = mapperListFindBlankRow();
             if (!$row.length) { mapperListAppendRow(true); $row = $('#mapper-list-input-tbody tr').last(); }
             mapperListSetResolved($row, id);
+            if (meta && meta.groupNameById && meta.groupNameById[id] != null) {
+              var $target = isNumberMode ? $row.find('.mapper-list-val1') : $row.find('.mapper-list-cat');
+              var assignedValue = isNumberMode ? numberMap[id] : meta.groupNameById[id];
+              if (assignedValue != null) {
+                $target.val(String(assignedValue)).trigger('input');
+              }
+            }
           });
           suppressRedraw = false;
           $('#mapper-list-clear-rows').removeClass('mapper20-clear-clean');

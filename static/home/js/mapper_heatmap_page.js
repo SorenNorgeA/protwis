@@ -853,12 +853,19 @@
       window.mapper20InitGpcromePickerModal({
         pickerRows: $.isArray(window.MAPPER20_GPCROME_PICKER_ROWS) ? window.MAPPER20_GPCROME_PICKER_ROWS : [],
         maxRows: MAPPER_HEATMAP_MAX_ROWS,
-        onAdd: function (entryIds) {
+        onAdd: function (entryIds, meta) {
           suppressRedraw = true;
+          // Heatmap has no category/text mode — assigned values are always sequential numbers.
+          var numberMap = (meta && meta.groupNameById)
+            ? window.mapper20BuildSequentialNumberMap(meta.groupNameById)
+            : null;
           (entryIds || []).forEach(function (id) {
             var $row = mapperHeatmapFindBlankRow();
             if (!$row.length) { mapperHeatmapAppendRow(true); $row = $('#mapper-heatmap-input-tbody tr').last(); }
             mapperHeatmapSetResolved($row, id);
+            if (numberMap && numberMap[id] != null) {
+              $row.find('.mapper-heatmap-val1').val(String(numberMap[id])).trigger('input');
+            }
           });
           suppressRedraw = false;
           $('#mapper-heatmap-clear-rows').removeClass('mapper20-clear-clean');

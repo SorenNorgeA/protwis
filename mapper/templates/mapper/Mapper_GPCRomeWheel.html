@@ -993,9 +993,21 @@
           </table>
         </div>
       </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-default" data-dismiss="modal" id="mapper20-gpcrome-picker-cancel">Cancel</button>
-        <button type="button" class="btn btn-primary" id="mapper20-gpcrome-picker-add">Add to table</button>
+      <div class="modal-footer" style="display:flex; align-items:center; justify-content:space-between;">
+        <div class="dropdown" style="position:relative;">
+          <button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown"><span class="mapper20-picker-assign-toggle-label">Assign value: None</span> <span class="caret"></span></button>
+          <div class="dropdown-menu p-2" id="mapper20-gpcrome-picker-assign-menu" style="min-width:220px; padding:10px 15px; bottom:100%; top:auto;">
+            <div style="font-weight:bold; margin-bottom:4px;">Value</div>
+            <button type="button" class="btn btn-primary btn-block btn-sm mb-1 mapper20-picker-assign-src" data-src="none">None</button>
+            <button type="button" class="btn btn-outline-primary btn-block btn-sm mb-1 mapper20-picker-assign-src" data-src="class">Class</button>
+            <button type="button" class="btn btn-outline-primary btn-block btn-sm mb-1 mapper20-picker-assign-src" data-src="ligandtype">Chemotype</button>
+            <button type="button" class="btn btn-outline-primary btn-block btn-sm mapper20-picker-assign-src" data-src="family">Receptor family</button>
+          </div>
+        </div>
+        <div>
+          <button type="button" class="btn btn-default" data-dismiss="modal" id="mapper20-gpcrome-picker-cancel">Cancel</button>
+          <button type="button" class="btn btn-primary" id="mapper20-gpcrome-picker-add">Add to table</button>
+        </div>
       </div>
     </div>
   </div>
@@ -4229,7 +4241,7 @@ $(document).ready(function() {
     window.mapper20InitGpcromePickerModal({
       pickerRows: $.isArray(MAPPER20_GPCROME_PICKER_ROWS) ? MAPPER20_GPCROME_PICKER_ROWS : [],
       maxRows: MAPPER20_MAX_ROWS,
-      onAdd: function(entryIds) {
+      onAdd: function(entryIds, meta) {
         if (!entryIds || !entryIds.length) {
           return;
         }
@@ -4249,6 +4261,10 @@ $(document).ready(function() {
           return $('#mapper20-input-tbody tr').length >= MAPPER20_MAX_ROWS;
         }
 
+        var numberMap = (meta && meta.groupNameById && !mapper20IsTextMode())
+          ? window.mapper20BuildSequentialNumberMap(meta.groupNameById)
+          : null;
+
         var added = 0;
         for (var ix = 0; ix < entryIds.length; ix++) {
           var id = entryIds[ix];
@@ -4262,6 +4278,12 @@ $(document).ready(function() {
             $tr = $('#mapper20-input-tbody tr').last();
           }
           mapper20SetReceptorResolvedUI($tr, id);
+          if (meta && meta.groupNameById && meta.groupNameById[id] != null) {
+            var assignedValue = mapper20IsTextMode() ? meta.groupNameById[id] : numberMap[id];
+            if (assignedValue != null) {
+              $tr.find('.mapper20-in-value').val(String(assignedValue));
+            }
+          }
           mapper20SyncValueCellHint($tr);
           mapper20SyncRowSwatch($tr);
           added++;

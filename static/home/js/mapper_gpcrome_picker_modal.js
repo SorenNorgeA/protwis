@@ -7,7 +7,40 @@
 
   var pickerState = {
     initialized: false,
-    dt: null
+    dt: null,
+    rowsById: {},
+    assignSource: 'none'
+  };
+
+  var ASSIGN_SOURCE_LABELS = {
+    none: 'None',
+    class: 'Class',
+    ligandtype: 'Chemotype',
+    family: 'Receptor family'
+  };
+
+  // Sort the distinct group labels alphabetically and assign each a stable
+  // sequential rank (1, 2, 3, ...) — shared by every page's onAdd so the
+  // "Numbers" assignment logic isn't duplicated 5 times.
+  window.mapper20BuildSequentialNumberMap = function (groupNameById) {
+    var seen = {};
+    var labels = [];
+    Object.keys(groupNameById || {}).forEach(function (id) {
+      var label = groupNameById[id];
+      if (label != null && label !== '' && !seen[label]) {
+        seen[label] = true;
+        labels.push(label);
+      }
+    });
+    labels.sort(function (a, b) { return String(a).localeCompare(String(b)); });
+    var rank = {};
+    labels.forEach(function (label, i) { rank[label] = i + 1; });
+    var out = {};
+    Object.keys(groupNameById || {}).forEach(function (id) {
+      var label = groupNameById[id];
+      out[id] = (label != null && label !== '') ? rank[label] : null;
+    });
+    return out;
   };
 
   function syncSelectAllCheckbox() {
@@ -234,6 +267,12 @@
     }
 
     pickerState.pendingRows = $.isArray(opts.pickerRows) ? opts.pickerRows : [];
+    pickerState.rowsById = {};
+    pickerState.pendingRows.forEach(function (r) {
+      if (r && r.id != null) {
+        pickerState.rowsById[r.id] = r;
+      }
+    });
 
     $('#mapper20-gpcrome-picker-modal').on('shown.bs.modal', function () {
       // Build lazily on first open (while the modal is actually visible) so DataTables/
@@ -270,6 +309,20 @@
       }
     );
 
+    // Bound directly on the dropdown-menu (not the modal) because a site-wide
+    // convention calls e.stopPropagation() on every .dropdown-menu click (to keep
+    // other dropdowns open on interaction), which would otherwise swallow this
+    // click before it ever reaches a handler delegated from the modal ancestor.
+    $('#mapper20-gpcrome-picker-assign-menu').on('click', '.mapper20-picker-assign-src', function () {
+      var src = $(this).attr('data-src') || 'none';
+      pickerState.assignSource = src;
+      $(this).siblings('.mapper20-picker-assign-src').addBack()
+        .toggleClass('btn-outline-primary', true).toggleClass('btn-primary', false);
+      $(this).toggleClass('btn-primary', true).toggleClass('btn-outline-primary', false);
+      $(this).closest('.dropdown').find('.mapper20-picker-assign-toggle-label')
+        .text('Assign value: ' + (ASSIGN_SOURCE_LABELS[src] || 'None'));
+    });
+
     $('#mapper20-gpcrome-picker-add').on('click', function () {
       if (!pickerState.dt) {
         return;
@@ -280,7 +333,16 @@
         return;
       }
       if (typeof opts.onAdd === 'function') {
-        opts.onAdd(ids);
+        var meta = null;
+        if (pickerState.assignSource && pickerState.assignSource !== 'none') {
+          var groupNameById = {};
+          ids.forEach(function (id) {
+            var row = pickerState.rowsById[id];
+            groupNameById[id] = row ? (row[pickerState.assignSource] || '') : '';
+          });
+          meta = { groupNameById: groupNameById };
+        }
+        opts.onAdd(ids, meta);
       }
       $('#mapper20-gpcrome-picker-modal').modal('hide');
     });

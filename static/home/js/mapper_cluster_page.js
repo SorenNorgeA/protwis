@@ -1598,12 +1598,23 @@ function mapperClusterGetLabelColor(lbl) {
       window.mapper20InitGpcromePickerModal({
         pickerRows: $.isArray(window.MAPPER20_GPCROME_PICKER_ROWS) ? window.MAPPER20_GPCROME_PICKER_ROWS : [],
         maxRows:    MAPPER_CLUSTER_MAX_ROWS,
-        onAdd: function (entryIds) {
+        onAdd: function (entryIds, meta) {
           suppressRedraw = true;
+          var isNumberMode = (plotMode === 'numbers');
+          var numberMap = (meta && meta.groupNameById && isNumberMode)
+            ? window.mapper20BuildSequentialNumberMap(meta.groupNameById)
+            : null;
           (entryIds || []).forEach(function (id) {
             var $row = mapperClusterFindBlankRow();
             if (!$row.length) { mapperClusterAppendRow(); $row = $('#mapper-cluster-input-tbody tr').last(); }
             mapperClusterSetResolved($row, id);
+            if (meta && meta.groupNameById && meta.groupNameById[id] != null) {
+              var $target = isNumberMode ? $row.find('.mapper-cluster-gradient') : $row.find('.mapper-cluster-cat');
+              var assignedValue = isNumberMode ? numberMap[id] : meta.groupNameById[id];
+              if (assignedValue != null) {
+                $target.val(String(assignedValue)).trigger('input');
+              }
+            }
           });
           suppressRedraw = false;
           mapperClusterEnsureTrailingBlankRow();

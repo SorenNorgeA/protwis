@@ -685,17 +685,21 @@ class DataMapperHome(TemplateView):
 
     @staticmethod
     def _gpcrome_receptor_family_display_name_after_traversal(protein_family):
-        """Traversal copy of Protein.get_protein_family."""
-        if protein_family is None:
+        """Receptor family = one hop up from Protein.family (matches family__parent__name)."""
+        if protein_family is None or protein_family.parent is None:
             return ''
-        tmp = protein_family
-        while (
-            tmp.parent is not None
-            and tmp.parent.parent is not None
-            and tmp.parent.parent.parent is not None
+        return protein_family.parent.name or ''
+
+    @staticmethod
+    def _gpcrome_ligand_type_display_name_after_family_traversal(protein_family):
+        """Ligand type / chemotype = two hops up from Protein.family (matches family__parent__parent__name)."""
+        if (
+            protein_family is None
+            or protein_family.parent is None
+            or protein_family.parent.parent is None
         ):
-            tmp = tmp.parent
-        return tmp.name if tmp.name else ''
+            return ''
+        return protein_family.parent.parent.name or ''
 
     @staticmethod
     def gpcrome_collapse_nonhuman_only(nonhuman_only):
@@ -772,6 +776,9 @@ class DataMapperHome(TemplateView):
             family = DataMapperHome._gpcrome_strip_markup(
                 DataMapperHome._gpcrome_receptor_family_display_name_after_traversal(rfam)
             )
+            ligand_type = DataMapperHome._gpcrome_strip_markup(
+                DataMapperHome._gpcrome_ligand_type_display_name_after_family_traversal(rfam)
+            )
             prot_class = DataMapperHome._gpcrome_strip_markup(
                 DataMapperHome._gpcrome_class_display_name_after_family_traversal(rfam)
             )
@@ -787,6 +794,7 @@ class DataMapperHome(TemplateView):
                 'uniprot': entry_short,
                 'uniprot_link': uniprot_link,
                 'family': family or '',
+                'ligandtype': ligand_type or '',
                 'class': prot_class or '',
                 'gpcrdb_link': gpcrdb_link,
             })
