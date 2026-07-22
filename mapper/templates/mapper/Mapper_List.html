@@ -845,7 +845,7 @@
 <script src="{% static 'home/js/select2_4.1.0-rc.0_full.js' %}"></script>
 <script src="{% static 'home/js/NewDrugsBrowser_datatables.min.js' %}"></script>
 <script src="{% static 'home/js/NorgesDTFilterBuilder.js' %}"></script>
-<script src="{% static 'home/js/mapper_gpcrome_picker_modal.js' %}"></script>
+<script src="{% static 'home/js/data_mapper/data_mapper_modal_table.js' %}"></script>
 <script src="{% static 'home/js/xlsx.full.min.js' %}"></script>
 
 <script>
@@ -885,7 +885,8 @@ window.MAPPER20_ENTRY_META = {};
   }
 })();
 </script>
-<script src="{% static 'home/js/mapper_list_page.js' %}"></script>
+<script src="{% static 'home/js/data_mapper/mapper_page_core.js' %}"></script>
+<script src="{% static 'home/js/data_mapper/mapper_list_page.js' %}"></script>
 <script>
 function mapperListDownloadTable() {
   var isText = $('#mapper-list-input-table').hasClass('mapper20-text-mode');

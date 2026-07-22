@@ -11,7 +11,6 @@
   var MAPPER_HEATMAP_PLACEHOLDER = 'Paste in 1–6 columns of data\nor type';
   var DEBOUNCE_MS = 200;
 
-  var redrawTimer;
   var suppressRedraw = false;
 
   // ── Global data structures ────────────────────────────────────────────────
@@ -231,10 +230,10 @@
     }
   }
 
+  var _heatmapRedrawDebounced = MapperPageCore.debounce(function () { mapperHeatmapRedrawNow(); }, DEBOUNCE_MS);
   function mapperHeatmapScheduleRedraw() {
     if (suppressRedraw) return;
-    window.clearTimeout(redrawTimer);
-    redrawTimer = window.setTimeout(mapperHeatmapRedrawNow, DEBOUNCE_MS);
+    _heatmapRedrawDebounced.schedule();
   }
 
   // ── Colour pickers ────────────────────────────────────────────────────────

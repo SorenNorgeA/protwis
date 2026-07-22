@@ -6,7 +6,6 @@
   'use strict';
 
   var DEBOUNCE_MS = 140;
-  var redrawTimer;
   var suppressRedraw = false;
 
   var ORIG_SKEL = null;
@@ -578,23 +577,9 @@
     });
   }
 
-  function mapper20FNV1a32(str) {
-    var h = 0x811c9dc5;
-    var s = String(str || '');
-    var i;
-    var code;
-    for (i = 0; i < s.length; i++) {
-      code = s.charCodeAt(i);
-      h ^= code;
-      h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
-      h >>>= 0;
-    }
-    return h >>> 0;
-  }
-
+  // FNV1a32 hash + default label colour moved to MapperPageCore (mapper_page_core.js).
   function mapperTreeDefaultHexForLabelKey(lbl) {
-    var hue = mapper20FNV1a32(String(lbl || '').toLowerCase()) % 360;
-    return 'hsl(' + hue + ', 68%, 48%)';
+    return MapperPageCore.defaultColorForLabel(lbl);
   }
 
   function mapperTreeParseNumLoose(s) {
@@ -1061,13 +1046,13 @@
 
   window.mapperTreeRedrawNow = mapperTreeRedrawNow;
 
+  var _treeRedrawDebounced = MapperPageCore.debounce(function () { mapperTreeRedrawNow(); }, DEBOUNCE_MS);
   function mapperTreeScheduleRedraw() {
     if (suppressRedraw) {
       return;
     }
     mapperTreeUpdateOverLimitMarks();
-    window.clearTimeout(redrawTimer);
-    redrawTimer = window.setTimeout(mapperTreeRedrawNow, DEBOUNCE_MS);
+    _treeRedrawDebounced.schedule();
   }
 
   // ── Mode snapshots ──────────────────────────────────────────────────────
@@ -1080,7 +1065,8 @@
     if (mode === 'categorical') {
       rows = rows.map(function (r) {
         return { entry: r.entry, receptorText: r.receptorText, unmatched: r.unmatched,
-                 invalid: r.invalid, inner: r.inner, o1: '', o2: '', o3: '', o4: '' };
+                 invalid: r.invalid, inner: r.inner, o1: '', o2: '', o3: '', o4: '',
+                 speciesEntry: r.speciesEntry };
       });
       MAPPER20_MODE_SNAPSHOTS_TREE.categorical = {
         rows: rows,
@@ -1094,19 +1080,9 @@
   function mapperTreeSeedOppositeMode(targetMode) {
     if (MAPPER20_MODE_SNAPSHOTS_TREE[targetMode] != null) { return; }
     if (targetMode === 'categorical') {
-      var base = MAPPER20_MODE_SNAPSHOTS_TREE.numeric || { rows: [] };
-      var seed = (base.rows || []).map(function (r) {
-        return { entry: r.entry, receptorText: r.receptorText, unmatched: r.unmatched,
-                 invalid: r.invalid, inner: '', o1: '', o2: '', o3: '', o4: '' };
-      });
-      MAPPER20_MODE_SNAPSHOTS_TREE.categorical = { rows: seed, labelColors: {} };
+      MAPPER20_MODE_SNAPSHOTS_TREE.categorical = { rows: [], labelColors: {} };
     } else {
-      var tbase = MAPPER20_MODE_SNAPSHOTS_TREE.categorical || { rows: [] };
-      var seed2 = (tbase.rows || []).map(function (r) {
-        return { entry: r.entry, receptorText: r.receptorText, unmatched: r.unmatched,
-                 invalid: r.invalid, inner: '', o1: '', o2: '', o3: '', o4: '' };
-      });
-      MAPPER20_MODE_SNAPSHOTS_TREE.numeric = { rows: seed2 };
+      MAPPER20_MODE_SNAPSHOTS_TREE.numeric = { rows: [] };
     }
   }
 
@@ -1117,6 +1093,13 @@
       'width', text ? (400 + speciesExtra) + 'px' : ''
     );
     $('.mapper20-wheel-wrap.mapper-tree-page').toggleClass('mapper-tree-species-active', mapperTreeSpeciesActive);
+  }
+
+  function mapperTreeSyncClearDropdown() {
+    var isText = mapperTreeIsTextMode();
+    $('#mapper-tree-clear-mode-label').text(isText ? 'Categories' : 'Numbers');
+    $('.mapper-tree-clear-col-num').toggle(!isText);
+    $('.mapper-tree-clear-col-text').toggle(isText);
   }
 
   function mapperTreeSetInputMode(mode) {
@@ -1137,14 +1120,14 @@
     // Seed the target mode's snapshot if this is the first visit
     mapperTreeSeedOppositeMode(text ? 'categorical' : 'numeric');
 
-    // Restore rows from snapshot
+    // Restore rows from snapshot — always rebuild, even when the target mode has
+    // never been visited (snap.rows is []), so a genuinely empty mode shows as empty
+    // rather than leaving the previous mode's rows sitting in the DOM.
     var snap = MAPPER20_MODE_SNAPSHOTS_TREE[text ? 'categorical' : 'numeric'] || {};
-    if (snap.rows && snap.rows.length) {
-      if (text && snap.labelColors) {
-        window.MAPPER20_LABEL_COLORS = $.extend({}, snap.labelColors);
-      }
-      mapperTreeApplySerializedRows(snap.rows);
+    if (text) {
+      window.MAPPER20_LABEL_COLORS = snap.labelColors ? $.extend({}, snap.labelColors) : {};
     }
+    mapperTreeApplySerializedRows(snap.rows || []);
 
     // Update button active states
     $('#mapper-tree-mode-numeric-btn, #mapper-tree-mode-labels-btn').each(function () {
@@ -2046,39 +2029,6 @@
       mapperTreeApplyDemoColorPresets();
     }
     mapperTreeRedrawNow();
-
-    // Seed opposite mode snapshot with demo values so switching modes keeps the data
-    mapperTreeCaptureSnapshot();
-    var oppMode = textMode ? 'numeric' : 'categorical';
-    if (!MAPPER20_MODE_SNAPSHOTS_TREE[oppMode]) {
-      var entryToDemo = {};
-      MAPPER_TREE_DEMO_ROWS.forEach(function (r) {
-        var entry = window.MAPPER20_RESOLVE && window.MAPPER20_RESOLVE[r.receptor.toUpperCase()];
-        if (entry) entryToDemo[entry] = r;
-      });
-      var curSnap = MAPPER20_MODE_SNAPSHOTS_TREE[textMode ? 'categorical' : 'numeric'];
-      if (curSnap && curSnap.rows) {
-        var seedRows = curSnap.rows.map(function (r) {
-          var dr = r.entry && entryToDemo[r.entry];
-          if (!dr) return { entry: r.entry, receptorText: r.receptorText, unmatched: r.unmatched, invalid: r.invalid, inner: '', o1: '', o2: '', o3: '', o4: '' };
-          if (oppMode === 'categorical') {
-            return { entry: r.entry, receptorText: r.receptorText, unmatched: r.unmatched, invalid: r.invalid, inner: dr.text || '', o1: '', o2: '', o3: '', o4: '' };
-          }
-          var vals = dr.numeric || [];
-          return { entry: r.entry, receptorText: r.receptorText, unmatched: r.unmatched, invalid: r.invalid,
-                   inner: vals[0] != null ? String(vals[0]) : '',
-                   o1:    vals[1] != null ? String(vals[1]) : '',
-                   o2:    vals[2] != null ? String(vals[2]) : '',
-                   o3:    vals[3] != null ? String(vals[3]) : '',
-                   o4:    vals[4] != null ? String(vals[4]) : '' };
-        });
-        if (oppMode === 'categorical') {
-          MAPPER20_MODE_SNAPSHOTS_TREE.categorical = { rows: seedRows, labelColors: {} };
-        } else {
-          MAPPER20_MODE_SNAPSHOTS_TREE.numeric = { rows: seedRows };
-        }
-      }
-    }
   }
 
   function mapperTreeApplyDemoColorPresets() {
@@ -2494,12 +2444,6 @@
       mapperTreeSyncFirstRowPlaceholder();
       mapperTreeRedrawNow();
       $('#mapper-tree-clear-rows').addClass('mapper20-clear-clean').blur();
-    }
-    function mapperTreeSyncClearDropdown() {
-      var isText = mapperTreeIsTextMode();
-      $('#mapper-tree-clear-mode-label').text(isText ? 'Categories' : 'Numbers');
-      $('.mapper-tree-clear-col-num').toggle(!isText);
-      $('.mapper-tree-clear-col-text').toggle(isText);
     }
     $('#mapper-tree-clear-whole').off('click.mapperTree').on('click.mapperTree', function(e) {
       e.preventDefault(); mapperTreeDoWholeTableClear();

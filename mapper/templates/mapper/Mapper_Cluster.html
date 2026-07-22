@@ -645,7 +645,7 @@
 <script src="{% static 'home/js/NorgesDTFilterBuilder.js' %}"></script>
 <script src="{% static 'home/js/ml.js' %}"></script>
 <script src="{% static 'home/js/plotly_v1_58_5.js' %}"></script>
-<script src="{% static 'home/js/mapper_gpcrome_picker_modal.js' %}"></script>
+<script src="{% static 'home/js/data_mapper/data_mapper_modal_table.js' %}"></script>
 <script src="{% static 'home/js/xlsx.full.min.js' %}"></script>
 
 <script>
@@ -692,7 +692,8 @@ window.MAPPER20_ENTRY_META = {};
   }
 })();
 </script>
-<script src="{% static 'home/js/mapper_cluster_page.js' %}"></script>
+<script src="{% static 'home/js/data_mapper/mapper_page_core.js' %}"></script>
+<script src="{% static 'home/js/data_mapper/mapper_cluster_page.js' %}"></script>
 <script>
 function mapperClusterDownloadTable() {
   var isText = $('#mapper-cluster-input-table').hasClass('mapper20-text-mode');

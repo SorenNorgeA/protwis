@@ -2,7 +2,7 @@ from django.shortcuts import render
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.conf import settings
 from django.db.models import Q
-from django.views.generic import TemplateView
+from django.views.generic import TemplateView, View
 from django import forms
 from protein.models import Protein, ProteinFamily
 from common.phylogenetic_tree import PhylogeneticTreeGenerator
@@ -2022,9 +2022,7 @@ class DataMapperHome(TemplateView):
 class ExcelUploadForm(forms.Form):
     file = forms.FileField()
 
-class ClusterRender(TemplateView):
-    template_name = 'mapper/PlotRender_Cluster.html'  # default fallback
-
+class ClusterRender(View):
     def post(self, request, *args, **kwargs):
         Data_json = request.POST.get('Data')
 
@@ -2035,25 +2033,24 @@ class ClusterRender(TemplateView):
             output_seq = DataMapperHome.clustering_test('tsne', Data,'seq')
             label_converter = DataMapperHome.Label_conversion_info(Data)
 
-            # Return JSON when called via AJAX (new Mapper_Cluster.html page)
-            if request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest':
-                return JsonResponse({
-                    'cluster_data_seq': json.loads(output_seq),
-                    'Label_converter': label_converter
-                })
-
-            # Return rendered HTML template (legacy PlotRender_Cluster.html flow)
-            context = {
-                'cluster_data_seq': output_seq,
-                'Label_converter': json.dumps(label_converter)
-                }
-            return self.render_to_response(context)
+            return JsonResponse({
+                'cluster_data_seq': json.loads(output_seq),
+                'Label_converter': label_converter
+            })
 
         except json.JSONDecodeError:
             return HttpResponse("Invalid JSON data")
 
 class MapperLandingPageView(TemplateView):
     template_name = 'mapper/Mapper_landingPage.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        wheel_maps = DataMapperHome.build_gpcrome_receptor_normalization_maps()
+        full_maps = DataMapperHome.build_gpcrome_receptor_normalization_maps(include_odorant=True)
+        context['wheel_max_receptors'] = len(wheel_maps['proteins_gpcrome_tree'])
+        context['full_max_receptors'] = len(full_maps['proteins_gpcrome_tree'])
+        return context
 
 
 class MapperGPCRomeWheelView(TemplateView):

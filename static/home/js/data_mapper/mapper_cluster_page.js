@@ -58,18 +58,11 @@ function getActiveColorOption() {
     return 'cluster';
 }
 // ── Color helpers (window-scoped so datamapper.js can call them) ────────────
-function mapperClusterFNV1a32(str) {
-    var h = 2166136261;
-    for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = (h * 16777619) >>> 0; }
-    return h;
-}
-function mapperClusterDefaultColorForLabel(lbl) {
-    var hue = mapperClusterFNV1a32(String(lbl || '').toLowerCase()) % 360;
-    return 'hsl(' + hue + ', 68%, 48%)';
-}
+// FNV1a32 hash + default label colour moved to MapperPageCore (mapper_page_core.js) —
+// shared verbatim with the tree/list/GPCRome-wheel pages.
 function mapperClusterGetLabelColor(lbl) {
     if (lbl == null || lbl === '') return '#cccccc';
-    if (!CLUSTER_LABEL_COLORS[lbl]) CLUSTER_LABEL_COLORS[lbl] = mapperClusterDefaultColorForLabel(lbl);
+    if (!CLUSTER_LABEL_COLORS[lbl]) CLUSTER_LABEL_COLORS[lbl] = MapperPageCore.defaultColorForLabel(lbl);
     return CLUSTER_LABEL_COLORS[lbl];
 }
 // ───────────────────────────────────────────────────────────────────────────
@@ -81,7 +74,6 @@ function mapperClusterGetLabelColor(lbl) {
   var MAPPER_CLUSTER_PLACEHOLDER = 'Paste in 1–2 columns\nor type';
   var DEBOUNCE_MS = 400;
 
-  var plotRequestTimer  = null;
   var posCheckTimer     = null;   // debounce for position input checks
   var suppressRedraw    = false;
   var plotMode          = 'numbers';  // 'numbers' | 'categories'
@@ -349,6 +341,7 @@ function mapperClusterGetLabelColor(lbl) {
     performClustering(numClusters, isNewData);
   }
 
+  var _clusterRedrawDebounced = MapperPageCore.debounce(function () { mapperClusterRenderPlot(); }, DEBOUNCE_MS);
   function mapperClusterScheduleRedraw() {
     if (inPositionMode && positionProcessed) {
       mapperClusterCosmeticRedraw();
@@ -357,8 +350,7 @@ function mapperClusterGetLabelColor(lbl) {
     if (inPositionMode && !positionProcessed) {
       return;
     }
-    clearTimeout(plotRequestTimer);
-    plotRequestTimer = setTimeout(mapperClusterRenderPlot, DEBOUNCE_MS);
+    _clusterRedrawDebounced.schedule();
   }
 
   // ── Clustering ─────────────────────────────────────────────────────────────
@@ -1135,12 +1127,13 @@ function mapperClusterGetLabelColor(lbl) {
       return { entry: entry, gradient: String(row.gradient || ''), category: String(row.category || '') };
     }).filter(Boolean);
 
-    // Pre-populate both mode snapshots so switching modes retains the demo data
-    MAPPER_CLUSTER_MODE_SNAPSHOTS.numbers = {
-      rows: demoResolved.map(function (r) { return { entry: r.entry, receptorText: '', gradient: r.gradient, pos: '' }; })
-    };
-    MAPPER_CLUSTER_MODE_SNAPSHOTS.categories = {
-      rows: demoResolved.map(function (r) { return { entry: r.entry, receptorText: '', category: r.category, pos: '' }; })
+    // Populate only the current mode's snapshot — Numbers and Categories stay fully separate
+    MAPPER_CLUSTER_MODE_SNAPSHOTS[plotMode] = {
+      rows: demoResolved.map(function (r) {
+        return plotMode === 'numbers'
+          ? { entry: r.entry, receptorText: '', gradient: r.gradient, pos: '' }
+          : { entry: r.entry, receptorText: '', category: r.category, pos: '' };
+      })
     };
 
     // Rebuild DOM for the currently active mode
