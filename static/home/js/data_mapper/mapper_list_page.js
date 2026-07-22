@@ -29,8 +29,8 @@
   };
 
   window.mapperListInputMode = 'numeric';
-  window.MAPPER20_LABEL_COLORS  = window.MAPPER20_LABEL_COLORS  || {};
-  window.MAPPER20_LABEL_ENABLED = window.MAPPER20_LABEL_ENABLED || {};
+  window.MAPPER_CORE_LABEL_COLORS  = window.MAPPER_CORE_LABEL_COLORS  || {};
+  window.MAPPER_CORE_LABEL_ENABLED = window.MAPPER_CORE_LABEL_ENABLED || {};
 
   var mapperListSpeciesActive = false;
   var mapperListSpeciesNameFormat = 'common';
@@ -110,7 +110,7 @@
 
   // ── Label conversion ─────────────────────────────────────────────────────────
   /**
-   * Build from MAPPER20_ENTRY_META (always populated from receptor_select2_json),
+   * Build from MAPPER_CORE_ENTRY_META (always populated from receptor_select2_json),
    * mirroring exactly what the wheel and tree do for their name-conversion dicts.
    * The list plot's add_text() uses IUPHAR_to_Gene_converter[name_plain] and
    * IUPHAR_to_UniProt_converter[name_plain], so keys must be name_plain values.
@@ -122,7 +122,7 @@
       UniProt_to_Gene_converter:   {},
       IUPHAR_to_Gene_converter:    {}
     };
-    var meta = window.MAPPER20_ENTRY_META || {};
+    var meta = window.MAPPER_CORE_ENTRY_META || {};
     Object.keys(meta).forEach(function (entry_name) {
       var m      = meta[entry_name];
       var iuphar = m.name_plain || '';   // IUPHAR display name (markup-stripped)
@@ -201,7 +201,7 @@
 
   function mapperListInitAllSpeciesDropdowns() {
     $('#mapper-list-input-tbody tr').each(function () {
-      var entry = ($(this).find('.mapper20-receptor-entry').val() || '').trim();
+      var entry = ($(this).find('.mapper-core-receptor-entry').val() || '').trim();
       if (entry) mapperListPopulateSpeciesSelect($(this), entry, true);
     });
   }
@@ -209,10 +209,10 @@
   function mapperListApplyLeftPanelWidth() {
     var text = window.mapperListInputMode === 'text';
     var speciesExtra = mapperListSpeciesActive ? 88 : 0;
-    $('.mapper20-wheel-wrap.mapper-list-page .mapper20-wheel-left').css(
+    $('.mapper-core-wheel-wrap.mapper-list-page .mapper-core-wheel-left').css(
       'width', text ? (400 + speciesExtra) + 'px' : ''
     );
-    $('.mapper20-wheel-wrap.mapper-list-page').toggleClass('mapper-list-species-active', mapperListSpeciesActive);
+    $('.mapper-core-wheel-wrap.mapper-list-page').toggleClass('mapper-list-species-active', mapperListSpeciesActive);
   }
 
   function mapperListApplySpeciesPanelClass() {
@@ -226,7 +226,7 @@
       var stem = o.stem;
       var humanOrthologs = (sd.by_stem[stem] || []).filter(function (x) { return x.is_human; });
       var humanEntry = humanOrthologs.length ? humanOrthologs[0].entry : null;
-      var baseMeta = humanEntry && window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[humanEntry];
+      var baseMeta = humanEntry && window.MAPPER_CORE_ENTRY_META && window.MAPPER_CORE_ENTRY_META[humanEntry];
       var baseIUPHAR = (baseMeta && baseMeta.name_plain) || stem.toUpperCase();
       var gene = (baseMeta && baseMeta.gene) || '';
       var tag  = mapperListSpeciesActive ? mapperListFormatSpeciesTag(o) : (o.is_human ? '' : mapperListFormatSpeciesTag(o));
@@ -256,13 +256,13 @@
 
     $('#mapper-list-input-tbody tr').each(function () {
       var $tr    = $(this);
-      var entry  = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
-      // Fallback: try to resolve via MAPPER20_RESOLVE if entry hidden-input is empty
+      var entry  = ($tr.find('.mapper-core-receptor-entry').val() || '').trim();
+      // Fallback: try to resolve via MAPPER_CORE_RESOLVE if entry hidden-input is empty
       if (!entry) {
-        var ta       = ($tr.find('.mapper20-in-receptor').val() || '').trim();
-        var unmatched = ($tr.data('mapper20UnmatchedRaw') || '');
+        var ta       = ($tr.find('.mapper-core-in-receptor').val() || '').trim();
+        var unmatched = ($tr.data('mapperCoreUnmatchedRaw') || '');
         var up = String(ta || unmatched).trim().toUpperCase();
-        if (up && window.MAPPER20_RESOLVE) entry = window.MAPPER20_RESOLVE[up] || '';
+        if (up && window.MAPPER_CORE_RESOLVE) entry = window.MAPPER_CORE_RESOLVE[up] || '';
       }
       if (!entry) return;
       var info = ReceptorInfo[entry];
@@ -277,7 +277,7 @@
       var ligtype = info.ligandtype || 'Other';
       var family  = info.family     || 'Other';
       // nameKey: species-aware when species mode is active
-      var metaEntry = (window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[entry]) || {};
+      var metaEntry = (window.MAPPER_CORE_ENTRY_META && window.MAPPER_CORE_ENTRY_META[entry]) || {};
       var baseNamePlain = metaEntry.name_plain || info.name_plain || entry;
       var nameKey;
       if (mapperListSpeciesActive) {
@@ -294,9 +294,9 @@
       if (mapperListIsTextMode()) {
         var cat = ($tr.find('.mapper-list-cat').val() || '').trim();
         if (!cat) return;
-        if (!window.MAPPER20_LABEL_COLORS[cat]) window.MAPPER20_LABEL_COLORS[cat] = mapperListDefaultColorForLabel(cat);
-        var en       = window.MAPPER20_LABEL_ENABLED[cat] !== false;
-        var colorVal = en ? window.MAPPER20_LABEL_COLORS[cat] : '#ffffff';
+        if (!window.MAPPER_CORE_LABEL_COLORS[cat]) window.MAPPER_CORE_LABEL_COLORS[cat] = mapperListDefaultColorForLabel(cat);
+        var en       = window.MAPPER_CORE_LABEL_ENABLED[cat] !== false;
+        var colorVal = en ? window.MAPPER_CORE_LABEL_COLORS[cat] : '#ffffff';
         dataEntry = { Value1: cat, ColorValue: colorVal };
       } else {
         var v1 = parseNumLoose($tr.find('.mapper-list-val1').val());
@@ -338,7 +338,7 @@
   function mapperListSyncFirstRowPlaceholder() {
     var hint = mapperListIsTextMode() ? MAPPER_LIST_PLACEHOLDER_CATMODE : MAPPER_LIST_PLACEHOLDER_NUMERIC;
     $('#mapper-list-input-tbody tr').each(function (idx) {
-      var $inp = $(this).find('.mapper20-in-receptor');
+      var $inp = $(this).find('.mapper-core-in-receptor');
       if (!$inp.length) return;
       if (idx === 0) $inp.attr('placeholder', hint);
       else           $inp.removeAttr('placeholder');
@@ -510,7 +510,7 @@
       });
       MAPPER_LIST_MODE_SNAPSHOTS.categorical = {
         rows: rows,
-        labelColors: $.extend({}, window.MAPPER20_LABEL_COLORS || {})
+        labelColors: $.extend({}, window.MAPPER_CORE_LABEL_COLORS || {})
       };
     } else {
       rows = rows.map(function (r) {
@@ -558,7 +558,7 @@
     // rather than leaving the previous mode's rows sitting in the DOM.
     var snap = MAPPER_LIST_MODE_SNAPSHOTS[text ? 'categorical' : 'numeric'] || {};
     if (text) {
-      window.MAPPER20_LABEL_COLORS = snap.labelColors ? $.extend({}, snap.labelColors) : {};
+      window.MAPPER_CORE_LABEL_COLORS = snap.labelColors ? $.extend({}, snap.labelColors) : {};
     }
     suppressRedraw = true;
     mapperListDestroyAllRows();
@@ -575,7 +575,7 @@
 
     // Table class
     var $tbl = $('#mapper-list-input-table');
-    $tbl.toggleClass('mapper20-text-mode', text);
+    $tbl.toggleClass('mapper-core-text-mode', text);
     $tbl.find('.mapper-list-val1,.mapper-list-val2,.mapper-list-val3,.mapper-list-val4').prop('disabled', text);
 
     // Toolbar visibility
@@ -586,7 +586,7 @@
     $('#mapper-list-colors-menu').toggleClass('mapper-list-colors-text-mode', text);
 
     // Shrink/grow left panel
-    $('.mapper20-wheel-wrap.mapper-list-page').toggleClass('mapper-list-catmode', text);
+    $('.mapper-core-wheel-wrap.mapper-list-page').toggleClass('mapper-list-catmode', text);
     mapperListApplyLeftPanelWidth();
 
     // Category hints
@@ -606,7 +606,7 @@
       var $td = $tr.find('td.mapper-list-cat-cell');
       if (!$td.length) return;
       if (!text) { $td.removeClass('mapper-list-cat-hint'); return; }
-      var hasRec = !!($tr.find('.mapper20-receptor-entry').val() || '').trim();
+      var hasRec = !!($tr.find('.mapper-core-receptor-entry').val() || '').trim();
       var hasCat = !!($tr.find('.mapper-list-cat').val() || '').trim();
       $td.toggleClass('mapper-list-cat-hint', hasRec && !hasCat);
     });
@@ -621,11 +621,11 @@
   function mapperListApplyLabelColor(label, color, $activePicker) {
     var key = String(label || '').trim();
     if (!key || !color) return;
-    window.MAPPER20_LABEL_COLORS[key] = color;
+    window.MAPPER_CORE_LABEL_COLORS[key] = color;
     $('#mapper-list-input-tbody tr').each(function () {
       var $tr = $(this);
       if (($tr.find('.mapper-list-cat').val() || '').trim() !== key) return;
-      var $sw = $tr.find('.mapper20-row-color-picker');
+      var $sw = $tr.find('.mapper-core-row-color-picker');
       $sw.val(color).css('background-color', color);
       if ($activePicker && $activePicker.length && $sw[0] === $activePicker[0]) return;
       if ($.fn.spectrum && ($sw.data('spectrum.id') != null || $sw.hasClass('sp-replaced'))) {
@@ -633,7 +633,7 @@
       }
     });
     // Sync panel picker
-    var $pp = $('#mapper-list-label-color-pickers .mapper20-lcat-spectrum[data-mapper-list-lcat-label="' + key + '"]');
+    var $pp = $('#mapper-list-label-color-pickers .mapper-core-lcat-spectrum[data-mapper-list-lcat-label="' + key + '"]');
     if ($pp.length && (!$activePicker || !$activePicker.length || $pp[0] !== $activePicker[0])) {
       if ($.fn.spectrum && ($pp.data('spectrum') || $pp.hasClass('sp-replaced'))) {
         try { $pp.spectrum('set', color); } catch (e) {}
@@ -654,8 +654,8 @@
     $picker.spectrum({
       color: color || '#f5f5f5', preferredFormat: 'hex', showInput: true,
       showPalette: true, showSelectionPalette: true, clickoutFiresChange: true,
-      containerClassName: 'mapper20-row-color-spectrum',
-      replacerClassName: 'mapper20-row-swatch-replacer',
+      containerClassName: 'mapper-core-row-color-spectrum',
+      replacerClassName: 'mapper-list-row-swatch-replacer',
       palette: [
         ['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd'],
         ['#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'],
@@ -668,15 +668,15 @@
 
   function mapperListRefreshSwatches() {
     if (!mapperListIsTextMode()) {
-      $('#mapper-list-input-tbody .mapper20-row-color-picker').each(function () { mapperListDestroySwatchSpectrum($(this)); });
-      $('#mapper-list-input-tbody .mapper20-label-swatch').css('background-color', 'transparent');
+      $('#mapper-list-input-tbody .mapper-core-row-color-picker').each(function () { mapperListDestroySwatchSpectrum($(this)); });
+      $('#mapper-list-input-tbody .mapper-list-label-swatch').css('background-color', 'transparent');
       return;
     }
     $('#mapper-list-input-tbody tr').each(function () {
-      var $sw  = $(this).find('.mapper20-label-swatch');
+      var $sw  = $(this).find('.mapper-list-label-swatch');
       var cat  = ($(this).find('.mapper-list-cat').val() || '').trim();
       if (!cat) { mapperListDestroySwatchSpectrum($sw); $sw.css('background-color', '#f5f5f5'); return; }
-      var hex = window.MAPPER20_LABEL_COLORS[cat] || mapperListDefaultColorForLabel(cat);
+      var hex = window.MAPPER_CORE_LABEL_COLORS[cat] || mapperListDefaultColorForLabel(cat);
       $sw.css('background-color', hex);
       mapperListEnsureSwatchSpectrum($sw, cat, hex);
     });
@@ -689,7 +689,7 @@
     if (!$mount.length) return;
 
     if (!mapperListIsTextMode()) {
-      $mount.find('.mapper20-lcat-spectrum').each(function () { try { if ($(this).data('spectrum')) $(this).spectrum('destroy'); } catch (e) {} });
+      $mount.find('.mapper-core-lcat-spectrum').each(function () { try { if ($(this).data('spectrum')) $(this).spectrum('destroy'); } catch (e) {} });
       $mount.empty(); mapperListLastLabelSet = ''; return;
     }
 
@@ -703,7 +703,7 @@
     var newKey = labels.join('\n');
     if (newKey === mapperListLastLabelSet) return;
 
-    $mount.find('.mapper20-lcat-spectrum').each(function () { try { if ($(this).data('spectrum')) $(this).spectrum('destroy'); } catch (e) {} });
+    $mount.find('.mapper-core-lcat-spectrum').each(function () { try { if ($(this).data('spectrum')) $(this).spectrum('destroy'); } catch (e) {} });
     $mount.empty();
     mapperListLastLabelSet = newKey;
 
@@ -714,15 +714,15 @@
 
     // Initialise colors/enabled
     labels.forEach(function (lbl) {
-      if (!window.MAPPER20_LABEL_COLORS[lbl]) window.MAPPER20_LABEL_COLORS[lbl] = mapperListDefaultColorForLabel(lbl);
-      if (!Object.prototype.hasOwnProperty.call(window.MAPPER20_LABEL_ENABLED, lbl)) window.MAPPER20_LABEL_ENABLED[lbl] = true;
+      if (!window.MAPPER_CORE_LABEL_COLORS[lbl]) window.MAPPER_CORE_LABEL_COLORS[lbl] = mapperListDefaultColorForLabel(lbl);
+      if (!Object.prototype.hasOwnProperty.call(window.MAPPER_CORE_LABEL_ENABLED, lbl)) window.MAPPER_CORE_LABEL_ENABLED[lbl] = true;
     });
 
     function domId(ix, kind) { return 'mapper_list_l_' + kind + '_' + ix; }
 
     function updateMaster() {
-      var allOn  = labels.every(function (l) { return window.MAPPER20_LABEL_ENABLED[l] !== false; });
-      var allOff = labels.every(function (l) { return window.MAPPER20_LABEL_ENABLED[l] === false; });
+      var allOn  = labels.every(function (l) { return window.MAPPER_CORE_LABEL_ENABLED[l] !== false; });
+      var allOff = labels.every(function (l) { return window.MAPPER_CORE_LABEL_ENABLED[l] === false; });
       var mx = $('#mapper-list-label-cat-master')[0];
       if (!mx) return;
       mx.checked = !!allOn;
@@ -732,13 +732,13 @@
     function refreshRow(ix, lbl) {
       var $inp = $('#' + domId(ix, 'spe'));
       if (!$inp.length || !$inp.data('spectrum')) return;
-      var en = window.MAPPER20_LABEL_ENABLED[lbl] !== false;
+      var en = window.MAPPER_CORE_LABEL_ENABLED[lbl] !== false;
       try { en ? $inp.spectrum('enable').css('opacity','1') : $inp.spectrum('disable').css('opacity','0.5'); } catch (e) {}
     }
 
-    var $hdr = $('<div class="mapper20-label-cat-head">').append(
+    var $hdr = $('<div class="mapper-core-label-cat-head">').append(
       $('<input type="checkbox" id="mapper-list-label-cat-master" aria-label="Toggle all">'),
-      $('<div class="mapper20-label-cat-head-title">Categories</div>')
+      $('<div class="mapper-core-label-cat-head-title">Categories</div>')
     );
     var $grid = $('<div class="color-grid">');
     $mount.append($hdr, $grid);
@@ -746,17 +746,17 @@
 
     $('#mapper-list-label-cat-master').on('change.mapperListColors', function () {
       var on = !!$(this).prop('checked');
-      labels.forEach(function (lbl, ix) { window.MAPPER20_LABEL_ENABLED[lbl] = on; refreshRow(ix, lbl); });
+      labels.forEach(function (lbl, ix) { window.MAPPER_CORE_LABEL_ENABLED[lbl] = on; refreshRow(ix, lbl); });
       mapperListRefreshSwatches(); mapperListScheduleRedraw();
     });
 
     labels.forEach(function (lbl, ix) {
       var chkId = domId(ix, 'chk'), spId = domId(ix, 'spe');
-      var hex = window.MAPPER20_LABEL_COLORS[lbl] || mapperListDefaultColorForLabel(lbl);
-      window.MAPPER20_LABEL_COLORS[lbl] = hex;
-      var en = window.MAPPER20_LABEL_ENABLED[lbl] !== false;
+      var hex = window.MAPPER_CORE_LABEL_COLORS[lbl] || mapperListDefaultColorForLabel(lbl);
+      window.MAPPER_CORE_LABEL_COLORS[lbl] = hex;
+      var en = window.MAPPER_CORE_LABEL_ENABLED[lbl] !== false;
 
-      var $spe = $('<input type="text">').addClass('mapper20-lcat-spectrum form-control input-sm')
+      var $spe = $('<input type="text">').addClass('mapper-core-lcat-spectrum form-control input-sm')
         .attr({ id: spId, 'data-mapper-list-lcat-label': lbl });
 
       $grid.append($('<div class="color-item">').append(
@@ -766,7 +766,7 @@
       ));
 
       $('#' + chkId).on('change.mapperListColors', function () {
-        window.MAPPER20_LABEL_ENABLED[lbl] = !!$(this).prop('checked');
+        window.MAPPER_CORE_LABEL_ENABLED[lbl] = !!$(this).prop('checked');
         refreshRow(ix, lbl); updateMaster();
         mapperListRefreshSwatches(); mapperListScheduleRedraw();
       });
@@ -774,14 +774,14 @@
       $spe.spectrum({
         color: hex, showPalette: true, showInput: true, showButtons: false, preferredFormat: 'hex',
         appendTo: '#mapper-list-colors-menu',
-        containerClassName: 'mapper20-lcat-sp-container',
-        replacerClassName: 'mapper20-lcat-replacer',
+        containerClassName: 'mapper-core-lcat-sp-container',
+        replacerClassName: 'mapper-core-lcat-replacer',
         palette: [
           ['#000','#FF0000','#00FF00','#0000FF','#FFFF00'],
           ['#FF00FF','#00FFFF','#FFFFFF','#C0C0C0','#808080']
         ],
         change: function (c) {
-          if (window.MAPPER20_LABEL_ENABLED[lbl] === false) return;
+          if (window.MAPPER_CORE_LABEL_ENABLED[lbl] === false) return;
           mapperListApplyLabelColor(lbl, c && c.toHexString ? c.toHexString() : hex, $spe);
         }
       });
@@ -903,11 +903,11 @@
 
   // ── Row management ────────────────────────────────────────────────────────────
   function mapperListCreateReceptorTd($td) {
-    var $hid  = $('<input type="hidden" class="mapper20-receptor-entry" value="">');
-    var $wrap = $('<div class="mapper20-receptor-input-wrap is-empty">');
-    var $inp  = $('<textarea class="form-control input-sm mapper20-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>');
-    var $view = $('<div class="form-control input-sm mapper20-receptor-html-view" tabindex="0"></div>');
-    var $clr  = $('<button type="button" class="mapper20-receptor-clear" aria-label="Clear receptor">&times;</button>');
+    var $hid  = $('<input type="hidden" class="mapper-core-receptor-entry" value="">');
+    var $wrap = $('<div class="mapper-core-receptor-input-wrap is-empty">');
+    var $inp  = $('<textarea class="form-control input-sm mapper-core-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>');
+    var $view = $('<div class="form-control input-sm mapper-core-receptor-html-view" tabindex="0"></div>');
+    var $clr  = $('<button type="button" class="mapper-core-receptor-clear" aria-label="Clear receptor">&times;</button>');
     $wrap.append($inp, $view, $clr);
     $td.append($hid, $wrap);
     $view.hide();
@@ -916,40 +916,40 @@
   }
 
   function mapperListRowBlank($tr) {
-    var entry   = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+    var entry   = ($tr.find('.mapper-core-receptor-entry').val() || '').trim();
     var cat     = ($tr.find('.mapper-list-cat').val() || '').trim();
-    var typed   = ($tr.find('.mapper20-in-receptor').val() || '').trim();
+    var typed   = ($tr.find('.mapper-core-in-receptor').val() || '').trim();
     var hasVals = ['.mapper-list-val1','.mapper-list-val2','.mapper-list-val3','.mapper-list-val4'].some(function (s) {
       return (($tr.find(s).val() || '').trim() !== '');
     });
-    return !entry && !cat && !typed && !hasVals && !$tr.data('mapper20UnmatchedRaw');
+    return !entry && !cat && !typed && !hasVals && !$tr.data('mapperCoreUnmatchedRaw');
   }
 
   function mapperListSyncClearBtn($tr) {
-    var has = !!($tr.find('.mapper20-receptor-entry').val() || '').trim()
-           || !!($tr.find('.mapper20-in-receptor').val() || '').trim()
-           || !!($tr.data('mapper20UnmatchedRaw'));
-    $tr.find('.mapper20-receptor-input-wrap').toggleClass('is-empty', !has);
+    var has = !!($tr.find('.mapper-core-receptor-entry').val() || '').trim()
+           || !!($tr.find('.mapper-core-in-receptor').val() || '').trim()
+           || !!($tr.data('mapperCoreUnmatchedRaw'));
+    $tr.find('.mapper-core-receptor-input-wrap').toggleClass('is-empty', !has);
   }
 
   function mapperListSyncRemoveButtons() {
     $('#mapper-list-input-tbody tr').each(function () {
-      $(this).find('.mapper20-remove-cell').toggleClass('is-remove-hidden', mapperListRowBlank($(this)));
+      $(this).find('.mapper-core-remove-cell').toggleClass('is-remove-hidden', mapperListRowBlank($(this)));
     });
   }
 
   function mapperListCompactReceptors() {
     var hasContent = false;
     $('#mapper-list-input-tbody tr').each(function () { if (!mapperListRowBlank($(this))) { hasContent = true; return false; } });
-    $('#mapper-list-input-table').toggleClass('mapper20-receptors-compact', hasContent);
+    $('#mapper-list-input-table').toggleClass('mapper-core-receptors-compact', hasContent);
   }
 
   function mapperListAppendRow(skipTrail) {
     var $tr = $('<tr>');
-    $tr.append($('<td class="mapper20-remove-cell is-remove-hidden">').append(
-      $('<button type="button" class="mapper20-remove-row" aria-label="Remove row">&times;</button>')
+    $tr.append($('<td class="mapper-core-remove-cell is-remove-hidden">').append(
+      $('<button type="button" class="mapper-core-remove-row" aria-label="Remove row">&times;</button>')
     ));
-    var $tdR = $('<td class="mapper20-receptor-cell mapper20-value-cell">');
+    var $tdR = $('<td class="mapper-core-receptor-cell mapper-core-value-cell">');
     var $inp = mapperListCreateReceptorTd($tdR);
     $tr.append($tdR);
     // Species cell (hidden until species toggle is active)
@@ -960,14 +960,14 @@
     ['val1','val2','val3','val4'].forEach(function (suf) {
       var $v = $('<input type="text" class="form-control input-sm mapper-list-' + suf + ' mapper-list-val" autocomplete="off">');
       if (mapperListIsTextMode()) $v.prop('disabled', true);
-      $tr.append($('<td class="mapper-list-val-cell mapper20-value-cell">').append($v));
+      $tr.append($('<td class="mapper-list-val-cell mapper-core-value-cell">').append($v));
     });
     // Category
     var $cat = $('<input type="text" class="form-control input-sm mapper-list-cat" autocomplete="off">');
-    $tr.append($('<td class="mapper-list-cat-cell mapper20-value-cell">').append($cat));
+    $tr.append($('<td class="mapper-list-cat-cell mapper-core-value-cell">').append($cat));
     // Swatch
-    $tr.append($('<td class="mapper20-swatch-cell">').append(
-      '<input type="text" class="mapper20-label-swatch mapper20-row-color-picker" readonly="readonly" aria-label="Label color">'
+    $tr.append($('<td class="mapper-list-swatch-cell">').append(
+      '<input type="text" class="mapper-list-label-swatch mapper-core-row-color-picker" readonly="readonly" aria-label="Label color">'
     ));
 
     $('#mapper-list-input-tbody').append($tr);
@@ -997,8 +997,8 @@
     try { if ($inp.hasClass('ui-autocomplete-input')) $inp.autocomplete('destroy'); } catch (e) {}
   }
   function mapperListDestroyRowAc($tr) {
-    mapperListDestroyAc($tr.find('.mapper20-in-receptor'));
-    $tr.find('.mapper20-row-color-picker').each(function () { mapperListDestroySwatchSpectrum($(this)); });
+    mapperListDestroyAc($tr.find('.mapper-core-in-receptor'));
+    $tr.find('.mapper-core-row-color-picker').each(function () { mapperListDestroySwatchSpectrum($(this)); });
     var $ss = $tr.find('.mapper-list-species-select');
     if ($ss.length && $ss.data('select2')) { try { $ss.select2('destroy'); } catch (e) {} }
   }
@@ -1008,7 +1008,7 @@
 
   // ── Autocomplete ──────────────────────────────────────────────────────────────
   function mapperListResolvedDisplay(entryId) {
-    var meta = window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[entryId] || {};
+    var meta = window.MAPPER_CORE_ENTRY_META && window.MAPPER_CORE_ENTRY_META[entryId] || {};
     if (LabelNames === 'Gene' && meta.gene) return $('<span/>').text(meta.gene).html();
     if (LabelNames === 'UniProt' && meta.uniprot) return $('<span/>').text(meta.uniprot).html();
     return meta.name_html ? String(meta.name_html) : $('<span/>').text(entryId || '').html();
@@ -1016,7 +1016,7 @@
 
   function mapperListEditSeed(entryId) {
     var sid = entryId != null ? String(entryId).trim() : '';
-    var meta = (window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[sid]) || {};
+    var meta = (window.MAPPER_CORE_ENTRY_META && window.MAPPER_CORE_ENTRY_META[sid]) || {};
     if (LabelNames === 'Gene' && meta.gene) { return meta.gene; }
     if (LabelNames === 'UniProt' && meta.uniprot) { return meta.uniprot; }
     return meta.name_plain || '';
@@ -1024,14 +1024,14 @@
 
   function mapperListSetResolved($tr, id) {
     var sid = id != null ? String(id).trim() : '';
-    var $inp  = $tr.find('.mapper20-in-receptor');
-    var $hid  = $tr.find('.mapper20-receptor-entry');
-    var $view = $tr.find('.mapper20-receptor-html-view');
+    var $inp  = $tr.find('.mapper-core-in-receptor');
+    var $hid  = $tr.find('.mapper-core-receptor-entry');
+    var $view = $tr.find('.mapper-core-receptor-html-view');
     mapperListDestroyAc($inp);
     if (!sid) {
       $hid.val(''); $view.hide().empty(); $inp.val('').show();
       mapperListBindAc($inp);
-      $tr.removeClass('mapper20-row-invalid').removeData('mapper20UnmatchedRaw');
+      $tr.removeClass('mapper-core-row-invalid').removeData('mapperCoreUnmatchedRaw');
       mapperListSyncClearBtn($tr); mapperListSyncRemoveButtons(); mapperListCompactReceptors();
       mapperListScheduleRedraw(); return;
     }
@@ -1040,7 +1040,7 @@
     $view.html(mapperListResolvedDisplay(sid)).show();
     $inp.val('').hide();
     mapperListBindAc($inp);
-    $tr.removeClass('mapper20-row-invalid').removeData('mapper20UnmatchedRaw');
+    $tr.removeClass('mapper-core-row-invalid').removeData('mapperCoreUnmatchedRaw');
     mapperListSyncClearBtn($tr); mapperListSyncRemoveButtons(); mapperListCompactReceptors();
     if (!suppressRedraw) {
       window.setTimeout(function () {
@@ -1054,7 +1054,7 @@
   function mapperListFilterLocal(term) {
     var t = (term || '').trim().toUpperCase();
     if (!t || !window.receptorSelect2Data) return [];
-    var meta = window.MAPPER20_ENTRY_META || {};
+    var meta = window.MAPPER_CORE_ENTRY_META || {};
     var results = [];
     window.receptorSelect2Data.forEach(function (item) {
       var m = meta[item.id] || {};
@@ -1087,13 +1087,13 @@
     if (w) {
       w._renderItem = function (ul, item) {
         var inner = item.html || item.name_html || $('<span/>').text(item.label || '').html();
-        return $('<li>').append($('<div class="mapper20-ac-item-label">').html(inner)).appendTo(ul);
+        return $('<li>').append($('<div class="mapper-core-ac-item-label">').html(inner)).appendTo(ul);
       };
-      if (w.menu && w.menu.element) w.menu.element.addClass('mapper20-receptor-ac-menu');
+      if (w.menu && w.menu.element) w.menu.element.addClass('mapper-core-receptor-ac-menu');
     }
     $inp.on('keyup', function () {
       var $tr = $inp.closest('tr');
-      if (!$tr.find('.mapper20-receptor-entry').val()) { $tr.removeData('mapper20UnmatchedRaw'); $tr.removeClass('mapper20-row-invalid'); }
+      if (!$tr.find('.mapper-core-receptor-entry').val()) { $tr.removeData('mapperCoreUnmatchedRaw'); $tr.removeClass('mapper-core-row-invalid'); }
       mapperListSyncClearBtn($tr);
     });
     $inp.on('blur.mapperList', function () {
@@ -1101,13 +1101,13 @@
       window.setTimeout(function () {
         if (!$inp.is(':visible')) return;
         var raw = ($inp.val() || '').trim();
-        if (!raw || $tr.find('.mapper20-receptor-entry').val()) return;
+        if (!raw || $tr.find('.mapper-core-receptor-entry').val()) return;
         var up = raw.toUpperCase();
-        var rid = window.MAPPER20_RESOLVE && window.MAPPER20_RESOLVE[up];
+        var rid = window.MAPPER_CORE_RESOLVE && window.MAPPER_CORE_RESOLVE[up];
         if (rid) { mapperListSetResolved($tr, rid); return; }
         var hit = (window.receptorSelect2Data||[]).filter(function(x){return String(x.id)===raw;});
         if (hit.length) { mapperListSetResolved($tr, hit[0].id); return; }
-        if (raw) { $tr.addClass('mapper20-row-invalid'); $tr.data('mapper20UnmatchedRaw', raw); }
+        if (raw) { $tr.addClass('mapper-core-row-invalid'); $tr.data('mapperCoreUnmatchedRaw', raw); }
         mapperListSyncClearBtn($tr);
       }, 170);
     });
@@ -1122,10 +1122,10 @@
       var $tr = $(this);
       rows.push({
         ix: ix,
-        entry: ($tr.find('.mapper20-receptor-entry').val() || '').trim(),
-        typed: ($tr.find('.mapper20-in-receptor').val() || '').trim(),
-        unmatched: ($tr.data('mapper20UnmatchedRaw') || ''),
-        invalid: $tr.hasClass('mapper20-row-invalid'),
+        entry: ($tr.find('.mapper-core-receptor-entry').val() || '').trim(),
+        typed: ($tr.find('.mapper-core-in-receptor').val() || '').trim(),
+        unmatched: ($tr.data('mapperCoreUnmatchedRaw') || ''),
+        invalid: $tr.hasClass('mapper-core-row-invalid'),
         v1: ($tr.find('.mapper-list-val1').val() || '').trim(),
         v2: ($tr.find('.mapper-list-val2').val() || '').trim(),
         v3: ($tr.find('.mapper-list-val3').val() || '').trim(),
@@ -1152,9 +1152,9 @@
           if ($specSel.data('select2')) { $specSel.trigger('change.select2'); }
         }
       } else if (r.typed) {
-        $tr.find('.mapper20-in-receptor').val(r.typed);
-        if (r.unmatched) $tr.data('mapper20UnmatchedRaw', r.unmatched);
-        if (r.invalid)   $tr.addClass('mapper20-row-invalid');
+        $tr.find('.mapper-core-in-receptor').val(r.typed);
+        if (r.unmatched) $tr.data('mapperCoreUnmatchedRaw', r.unmatched);
+        if (r.invalid)   $tr.addClass('mapper-core-row-invalid');
       }
       $tr.find('.mapper-list-val1').val(r.v1);
       $tr.find('.mapper-list-val2').val(r.v2);
@@ -1194,12 +1194,12 @@
   }
 
   function mapperListUpdateSortHeaders() {
-    $('#mapper-list-input-table th.mapper20-sortable-head').each(function () {
+    $('#mapper-list-input-table th.mapper-core-sortable-head').each(function () {
       var col    = $(this).attr('data-mapper-list-sort-col');
       var active = SORT_STATE.col === col;
       var dir    = active ? SORT_STATE.dir : null;
       $(this).attr('aria-sort', active ? (dir==='desc'?'descending':'ascending') : 'none');
-      $(this).find('.mapper20-sort-indicator').text(active ? (dir==='desc'?'▼':'▲') : '↕');
+      $(this).find('.mapper-core-sort-indicator').text(active ? (dir==='desc'?'▼':'▲') : '↕');
     });
   }
 
@@ -1247,11 +1247,11 @@
 
     // Pre-assign categorical colours so each label gets a distinct colour
     if (text) {
-      window.MAPPER20_LABEL_COLORS = {};
-      window.MAPPER20_LABEL_ENABLED = {};
+      window.MAPPER_CORE_LABEL_COLORS = {};
+      window.MAPPER_CORE_LABEL_ENABLED = {};
       Object.keys(DEMO_CAT_COLORS).forEach(function (cat) {
-        window.MAPPER20_LABEL_COLORS[cat] = DEMO_CAT_COLORS[cat];
-        window.MAPPER20_LABEL_ENABLED[cat] = true;
+        window.MAPPER_CORE_LABEL_COLORS[cat] = DEMO_CAT_COLORS[cat];
+        window.MAPPER_CORE_LABEL_ENABLED[cat] = true;
       });
     }
 
@@ -1259,11 +1259,11 @@
       mapperListAppendRow(true);
       var $tr = $('#mapper-list-input-tbody tr').last();
       var up = r.receptor.toUpperCase();
-      var rid = window.MAPPER20_RESOLVE && window.MAPPER20_RESOLVE[up];
+      var rid = window.MAPPER_CORE_RESOLVE && window.MAPPER_CORE_RESOLVE[up];
       if (rid) {
         mapperListSetResolved($tr, rid);
       } else {
-        $tr.find('.mapper20-in-receptor').val(r.receptor);
+        $tr.find('.mapper-core-in-receptor').val(r.receptor);
       }
       // Fill only the current mode's fields — Numbers and Categories stay fully separate
       if (text) {
@@ -1276,7 +1276,7 @@
       }
     });
     suppressRedraw = false;
-    $('#mapper-list-clear-rows').removeClass('mapper20-clear-clean');
+    $('#mapper-list-clear-rows').removeClass('mapper-core-clear-clean');
     mapperListEnsureTrailingBlankRow();
     mapperListSyncRemoveButtons();
     mapperListCompactReceptors();
@@ -1296,7 +1296,7 @@
 
   // ── Boot ──────────────────────────────────────────────────────────────────────
   function mapperListBoot() {
-    $('.mapper20-booting').removeClass('mapper20-booting');
+    $('.mapper-core-booting').removeClass('mapper-core-booting');
     // Load receptor info from Django context
     ReceptorInfo = window.MAPPER_LIST_RECEPTOR_INFO || {};
     mapperListBuildLabelConversion();
@@ -1309,15 +1309,15 @@
         (window.MAPPER_LIST_SPECIES_DATA.nonhuman_only || []).forEach(function (nho) {
           var stem = nho.stem;
 
-          // Register MAPPER20_ENTRY_META for every individual species entry so that
+          // Register MAPPER_CORE_ENTRY_META for every individual species entry so that
           // whichever species is later picked in the row's species dropdown, the cell
           // always shows "STEM (no human ortholog)" in all Receptor Names modes.
           var stemU = stem.toUpperCase();
           var TAG = '(no human ortholog)';
           var dispText = stemU + ' ' + TAG;
           var nhoHtml = '<span>' + $('<span>').text(stemU).html() + ' <em>' + TAG + '</em></span>';
-          if (window.MAPPER20_ENTRY_META && !window.MAPPER20_ENTRY_META[nho.entry]) {
-            window.MAPPER20_ENTRY_META[nho.entry] = {
+          if (window.MAPPER_CORE_ENTRY_META && !window.MAPPER_CORE_ENTRY_META[nho.entry]) {
+            window.MAPPER_CORE_ENTRY_META[nho.entry] = {
               name_html:  nhoHtml,
               name_plain: dispText,
               uniprot:    dispText
@@ -1326,8 +1326,8 @@
 
           if (_seenNhoStems[stem]) return;
           _seenNhoStems[stem] = true;
-          if (window.MAPPER20_RESOLVE && (window.MAPPER20_RESOLVE[stem.toUpperCase()] ||
-              window.MAPPER20_RESOLVE[(stem + '_human').toUpperCase()])) return;
+          if (window.MAPPER_CORE_RESOLVE && (window.MAPPER_CORE_RESOLVE[stem.toUpperCase()] ||
+              window.MAPPER_CORE_RESOLVE[(stem + '_human').toUpperCase()])) return;
           var entryText = (nho.common || stem) + ' (no human ortholog)';
           if (window.receptorSelect2Data) {
             window.receptorSelect2Data.push({
@@ -1336,9 +1336,9 @@
               search_text: (stem + ' ' + (nho.common || '') + ' ' + (nho.latin || '')).toUpperCase()
             });
           }
-          if (window.MAPPER20_RESOLVE) {
-            window.MAPPER20_RESOLVE[stem.toUpperCase()] = nho.entry;
-            window.MAPPER20_RESOLVE[nho.entry.toUpperCase()] = nho.entry;
+          if (window.MAPPER_CORE_RESOLVE) {
+            window.MAPPER_CORE_RESOLVE[stem.toUpperCase()] = nho.entry;
+            window.MAPPER_CORE_RESOLVE[nho.entry.toUpperCase()] = nho.entry;
           }
         });
       }
@@ -1373,9 +1373,9 @@
       });
       // Refresh resolved receptor names shown in the input table html-view
       $('#mapper-list-input-tbody tr').each(function () {
-        var sid = ($( this).find('.mapper20-receptor-entry').val() || '').trim();
+        var sid = ($( this).find('.mapper-core-receptor-entry').val() || '').trim();
         if (!sid) return;
-        var $view = $(this).find('.mapper20-receptor-html-view');
+        var $view = $(this).find('.mapper-core-receptor-html-view');
         if ($view.length && $view.is(':visible')) $view.html(mapperListResolvedDisplay(sid));
       });
       mapperListScheduleRedraw();
@@ -1414,7 +1414,7 @@
       mapperListAppendRow();
       mapperListCompactReceptors();
       mapperListSyncFirstRowPlaceholder();
-      $('#mapper-list-clear-rows').addClass('mapper20-clear-clean').blur();
+      $('#mapper-list-clear-rows').addClass('mapper-core-clear-clean').blur();
       mapperListRedrawNow();
     }
     function mapperListDoCurrentModeClear() {
@@ -1425,7 +1425,7 @@
       mapperListAppendRow();
       mapperListCompactReceptors();
       mapperListSyncFirstRowPlaceholder();
-      $('#mapper-list-clear-rows').addClass('mapper20-clear-clean').blur();
+      $('#mapper-list-clear-rows').addClass('mapper-core-clear-clean').blur();
       mapperListRedrawNow();
     }
     $('#mapper-list-clear-whole').on('click.mapperList', function(e) {
@@ -1434,22 +1434,22 @@
     $('#mapper-list-clear-mode').on('click.mapperList', function(e) {
       e.preventDefault(); mapperListDoCurrentModeClear();
     });
-    $('.mapper20-clear-menu').on('click.mapperList', '[data-list-col]', function(e) {
+    $('.mapper-core-clear-menu').on('click.mapperList', '[data-list-col]', function(e) {
       e.preventDefault();
       var col = $(this).data('list-col');
       $('#mapper-list-input-tbody tr').each(function() {
         $(this).find('.mapper-list-' + col).val('').trigger('input');
       });
-      $('#mapper-list-clear-rows').removeClass('mapper20-clear-clean');
+      $('#mapper-list-clear-rows').removeClass('mapper-core-clear-clean');
       mapperListScheduleRedraw();
     });
 
     // Remove row
-    $('#mapper-list-input-table').on('click.mapperListRemove', '.mapper20-remove-row', function () {
+    $('#mapper-list-input-table').on('click.mapperListRemove', '.mapper-core-remove-row', function () {
       var $tr = $(this).closest('tr');
       if (mapperListRowBlank($tr) && $tr.is(':last-child')) return;
       mapperListDestroyRowAc($tr); $tr.remove();
-      $('#mapper-list-clear-rows').removeClass('mapper20-clear-clean');
+      $('#mapper-list-clear-rows').removeClass('mapper-core-clear-clean');
       mapperListEnsureTrailingBlankRow();
       _listCosmeticSyncDebounced.schedule();
       mapperListScheduleRedraw();
@@ -1457,19 +1457,19 @@
 
     // Click resolved chip to re-enter edit mode
     $(document)
-      .off('click.mapperListHtmlEdit', '#mapper-list-input-tbody .mapper20-receptor-html-view')
-      .on('click.mapperListHtmlEdit', '#mapper-list-input-tbody .mapper20-receptor-html-view', function () {
+      .off('click.mapperListHtmlEdit', '#mapper-list-input-tbody .mapper-core-receptor-html-view')
+      .on('click.mapperListHtmlEdit', '#mapper-list-input-tbody .mapper-core-receptor-html-view', function () {
         var $tr  = $(this).closest('tr');
-        mapperListDestroyAc($tr.find('.mapper20-in-receptor'));
-        var hid  = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+        mapperListDestroyAc($tr.find('.mapper-core-in-receptor'));
+        var hid  = ($tr.find('.mapper-core-receptor-entry').val() || '').trim();
         $(this).hide().empty();
-        var $inp2 = $('<textarea class="form-control input-sm mapper20-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>');
+        var $inp2 = $('<textarea class="form-control input-sm mapper-core-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>');
         var seed  = mapperListEditSeed(hid);
         $inp2.val(seed);
-        if (!seed) { $tr.find('.mapper20-receptor-input-wrap').addClass('is-empty'); }
-        $tr.find('.mapper20-receptor-input-wrap .mapper20-in-receptor').remove();
-        $tr.find('.mapper20-receptor-input-wrap').prepend($inp2);
-        $tr.find('.mapper20-receptor-entry').val('');
+        if (!seed) { $tr.find('.mapper-core-receptor-input-wrap').addClass('is-empty'); }
+        $tr.find('.mapper-core-receptor-input-wrap .mapper-core-in-receptor').remove();
+        $tr.find('.mapper-core-receptor-input-wrap').prepend($inp2);
+        $tr.find('.mapper-core-receptor-entry').val('');
         mapperListBindAc($inp2);
         $inp2.show().focus();
         window.setTimeout(function () {
@@ -1484,7 +1484,7 @@
       });
 
     // Sort headers
-    $('#mapper-list-input-table').on('click.mapperListSort', 'th.mapper20-sortable-head', function () {
+    $('#mapper-list-input-table').on('click.mapperListSort', 'th.mapper-core-sortable-head', function () {
       mapperListSortRows($(this).attr('data-mapper-list-sort-col'));
     });
 
@@ -1494,7 +1494,7 @@
       function () {
         var $tr = $(this).closest('tr');
         mapperListSyncClearBtn($tr);   // keep is-empty in sync → removes orange border when filled
-        $('#mapper-list-clear-rows').removeClass('mapper20-clear-clean');
+        $('#mapper-list-clear-rows').removeClass('mapper-core-clear-clean');
         mapperListEnsureTrailingBlankRow();
         _listCosmeticSyncDebounced.schedule();
         mapperListScheduleRedraw();
@@ -1507,7 +1507,7 @@
       var text = ev.clipboardData ? ev.clipboardData.getData('text/plain') : '';
       if (!text || text.indexOf('\t') === -1) return;
       ePz.preventDefault();
-      $('#mapper-list-clear-rows').removeClass('mapper20-clear-clean');
+      $('#mapper-list-clear-rows').removeClass('mapper-core-clear-clean');
       suppressRedraw = true;
       text.split(/\r?\n/).forEach(function (ln) {
         if (!ln.trim()) return;
@@ -1515,9 +1515,9 @@
         var rawR  = (parts[0] || '').trim();
         var $tr   = mapperListFindBlankRow();
         if (!$tr.length) { mapperListAppendRow(true); $tr = $('#mapper-list-input-tbody tr').last(); }
-        $tr.find('.mapper20-in-receptor').val(rawR);
+        $tr.find('.mapper-core-in-receptor').val(rawR);
         var up = rawR.toUpperCase();
-        var rid = window.MAPPER20_RESOLVE && window.MAPPER20_RESOLVE[up];
+        var rid = window.MAPPER_CORE_RESOLVE && window.MAPPER_CORE_RESOLVE[up];
         if (rid) { mapperListSetResolved($tr, rid); }
         if (!mapperListIsTextMode()) {
           if (parts[1]) $tr.find('.mapper-list-val1').val((parts[1]||'').trim());
@@ -1567,15 +1567,15 @@
     });
 
     // Receptor lookup modal
-    if (typeof window.mapper20InitGpcromePickerModal === 'function') {
-      window.mapper20InitGpcromePickerModal({
-        pickerRows: $.isArray(window.MAPPER20_GPCROME_PICKER_ROWS) ? window.MAPPER20_GPCROME_PICKER_ROWS : [],
+    if (typeof window.mapperCoreInitGpcromePickerModal === 'function') {
+      window.mapperCoreInitGpcromePickerModal({
+        pickerRows: $.isArray(window.MAPPER_CORE_GPCROME_PICKER_ROWS) ? window.MAPPER_CORE_GPCROME_PICKER_ROWS : [],
         maxRows: MAPPER_LIST_MAX_ROWS,
         onAdd: function (entryIds, meta) {
           suppressRedraw = true;
           var isNumberMode = !mapperListIsTextMode();
           var numberMap = (meta && meta.groupNameById && isNumberMode)
-            ? window.mapper20BuildSequentialNumberMap(meta.groupNameById)
+            ? window.mapperCoreBuildSequentialNumberMap(meta.groupNameById)
             : null;
           (entryIds || []).forEach(function (id) {
             var $row = mapperListFindBlankRow();
@@ -1590,7 +1590,7 @@
             }
           });
           suppressRedraw = false;
-          $('#mapper-list-clear-rows').removeClass('mapper20-clear-clean');
+          $('#mapper-list-clear-rows').removeClass('mapper-core-clear-clean');
           mapperListEnsureTrailingBlankRow();
           mapperListCompactReceptors();
           mapperListScheduleRedraw();

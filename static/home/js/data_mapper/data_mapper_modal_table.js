@@ -22,7 +22,7 @@
   // Sort the distinct group labels alphabetically and assign each a stable
   // sequential rank (1, 2, 3, ...) — shared by every page's onAdd so the
   // "Numbers" assignment logic isn't duplicated 5 times.
-  window.mapper20BuildSequentialNumberMap = function (groupNameById) {
+  window.mapperCoreBuildSequentialNumberMap = function (groupNameById) {
     var seen = {};
     var labels = [];
     Object.keys(groupNameById || {}).forEach(function (id) {
@@ -51,13 +51,13 @@
     var rows = dt.rows({ search: 'applied' });
     var checked = 0;
     rows.every(function () {
-      var $cb = $(this.node()).find('.mapper20-gpcrome-pick-cb');
+      var $cb = $(this.node()).find('.mapper-core-gpcrome-pick-cb');
       if ($cb.prop('checked')) {
         checked += 1;
       }
     });
     var total = rows.count();
-    var $master = $('#mapper20-gpcrome-picker-select-all');
+    var $master = $('#mapper-core-gpcrome-picker-select-all');
     if (!total || checked === 0) {
       $master.prop({ checked: false, indeterminate: false });
     } else if (checked === total) {
@@ -73,7 +73,7 @@
     }
     var out = [];
     pickerState.dt.rows().every(function () {
-      var $cb = $(this.node()).find('.mapper20-gpcrome-pick-cb');
+      var $cb = $(this.node()).find('.mapper-core-gpcrome-pick-cb');
       if ($cb.prop('checked')) {
         var v = $cb.val();
         if (v != null && v !== '') {
@@ -105,7 +105,7 @@
     // Columns 2-6 get multi-select filters; 0-1 (checkbox, GPCRdb link) are left empty
     [2, 3, 4, 5, 6].forEach(function (colIdx) {
       var $th = $filterCells.eq(colIdx);
-      var filterId = 'mapper20-gpcrome-picker-table_Filter' + colIdx;
+      var filterId = 'mapper-core-gpcrome-picker-table_Filter' + colIdx;
       var $sel = $('<select multiple="multiple" style="width:100%;">')
         .attr('id', filterId);
 
@@ -142,7 +142,7 @@
         placeholder: { text: 'Filter' },
         dropdownAutoWidth: true,
         width: 'element',
-        dropdownParent: $('#mapper20-gpcrome-picker-modal')
+        dropdownParent: $('#mapper-core-gpcrome-picker-modal')
       });
     });
   }
@@ -160,7 +160,7 @@
           }
           var vid = escapeAttr(entryId == null ? '' : entryId);
           return (
-            '<input type="checkbox" class="mapper20-gpcrome-pick-cb" value="' +
+            '<input type="checkbox" class="mapper-core-gpcrome-pick-cb" value="' +
             vid +
             '" aria-label="Select receptor">'
           );
@@ -232,7 +232,7 @@
       }
     ];
 
-    pickerState.dt = $('#mapper20-gpcrome-picker-table').DataTable({
+    pickerState.dt = $('#mapper-core-gpcrome-picker-table').DataTable({
       dom: "<'row'<'col-sm-12'tr>>" + "<'row'<'col-sm-12'i>>",
       data: rows || [],
       columns: columns,
@@ -250,19 +250,19 @@
     var dt = pickerState.dt;
     buildPickerFilterRow(dt);
 
-    $('#mapper20-gpcrome-picker-table').on('draw.dt', syncSelectAllCheckbox);
-    $('#mapper20-gpcrome-picker-table tbody').on('change', '.mapper20-gpcrome-pick-cb', syncSelectAllCheckbox);
+    $('#mapper-core-gpcrome-picker-table').on('draw.dt', syncSelectAllCheckbox);
+    $('#mapper-core-gpcrome-picker-table tbody').on('change', '.mapper-core-gpcrome-pick-cb', syncSelectAllCheckbox);
     // Click anywhere on a row to toggle its checkbox
-    $('#mapper20-gpcrome-picker-table tbody').on('click', 'tr', function (e) {
+    $('#mapper-core-gpcrome-picker-table tbody').on('click', 'tr', function (e) {
       if ($(e.target).is('input[type="checkbox"], a, img')) return;
-      var $cb = $(this).find('.mapper20-gpcrome-pick-cb');
+      var $cb = $(this).find('.mapper-core-gpcrome-pick-cb');
       $cb.prop('checked', !$cb.prop('checked')).trigger('change');
     });
   }
 
-  window.mapper20InitGpcromePickerModal = function (opts) {
+  window.mapperCoreInitGpcromePickerModal = function (opts) {
     opts = opts || {};
-    if (!$('#mapper20-gpcrome-picker-table').length) {
+    if (!$('#mapper-core-gpcrome-picker-table').length) {
       return;
     }
 
@@ -274,7 +274,7 @@
       }
     });
 
-    $('#mapper20-gpcrome-picker-modal').on('shown.bs.modal', function () {
+    $('#mapper-core-gpcrome-picker-modal').on('shown.bs.modal', function () {
       // Build lazily on first open (while the modal is actually visible) so DataTables/
       // select2 measure real widths instead of the 0-width hidden container at page load.
       if (!pickerState.initialized) {
@@ -287,23 +287,23 @@
       syncSelectAllCheckbox();
     });
 
-    $('#mapper20-gpcrome-picker-modal').on('hidden.bs.modal', function () {
-      $('#mapper20-gpcrome-picker-select-all').prop({ checked: false, indeterminate: false });
+    $('#mapper-core-gpcrome-picker-modal').on('hidden.bs.modal', function () {
+      $('#mapper-core-gpcrome-picker-select-all').prop({ checked: false, indeterminate: false });
       if (pickerState.dt) {
-        pickerState.dt.$('.mapper20-gpcrome-pick-cb').prop('checked', false);
+        pickerState.dt.$('.mapper-core-gpcrome-pick-cb').prop('checked', false);
       }
     });
 
-    $('#mapper20-gpcrome-picker-modal').on(
+    $('#mapper-core-gpcrome-picker-modal').on(
       'change',
-      '#mapper20-gpcrome-picker-select-all',
+      '#mapper-core-gpcrome-picker-select-all',
       function () {
         if (!pickerState.dt) {
           return;
         }
         var on = $(this).prop('checked');
         pickerState.dt.rows({ search: 'applied' }).every(function () {
-          $(this.node()).find('.mapper20-gpcrome-pick-cb').prop('checked', on);
+          $(this.node()).find('.mapper-core-gpcrome-pick-cb').prop('checked', on);
         });
         syncSelectAllCheckbox();
       }
@@ -313,17 +313,17 @@
     // convention calls e.stopPropagation() on every .dropdown-menu click (to keep
     // other dropdowns open on interaction), which would otherwise swallow this
     // click before it ever reaches a handler delegated from the modal ancestor.
-    $('#mapper20-gpcrome-picker-assign-menu').on('click', '.mapper20-picker-assign-src', function () {
+    $('#mapper-core-gpcrome-picker-assign-menu').on('click', '.mapper-core-picker-assign-src', function () {
       var src = $(this).attr('data-src') || 'none';
       pickerState.assignSource = src;
-      $(this).siblings('.mapper20-picker-assign-src').addBack()
+      $(this).siblings('.mapper-core-picker-assign-src').addBack()
         .toggleClass('btn-outline-primary', true).toggleClass('btn-primary', false);
       $(this).toggleClass('btn-primary', true).toggleClass('btn-outline-primary', false);
-      $(this).closest('.dropdown').find('.mapper20-picker-assign-toggle-label')
+      $(this).closest('.dropdown').find('.mapper-core-picker-assign-toggle-label')
         .text('Assign value: ' + (ASSIGN_SOURCE_LABELS[src] || 'None'));
     });
 
-    $('#mapper20-gpcrome-picker-add').on('click', function () {
+    $('#mapper-core-gpcrome-picker-add').on('click', function () {
       if (!pickerState.dt) {
         return;
       }
@@ -344,7 +344,7 @@
         }
         opts.onAdd(ids, meta);
       }
-      $('#mapper20-gpcrome-picker-modal').modal('hide');
+      $('#mapper-core-gpcrome-picker-modal').modal('hide');
     });
   };
 })(jQuery);

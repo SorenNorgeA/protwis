@@ -99,8 +99,8 @@ function mapperClusterGetLabelColor(lbl) {
     var scheme = getActiveColorOption();
     var isGrad = (scheme === 'gradient');
     var $panel = $('#cluster-colors-panel');
-    $panel.toggleClass('mapper20-colors-show-numeric', isGrad)
-          .toggleClass('mapper20-colors-show-text', !isGrad);
+    $panel.toggleClass('mapper-core-colors-show-numeric', isGrad)
+          .toggleClass('mapper-core-colors-show-text', !isGrad);
     $('#cluster-cp-empty').hide();
     if (isGrad) return; // gradient pickers already initialised at boot
 
@@ -124,7 +124,7 @@ function mapperClusterGetLabelColor(lbl) {
 
     // Smart rebuild: if labels unchanged, just update swatch colors (keeps open Spectrum popups)
     var $list = $('#cluster-cp-label-list');
-    var $existing = $list.find('.mapper20-lcat-inp');
+    var $existing = $list.find('.mapper-cluster-lcat-inp');
     var existingLabels = $existing.map(function(){ return $(this).data('cp-label'); }).get();
     if (JSON.stringify(existingLabels) === JSON.stringify(labels)) {
       $existing.each(function() {
@@ -138,12 +138,12 @@ function mapperClusterGetLabelColor(lbl) {
     $existing.each(function(){ try { $(this).spectrum('destroy'); } catch(e) {} });
     $list.empty();
     // Scheme header
-    $list.append($('<div class="mapper20-lcat-scheme-head">').text(titleMap[scheme] || scheme));
+    $list.append($('<div class="mapper-cluster-lcat-scheme-head">').text(titleMap[scheme] || scheme));
     labels.forEach(function(lbl) {
       var hex = mapperClusterGetLabelColor(lbl);
       var $row = $('<div class="color-item">');
       var $name = $('<label class="color-label">').text(lbl).attr('title', lbl);
-      var $inp = $('<input type="text" class="mapper20-lcat-inp">').data('cp-label', lbl).hide();
+      var $inp = $('<input type="text" class="mapper-cluster-lcat-inp">').data('cp-label', lbl).hide();
       $row.append($name, $inp);
       $list.append($row);
       (function(label, initHex) {
@@ -151,8 +151,8 @@ function mapperClusterGetLabelColor(lbl) {
           color: initHex,
           showPalette: true, showInput: true, showButtons: false, preferredFormat: 'hex',
           appendTo: '#cluster-colors-panel',
-          containerClassName: 'mapper20-lcat-sp-container',
-          replacerClassName: 'mapper20-lcat-replacer',
+          containerClassName: 'mapper-core-lcat-sp-container',
+          replacerClassName: 'mapper-core-lcat-replacer',
           palette: CLUSTER_COLOR_PALETTE,
           change: function(c) {
             CLUSTER_LABEL_COLORS[label] = c ? c.toHexString() : initHex;
@@ -175,7 +175,7 @@ function mapperClusterGetLabelColor(lbl) {
     $('#mapper-cluster-input-tbody tr').each(function() {
       var rowCat = $(this).find('.mapper-cluster-cat').val().trim();
       if (rowCat === lbl) {
-        try { $(this).find('.mapper20-label-swatch').spectrum('set', hex); } catch(e) {}
+        try { $(this).find('.mapper-cluster-label-swatch').spectrum('set', hex); } catch(e) {}
       }
     });
   }
@@ -203,7 +203,7 @@ function mapperClusterGetLabelColor(lbl) {
 
   // ── Label converter ────────────────────────────────────────────────────────
   function mapperClusterBuildLabelConverter() {
-    var meta = window.MAPPER20_ENTRY_META || {};
+    var meta = window.MAPPER_CORE_ENTRY_META || {};
     Object.keys(meta).forEach(function (entry_name) {
       var m = meta[entry_name];
       var stripped = entry_name.toLowerCase().replace('_human', '');
@@ -223,11 +223,11 @@ function mapperClusterGetLabelColor(lbl) {
     var data = {};
     $('#mapper-cluster-input-tbody tr').each(function () {
       var $tr   = $(this);
-      var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+      var entry = ($tr.find('.mapper-core-receptor-entry').val() || '').trim();
       if (!entry) {
-        var ta  = ($tr.find('.mapper20-in-receptor').val() || '').trim();
+        var ta  = ($tr.find('.mapper-core-in-receptor').val() || '').trim();
         var up  = ta.toUpperCase();
-        if (up && window.MAPPER20_RESOLVE) entry = window.MAPPER20_RESOLVE[up] || '';
+        if (up && window.MAPPER_CORE_RESOLVE) entry = window.MAPPER_CORE_RESOLVE[up] || '';
       }
       if (!entry) return;
 
@@ -424,8 +424,8 @@ function mapperClusterGetLabelColor(lbl) {
     var rows = [];
     $('#mapper-cluster-input-tbody tr').each(function () {
       var $tr      = $(this);
-      var entry    = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
-      var rawText  = ($tr.find('.mapper20-in-receptor').val()    || '').trim();
+      var entry    = ($tr.find('.mapper-core-receptor-entry').val() || '').trim();
+      var rawText  = ($tr.find('.mapper-core-in-receptor').val()    || '').trim();
       if (!entry && !rawText) return; // skip the trailing blank row
       var row = { entry: entry, receptorText: rawText, pos: ($tr.find('.mapper-cluster-pos').val() || '').trim() };
       if (plotMode === 'numbers') {
@@ -444,7 +444,7 @@ function mapperClusterGetLabelColor(lbl) {
   function mapperClusterRestoreSnapshot(targetMode) {
     // Destroy existing AC widgets before clearing DOM
     $('#mapper-cluster-input-tbody tr').each(function () {
-      var $ta = $(this).find('.mapper20-in-receptor');
+      var $ta = $(this).find('.mapper-core-in-receptor');
       try { if ($ta.data('ui-autocomplete')) $ta.autocomplete('destroy'); } catch (e) {}
     });
     $('#mapper-cluster-input-tbody').empty();
@@ -501,12 +501,12 @@ function mapperClusterGetLabelColor(lbl) {
       // Init/destroy row swatch on mode switch
       if (!isNum) mapperClusterInitRowSwatch($(this));
       else {
-        try { $(this).find('.mapper20-label-swatch').spectrum('destroy'); } catch(e) {}
+        try { $(this).find('.mapper-cluster-label-swatch').spectrum('destroy'); } catch(e) {}
       }
     });
 
-    // CSS-controlled: mapper20-text-mode on the table shows/hides the swatch column
-    $('#mapper-cluster-input-table').toggleClass('mapper20-text-mode', !isNum);
+    // CSS-controlled: mapper-core-text-mode on the table shows/hides the swatch column
+    $('#mapper-cluster-input-table').toggleClass('mapper-core-text-mode', !isNum);
 
     $('.mapper-cluster-numbers-only').toggle(isNum);
     $('.mapper-cluster-categories-only').toggle(!isNum);
@@ -643,7 +643,7 @@ function mapperClusterGetLabelColor(lbl) {
     var allNumeric = true;
     $('#mapper-cluster-input-tbody tr').each(function () {
       var $tr = $(this);
-      var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+      var entry = ($tr.find('.mapper-core-receptor-entry').val() || '').trim();
       if (!entry) return;
       var posStr = ($tr.find('.mapper-cluster-pos').val() || '').trim();
       var pos = parseFloat(posStr);
@@ -742,11 +742,11 @@ function mapperClusterGetLabelColor(lbl) {
 
   // ── Row management ─────────────────────────────────────────────────────────
   function mapperClusterCreateReceptorTd() {
-    var $wrap  = $('<div class="mapper20-receptor-input-wrap is-empty">');
-    var $hidden = $('<input type="hidden" class="mapper20-receptor-entry">');
-    var $ta    = $('<textarea rows="1" class="mapper20-in-receptor form-control input-sm">');
-    var $view  = $('<div class="mapper20-receptor-html-view" tabindex="0">');
-    var $clear = $('<button type="button" class="mapper20-receptor-clear" aria-label="Clear receptor">\xd7</button>');
+    var $wrap  = $('<div class="mapper-core-receptor-input-wrap is-empty">');
+    var $hidden = $('<input type="hidden" class="mapper-core-receptor-entry">');
+    var $ta    = $('<textarea rows="1" class="mapper-core-in-receptor form-control input-sm">');
+    var $view  = $('<div class="mapper-core-receptor-html-view" tabindex="0">');
+    var $clear = $('<button type="button" class="mapper-core-receptor-clear" aria-label="Clear receptor">\xd7</button>');
     $wrap.append($hidden, $ta, $view, $clear);
     return $wrap;
   }
@@ -754,8 +754,8 @@ function mapperClusterGetLabelColor(lbl) {
   function mapperClusterFindBlankRow() {
     var $blank = $();
     $('#mapper-cluster-input-tbody tr').each(function () {
-      var entry = $(this).find('.mapper20-receptor-entry').val() || '';
-      var ta    = $(this).find('.mapper20-in-receptor').val()    || '';
+      var entry = $(this).find('.mapper-core-receptor-entry').val() || '';
+      var ta    = $(this).find('.mapper-core-in-receptor').val()    || '';
       if (!entry && !ta.trim()) { $blank = $(this); return false; }
     });
     return $blank;
@@ -769,13 +769,13 @@ function mapperClusterGetLabelColor(lbl) {
     var $tr = $('<tr>');
 
     // Remove cell
-    var $removeCell = $('<td class="mapper20-remove-cell">');
-    var $removeBtn  = $('<button type="button" class="mapper20-remove-row" aria-label="Remove row" title="Remove row">\xd7</button>');
+    var $removeCell = $('<td class="mapper-core-remove-cell">');
+    var $removeBtn  = $('<button type="button" class="mapper-core-remove-row" aria-label="Remove row" title="Remove row">\xd7</button>');
     $removeCell.append($removeBtn);
     $tr.append($removeCell);
 
     // Receptor cell
-    var $receptorCell = $('<td class="mapper20-receptor-cell">');
+    var $receptorCell = $('<td class="mapper-core-receptor-cell">');
     $receptorCell.append(mapperClusterCreateReceptorTd());
     $tr.append($receptorCell);
 
@@ -787,9 +787,9 @@ function mapperClusterGetLabelColor(lbl) {
     $valCell.append($gradInput, $catInput);
     $tr.append($valCell);
 
-    // Color swatch cell — visibility controlled by mapper20-text-mode on the table
-    var $colorCell  = $('<td class="mapper20-swatch-cell">');
-    var $swatchInp  = $('<input type="text" class="mapper20-label-swatch mapper20-row-color-picker">').hide();
+    // Color swatch cell — visibility controlled by mapper-core-text-mode on the table
+    var $colorCell  = $('<td class="mapper-cluster-swatch-cell">');
+    var $swatchInp  = $('<input type="text" class="mapper-cluster-label-swatch mapper-core-row-color-picker">').hide();
     $colorCell.append($swatchInp);
     $tr.append($colorCell);
 
@@ -832,22 +832,22 @@ function mapperClusterGetLabelColor(lbl) {
     });
 
     // Bind autocomplete
-    mapperClusterBindAc($tr.find('.mapper20-in-receptor'));
+    mapperClusterBindAc($tr.find('.mapper-core-in-receptor'));
 
     // Set values if provided
     if (opts.entry) {
-      $tr.find('.mapper20-receptor-entry').val(opts.entry);
-      var meta = window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[opts.entry];
+      $tr.find('.mapper-core-receptor-entry').val(opts.entry);
+      var meta = window.MAPPER_CORE_ENTRY_META && window.MAPPER_CORE_ENTRY_META[opts.entry];
       if (meta) {
-        $tr.find('.mapper20-in-receptor').hide();
-        $tr.find('.mapper20-receptor-html-view').html(mapperClusterResolvedDisplay(opts.entry)).show();
-        $tr.find('.mapper20-receptor-input-wrap').removeClass('is-empty');
+        $tr.find('.mapper-core-in-receptor').hide();
+        $tr.find('.mapper-core-receptor-html-view').html(mapperClusterResolvedDisplay(opts.entry)).show();
+        $tr.find('.mapper-core-receptor-input-wrap').removeClass('is-empty');
       }
       $tr.addClass('has-receptor');
     }
     if (!opts.entry && opts.receptorText) {
-      $tr.find('.mapper20-in-receptor').val(opts.receptorText);
-      if (opts.receptorText.trim()) $tr.find('.mapper20-receptor-input-wrap').removeClass('is-empty');
+      $tr.find('.mapper-core-in-receptor').val(opts.receptorText);
+      if (opts.receptorText.trim()) $tr.find('.mapper-core-receptor-input-wrap').removeClass('is-empty');
     }
     if (opts.gradient != null) {
       var gv = String(opts.gradient);
@@ -868,7 +868,7 @@ function mapperClusterGetLabelColor(lbl) {
   }
 
   function mapperClusterInitRowSwatch($tr) {
-    var $inp = $tr.find('.mapper20-label-swatch');
+    var $inp = $tr.find('.mapper-cluster-label-swatch');
     if (!$inp.length || !$.fn.spectrum) return;
     if (!$tr.hasClass('has-receptor')) {
       try { $inp.spectrum('destroy'); } catch(e) {}
@@ -880,9 +880,9 @@ function mapperClusterGetLabelColor(lbl) {
     $inp.spectrum({
       color: hex,
       showPalette: true, showInput: true, showButtons: false, preferredFormat: 'hex',
-      appendTo: '.mapper20-wheel-left',
-      containerClassName: 'mapper20-row-swatch-sp-container',
-      replacerClassName: 'mapper20-row-swatch-replacer',
+      appendTo: '.mapper-core-wheel-left',
+      containerClassName: 'mapper-cluster-row-swatch-sp-container',
+      replacerClassName: 'mapper-cluster-row-swatch-replacer',
       palette: CLUSTER_COLOR_PALETTE,
       change: function(c) {
         var newHex = c ? c.toHexString() : hex;
@@ -918,8 +918,8 @@ function mapperClusterGetLabelColor(lbl) {
     var $rows  = $tbody.find('tr');
     var blankCount = 0;
     $rows.each(function () {
-      var entry = $(this).find('.mapper20-receptor-entry').val() || '';
-      var ta    = $(this).find('.mapper20-in-receptor').val()    || '';
+      var entry = $(this).find('.mapper-core-receptor-entry').val() || '';
+      var ta    = $(this).find('.mapper-core-in-receptor').val()    || '';
       if (!entry && !ta.trim()) blankCount++;
     });
     if (blankCount < 1) mapperClusterAppendRow();
@@ -928,8 +928,8 @@ function mapperClusterGetLabelColor(lbl) {
       $rows.get().reverse().forEach(function (tr) {
         if (removed >= blankCount - 1) return;
         var $tr   = $(tr);
-        var entry = $tr.find('.mapper20-receptor-entry').val() || '';
-        var ta    = $tr.find('.mapper20-in-receptor').val()    || '';
+        var entry = $tr.find('.mapper-core-receptor-entry').val() || '';
+        var ta    = $tr.find('.mapper-core-in-receptor').val()    || '';
         if (!entry && !ta.trim()) { $tr.remove(); removed++; }
       });
     }
@@ -967,7 +967,7 @@ function mapperClusterGetLabelColor(lbl) {
   function _posCountersReset() {
     _posCtReceptors = 0; _posCtFilled = 0;
     $('#mapper-cluster-input-tbody tr').each(function () {
-      var hasR = ($(this).find('.mapper20-receptor-entry').val() || '').trim() !== '';
+      var hasR = ($(this).find('.mapper-core-receptor-entry').val() || '').trim() !== '';
       var $pos = $(this).find('.mapper-cluster-pos');
       var posVal = $pos.val() || '';
       var hasV = _isValidPos(posVal);
@@ -982,7 +982,7 @@ function mapperClusterGetLabelColor(lbl) {
   function mapperClusterGetPosFingerprint() {
     var parts = [];
     $('#mapper-cluster-input-tbody tr').each(function () {
-      var entry = ($(this).find('.mapper20-receptor-entry').val() || '').trim();
+      var entry = ($(this).find('.mapper-core-receptor-entry').val() || '').trim();
       if (!entry) return;
       var pos = ($(this).find('.mapper-cluster-pos').val() || '').trim();
       parts.push(entry + ':' + pos);
@@ -1022,11 +1022,11 @@ function mapperClusterGetLabelColor(lbl) {
   function mapperClusterSyncFirstRowPlaceholder() {
     var hasAny = false;
     $('#mapper-cluster-input-tbody tr').each(function () {
-      if ($(this).find('.mapper20-receptor-entry').val()) { hasAny = true; return false; }
+      if ($(this).find('.mapper-core-receptor-entry').val()) { hasAny = true; return false; }
     });
-    $('#mapper-cluster-input-table').toggleClass('mapper20-receptors-compact', hasAny);
+    $('#mapper-cluster-input-table').toggleClass('mapper-core-receptors-compact', hasAny);
     $('#mapper-cluster-input-tbody tr').each(function (idx) {
-      var $inp = $(this).find('.mapper20-in-receptor');
+      var $inp = $(this).find('.mapper-core-in-receptor');
       if (!$inp.length) return;
       if (idx === 0 && !hasAny) $inp.attr('placeholder', MAPPER_CLUSTER_PLACEHOLDER);
       else                      $inp.removeAttr('placeholder');
@@ -1038,7 +1038,7 @@ function mapperClusterGetLabelColor(lbl) {
   // Returns the label-type-appropriate seed text for a resolved receptor's edit field.
   function mapperClusterEditSeed(entryId) {
     var sid  = entryId != null ? String(entryId).trim() : '';
-    var meta = (window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[sid]) || {};
+    var meta = (window.MAPPER_CORE_ENTRY_META && window.MAPPER_CORE_ENTRY_META[sid]) || {};
     var ltype = getActiveLabelType();
     if (ltype === 'Entrez'  && meta.gene)    return meta.gene;
     if (ltype === 'UniProt' && meta.uniprot) return meta.uniprot;
@@ -1047,7 +1047,7 @@ function mapperClusterGetLabelColor(lbl) {
 
   function mapperClusterFilterLocal(term) {
     var t     = term.trim().toUpperCase();
-    var meta  = window.MAPPER20_ENTRY_META || {};
+    var meta  = window.MAPPER_CORE_ENTRY_META || {};
     var ltype = getActiveLabelType(); // 'IUPHAR' | 'Entrez' | 'UniProt'
     var results = [];
     Object.keys(meta).forEach(function (entry_name) {
@@ -1072,7 +1072,7 @@ function mapperClusterGetLabelColor(lbl) {
 
   function mapperClusterResolvedDisplay(entryId) {
     var sid  = entryId != null ? String(entryId).trim() : '';
-    var meta = (window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[sid]) || {};
+    var meta = (window.MAPPER_CORE_ENTRY_META && window.MAPPER_CORE_ENTRY_META[sid]) || {};
     var ltype = getActiveLabelType(); // 'IUPHAR' | 'Entrez' | 'UniProt'
     if (ltype === 'Entrez' && meta.gene)    return $('<span/>').text(meta.gene).html();
     if (ltype === 'UniProt' && meta.uniprot) return $('<span/>').text(meta.uniprot).html();
@@ -1080,12 +1080,12 @@ function mapperClusterGetLabelColor(lbl) {
   }
 
   function mapperClusterSetResolved($tr, entry_name) {
-    var meta = window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[entry_name];
+    var meta = window.MAPPER_CORE_ENTRY_META && window.MAPPER_CORE_ENTRY_META[entry_name];
     if (!meta) return;
-    $tr.find('.mapper20-receptor-entry').val(entry_name);
-    $tr.find('.mapper20-in-receptor').val('').hide();
-    $tr.find('.mapper20-receptor-html-view').html(mapperClusterResolvedDisplay(entry_name)).show();
-    $tr.find('.mapper20-receptor-input-wrap').removeClass('is-empty');
+    $tr.find('.mapper-core-receptor-entry').val(entry_name);
+    $tr.find('.mapper-core-in-receptor').val('').hide();
+    $tr.find('.mapper-core-receptor-html-view').html(mapperClusterResolvedDisplay(entry_name)).show();
+    $tr.find('.mapper-core-receptor-input-wrap').removeClass('is-empty');
     $tr.addClass('has-receptor').removeClass('receptor-unknown');
     _posRowUpdate($tr, true, _isValidPos($tr.find('.mapper-cluster-pos').val()));
     positionResultCache[plotMode] = null;
@@ -1100,7 +1100,7 @@ function mapperClusterGetLabelColor(lbl) {
     if (!$.ui || !$.ui.autocomplete) return;
     $ta.autocomplete({
       minLength: 1,
-      classes: { 'ui-autocomplete': 'mapper20-receptor-ac-menu' },
+      classes: { 'ui-autocomplete': 'mapper-core-receptor-ac-menu' },
       source: function (req, resp) {
         resp(mapperClusterFilterLocal(req.term).map(function (r) {
           return { label: r.label, html: r.html, value: r.value };
@@ -1114,7 +1114,7 @@ function mapperClusterGetLabelColor(lbl) {
     });
     $ta.data('ui-autocomplete') && ($ta.data('ui-autocomplete')._renderItem = function (ul, item) {
       var inner = item.html || $('<span/>').text(item.label || '').html();
-      return $('<li>').append($('<div class="mapper20-ac-item-label">').html(inner)).appendTo(ul);
+      return $('<li>').append($('<div class="mapper-core-ac-item-label">').html(inner)).appendTo(ul);
     });
   }
 
@@ -1129,7 +1129,7 @@ function mapperClusterGetLabelColor(lbl) {
 
     // Resolve all demo entries first
     var demoResolved = MAPPER_CLUSTER_DEMO_ROWS.map(function (row) {
-      var entry = window.MAPPER20_RESOLVE && window.MAPPER20_RESOLVE[row.receptor.toUpperCase()];
+      var entry = window.MAPPER_CORE_RESOLVE && window.MAPPER_CORE_RESOLVE[row.receptor.toUpperCase()];
       if (!entry) return null;
       return { entry: entry, gradient: String(row.gradient || ''), category: String(row.category || '') };
     }).filter(Boolean);
@@ -1145,7 +1145,7 @@ function mapperClusterGetLabelColor(lbl) {
 
     // Rebuild DOM for the currently active mode
     $('#mapper-cluster-input-tbody tr').each(function () {
-      var $ta = $(this).find('.mapper20-in-receptor');
+      var $ta = $(this).find('.mapper-core-in-receptor');
       try { if ($ta.data('ui-autocomplete')) $ta.autocomplete('destroy'); } catch (e) {}
     });
     $('#mapper-cluster-input-tbody').empty();
@@ -1210,7 +1210,7 @@ function mapperClusterGetLabelColor(lbl) {
     // Clear
     function mapperClusterDestroyAcWidgets() {
       $('#mapper-cluster-input-tbody tr').each(function () {
-        var $ta = $(this).find('.mapper20-in-receptor');
+        var $ta = $(this).find('.mapper-core-in-receptor');
         try { if ($ta.data('ui-autocomplete')) $ta.autocomplete('destroy'); } catch (e) {}
       });
     }
@@ -1236,7 +1236,7 @@ function mapperClusterGetLabelColor(lbl) {
       mapperClusterAppendRow();
       mapperClusterSyncFirstRowPlaceholder();
       suppressRedraw = false;
-      $('#mapper-cluster-clear-rows').addClass('mapper20-clear-clean').blur();
+      $('#mapper-cluster-clear-rows').addClass('mapper-core-clear-clean').blur();
     }
     function mapperClusterDoCurrentModeClear() {
       var curKey = plotMode === 'numbers' ? 'numbers' : 'categories';
@@ -1251,7 +1251,7 @@ function mapperClusterGetLabelColor(lbl) {
       mapperClusterAppendRow();
       mapperClusterSyncFirstRowPlaceholder();
       suppressRedraw = false;
-      $('#mapper-cluster-clear-rows').addClass('mapper20-clear-clean').blur();
+      $('#mapper-cluster-clear-rows').addClass('mapper-core-clear-clean').blur();
     }
     $('#mapper-cluster-clear-whole').on('click', function() {
       mapperClusterDoWholeTableClear();
@@ -1264,14 +1264,14 @@ function mapperClusterGetLabelColor(lbl) {
         $(this).find('.mapper-cluster-gradient').val('').trigger('input');
       });
       mapperClusterScheduleRedraw();
-      $('#mapper-cluster-clear-rows').removeClass('mapper20-clear-clean');
+      $('#mapper-cluster-clear-rows').removeClass('mapper-core-clear-clean');
     });
     $('#mapper-cluster-clear-cat').on('click', function() {
       $('#mapper-cluster-input-tbody tr').each(function() {
         $(this).find('.mapper-cluster-cat').val('').trigger('input');
       });
       mapperClusterScheduleRedraw();
-      $('#mapper-cluster-clear-rows').removeClass('mapper20-clear-clean');
+      $('#mapper-cluster-clear-rows').removeClass('mapper-core-clear-clean');
     });
     $('#mapper-cluster-clear-pos').on('click', function() {
       suppressRedraw = true;
@@ -1372,9 +1372,9 @@ function mapperClusterGetLabelColor(lbl) {
         this.classList.remove('btn-outline-primary');
         // Refresh input table chips to show the new label name
         $('#mapper-cluster-input-tbody tr').each(function () {
-          var sid = ($(this).find('.mapper20-receptor-entry').val() || '').trim();
+          var sid = ($(this).find('.mapper-core-receptor-entry').val() || '').trim();
           if (!sid) return;
-          var $view = $(this).find('.mapper20-receptor-html-view');
+          var $view = $(this).find('.mapper-core-receptor-html-view');
           if ($view.length && $view.is(':visible')) $view.html(mapperClusterResolvedDisplay(sid));
         });
         if (currentClusterData.length) switchClusterLabels(this.getAttribute('data-value'));
@@ -1391,7 +1391,7 @@ function mapperClusterGetLabelColor(lbl) {
       } else {
         // Category changed — update this row's swatch to the color for the new label
         var $tr = $(this).closest('tr');
-        try { $tr.find('.mapper20-label-swatch').spectrum('set', mapperClusterGetLabelColor(val)); } catch(e) {}
+        try { $tr.find('.mapper-cluster-label-swatch').spectrum('set', mapperClusterGetLabelColor(val)); } catch(e) {}
         setActiveColorButton('cluster-colorByUserCategory');
       }
       mapperClusterScheduleRedraw();
@@ -1404,22 +1404,22 @@ function mapperClusterGetLabelColor(lbl) {
     $('#mapper-cluster-input-tbody')
       .off('keydown.clusterTab')
       .on('keydown.clusterTab',
-          '.mapper20-in-receptor, .mapper-cluster-gradient, .mapper-cluster-cat, .mapper-cluster-pos',
+          '.mapper-core-in-receptor, .mapper-cluster-gradient, .mapper-cluster-cat, .mapper-cluster-pos',
           function (e) {
         if (e.which !== 9 || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
         // Let AC dropdown handle Tab when an item is highlighted
-        if ($(this).hasClass('mapper20-in-receptor') && $(this).data('ui-autocomplete')) {
+        if ($(this).hasClass('mapper-core-in-receptor') && $(this).data('ui-autocomplete')) {
           var $menu = $(this).autocomplete('widget');
           if ($menu && $menu.is(':visible') && $menu.find('.ui-state-focus, .ui-state-active').length) return;
         }
         var $el = $(this);
         var $all, idx, $target;
-        if ($el.hasClass('mapper20-in-receptor')) {
-          $all = $('#mapper-cluster-input-tbody .mapper20-in-receptor:visible');
+        if ($el.hasClass('mapper-core-in-receptor')) {
+          $all = $('#mapper-cluster-input-tbody .mapper-core-in-receptor:visible');
           idx  = $all.index(this);
           for (var i = idx + 1; i < $all.length; i++) {
             var $row = $all.eq(i).closest('tr');
-            if (!$row.find('.mapper20-receptor-entry').val().trim() && !$all.eq(i).val().trim()) {
+            if (!$row.find('.mapper-core-receptor-entry').val().trim() && !$all.eq(i).val().trim()) {
               $target = $all.eq(i); break;
             }
           }
@@ -1442,14 +1442,14 @@ function mapperClusterGetLabelColor(lbl) {
       });
 
     // Receptor textarea events
-    $('#mapper-cluster-input-tbody').on('input', '.mapper20-in-receptor', function () {
+    $('#mapper-cluster-input-tbody').on('input', '.mapper-core-in-receptor', function () {
       var $ta  = $(this);
       var val  = $ta.val().trim();
-      var $wrap = $ta.closest('.mapper20-receptor-input-wrap');
+      var $wrap = $ta.closest('.mapper-core-receptor-input-wrap');
       var $row = $ta.closest('tr');
       $row.removeClass('receptor-unknown'); // clear on any edit
       if (!val) {
-        $row.find('.mapper20-receptor-entry').val('');
+        $row.find('.mapper-core-receptor-entry').val('');
         $row.removeClass('has-receptor');
         $wrap.addClass('is-empty');
         _posRowUpdate($row, false, _isValidPos($row.find('.mapper-cluster-pos').val()));
@@ -1461,7 +1461,7 @@ function mapperClusterGetLabelColor(lbl) {
         return;
       }
       $wrap.removeClass('is-empty'); // has text: hide the empty-state styling
-      var resolved = window.MAPPER20_RESOLVE && window.MAPPER20_RESOLVE[val.toUpperCase()];
+      var resolved = window.MAPPER_CORE_RESOLVE && window.MAPPER_CORE_RESOLVE[val.toUpperCase()];
       if (resolved) mapperClusterSetResolved($ta.closest('tr'), resolved);
     });
 
@@ -1470,37 +1470,37 @@ function mapperClusterGetLabelColor(lbl) {
     // chip re-edit case where the entry field was cleared but the textarea
     // still holds a valid IUPHAR/gene name that we can look up.
     $('#mapper-cluster-input-tbody')
-      .on('blur',  '.mapper20-in-receptor', function () {
+      .on('blur',  '.mapper-core-in-receptor', function () {
         var $ta   = $(this);
         var val   = $ta.val().trim();
         var $tr   = $ta.closest('tr');
-        var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+        var entry = ($tr.find('.mapper-core-receptor-entry').val() || '').trim();
         if (!val || entry) { $tr.removeClass('receptor-unknown'); return; }
-        // Try MAPPER20_RESOLVE (covers entry names, gene names, IUPHAR names)
-        var resolved = window.MAPPER20_RESOLVE && window.MAPPER20_RESOLVE[val.toUpperCase()];
+        // Try MAPPER_CORE_RESOLVE (covers entry names, gene names, IUPHAR names)
+        var resolved = window.MAPPER_CORE_RESOLVE && window.MAPPER_CORE_RESOLVE[val.toUpperCase()];
         if (resolved) { mapperClusterSetResolved($tr, resolved); return; }
-        // UniProt accessions are not in MAPPER20_RESOLVE — scan ENTRY_META directly
-        if (window.MAPPER20_ENTRY_META) {
+        // UniProt accessions are not in MAPPER_CORE_RESOLVE — scan ENTRY_META directly
+        if (window.MAPPER_CORE_ENTRY_META) {
           var vUp = val.toUpperCase();
-          var found = Object.keys(window.MAPPER20_ENTRY_META).filter(function (k) {
-            var u = (window.MAPPER20_ENTRY_META[k].uniprot || '').toUpperCase();
+          var found = Object.keys(window.MAPPER_CORE_ENTRY_META).filter(function (k) {
+            var u = (window.MAPPER_CORE_ENTRY_META[k].uniprot || '').toUpperCase();
             return u && u === vUp;
           })[0];
           if (found) { mapperClusterSetResolved($tr, found); return; }
         }
         $tr.addClass('receptor-unknown');
       })
-      .on('focus', '.mapper20-in-receptor', function () {
+      .on('focus', '.mapper-core-in-receptor', function () {
         $(this).closest('tr').removeClass('receptor-unknown');
       });
 
     // Clear receptor button
-    $('#mapper-cluster-input-tbody').on('click', '.mapper20-receptor-clear', function () {
+    $('#mapper-cluster-input-tbody').on('click', '.mapper-core-receptor-clear', function () {
       var $tr = $(this).closest('tr');
-      var $wrap = $tr.find('.mapper20-receptor-input-wrap');
-      $wrap.find('.mapper20-receptor-entry').val('');
-      $wrap.find('.mapper20-receptor-html-view').hide().empty();
-      $wrap.find('.mapper20-in-receptor').val('').show();
+      var $wrap = $tr.find('.mapper-core-receptor-input-wrap');
+      $wrap.find('.mapper-core-receptor-entry').val('');
+      $wrap.find('.mapper-core-receptor-html-view').hide().empty();
+      $wrap.find('.mapper-core-in-receptor').val('').show();
       $wrap.addClass('is-empty');
       $tr.removeClass('has-receptor receptor-unknown');
       _posRowUpdate($tr, false, _isValidPos($tr.find('.mapper-cluster-pos').val()));
@@ -1513,21 +1513,21 @@ function mapperClusterGetLabelColor(lbl) {
 
     // Click resolved chip to re-enter edit mode
     $(document)
-      .off('click.mapperClusterHtmlEdit', '#mapper-cluster-input-tbody .mapper20-receptor-html-view')
-      .on('click.mapperClusterHtmlEdit', '#mapper-cluster-input-tbody .mapper20-receptor-html-view', function () {
+      .off('click.mapperClusterHtmlEdit', '#mapper-cluster-input-tbody .mapper-core-receptor-html-view')
+      .on('click.mapperClusterHtmlEdit', '#mapper-cluster-input-tbody .mapper-core-receptor-html-view', function () {
         var $tr   = $(this).closest('tr');
         $tr.removeClass('has-receptor');
-        var $oldTa = $tr.find('.mapper20-in-receptor');
+        var $oldTa = $tr.find('.mapper-core-in-receptor');
         try { if ($oldTa.hasClass('ui-autocomplete-input')) $oldTa.autocomplete('destroy'); } catch (e) {}
-        var hid   = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+        var hid   = ($tr.find('.mapper-core-receptor-entry').val() || '').trim();
         $(this).hide().empty();
-        var $inp2 = $('<textarea class="form-control input-sm mapper20-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>');
+        var $inp2 = $('<textarea class="form-control input-sm mapper-core-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>');
         var seedText = mapperClusterEditSeed(hid); // label-type-aware seed (Gene/UniProt/IUPHAR)
         $inp2.val(seedText);
-        $tr.find('.mapper20-receptor-input-wrap .mapper20-in-receptor').remove();
-        var $wrapEdit = $tr.find('.mapper20-receptor-input-wrap').prepend($inp2);
+        $tr.find('.mapper-core-receptor-input-wrap .mapper-core-in-receptor').remove();
+        var $wrapEdit = $tr.find('.mapper-core-receptor-input-wrap').prepend($inp2);
         if (!seedText) $wrapEdit.addClass('is-empty'); else $wrapEdit.removeClass('is-empty');
-        $tr.find('.mapper20-receptor-entry').val('');
+        $tr.find('.mapper-core-receptor-entry').val('');
         _posRowUpdate($tr, false, _isValidPos($tr.find('.mapper-cluster-pos').val()));
         positionResultCache[plotMode] = null;
         if (inPositionMode) positionProcessed = false;
@@ -1545,7 +1545,7 @@ function mapperClusterGetLabelColor(lbl) {
       });
 
     // Paste handler (tab-separated receptor + value)
-    $('#mapper-cluster-input-tbody').on('paste', '.mapper20-in-receptor', function (e) {
+    $('#mapper-cluster-input-tbody').on('paste', '.mapper-core-in-receptor', function (e) {
       var pastedData = (e.originalEvent || e).clipboardData.getData('text');
       if (!pastedData || pastedData.indexOf('\n') === -1) return;
       e.preventDefault();
@@ -1557,13 +1557,13 @@ function mapperClusterGetLabelColor(lbl) {
         var receptor = parts[0].trim();
         var gradient = parts[1] ? parts[1].trim() : '';
         if (!receptor) return;
-        var resolved = window.MAPPER20_RESOLVE && window.MAPPER20_RESOLVE[receptor.toUpperCase()];
+        var resolved = window.MAPPER_CORE_RESOLVE && window.MAPPER_CORE_RESOLVE[receptor.toUpperCase()];
         if (resolved) {
           mapperClusterAppendRow({ entry: resolved, gradient: gradient });
         } else {
           var $row = mapperClusterFindBlankRow();
           if (!$row.length) { mapperClusterAppendRow(); $row = $('#mapper-cluster-input-tbody tr').last(); }
-          $row.find('.mapper20-in-receptor').val(receptor);
+          $row.find('.mapper-core-in-receptor').val(receptor);
           $row.find('.mapper-cluster-gradient').val(gradient);
         }
       });
@@ -1594,15 +1594,15 @@ function mapperClusterGetLabelColor(lbl) {
     });
 
     // Receptor picker modal
-    if (typeof window.mapper20InitGpcromePickerModal === 'function') {
-      window.mapper20InitGpcromePickerModal({
-        pickerRows: $.isArray(window.MAPPER20_GPCROME_PICKER_ROWS) ? window.MAPPER20_GPCROME_PICKER_ROWS : [],
+    if (typeof window.mapperCoreInitGpcromePickerModal === 'function') {
+      window.mapperCoreInitGpcromePickerModal({
+        pickerRows: $.isArray(window.MAPPER_CORE_GPCROME_PICKER_ROWS) ? window.MAPPER_CORE_GPCROME_PICKER_ROWS : [],
         maxRows:    MAPPER_CLUSTER_MAX_ROWS,
         onAdd: function (entryIds, meta) {
           suppressRedraw = true;
           var isNumberMode = (plotMode === 'numbers');
           var numberMap = (meta && meta.groupNameById && isNumberMode)
-            ? window.mapper20BuildSequentialNumberMap(meta.groupNameById)
+            ? window.mapperCoreBuildSequentialNumberMap(meta.groupNameById)
             : null;
           (entryIds || []).forEach(function (id) {
             var $row = mapperClusterFindBlankRow();
@@ -1634,7 +1634,7 @@ function mapperClusterGetLabelColor(lbl) {
           color: CLUSTER_GRADIENT_COLORS[key],
           showPalette: true, showInput: true, showButtons: false, preferredFormat: 'hex',
           appendTo: '#cluster-colors-panel',
-          containerClassName: 'mapper20-lcat-sp-container',
+          containerClassName: 'mapper-core-lcat-sp-container',
           replacerClassName: 'cluster-grad-replacer',
           palette: CLUSTER_COLOR_PALETTE,
           change: function(c) { CLUSTER_GRADIENT_COLORS[key] = c ? c.toHexString() : CLUSTER_GRADIENT_COLORS[key]; mapperClusterScheduleRedraw(); },
@@ -1671,7 +1671,7 @@ function mapperClusterGetLabelColor(lbl) {
     window.mapperClusterOnPlotUpdated = function() {
       if (!$('#cluster-colors-btn').closest('.dropdown').hasClass('open')) return;
       // Skip rebuild if the user has a label Spectrum picker open (avoids closing it mid-pick)
-      if ($('.mapper20-lcat-sp-container.sp-container:visible').length) return;
+      if ($('.mapper-core-lcat-sp-container.sp-container:visible').length) return;
       mapperClusterRebuildColorsPanel();
     };
   }

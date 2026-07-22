@@ -56,7 +56,7 @@
   // ── Label converter ───────────────────────────────────────────────────────
   function mapperHeatmapBuildLabelConverter() {
     LabelConverter = { UniProt_to_IUPHAR_converter: {}, IUPHAR_to_UniProt_converter: {}, UniProt_to_Gene_converter: {} };
-    var meta = window.MAPPER20_ENTRY_META || {};
+    var meta = window.MAPPER_CORE_ENTRY_META || {};
     Object.keys(meta).forEach(function (entry_name) {
       var m = meta[entry_name];
       if (m.name_plain) {
@@ -126,13 +126,13 @@
 
   function mapperHeatmapInitAllSpeciesDropdowns() {
     $('#mapper-heatmap-input-tbody tr').each(function () {
-      var entry = ($(this).find('.mapper20-receptor-entry').val() || '').trim();
+      var entry = ($(this).find('.mapper-core-receptor-entry').val() || '').trim();
       if (entry) mapperHeatmapPopulateSpeciesSelect($(this), entry, true);
     });
   }
 
   function mapperHeatmapApplySpeciesPanelClass() {
-    $('.mapper20-wheel-wrap.mapper-heatmap-page').toggleClass('mapper-heatmap-species-active', mapperHeatmapSpeciesActive);
+    $('.mapper-core-wheel-wrap.mapper-heatmap-page').toggleClass('mapper-heatmap-species-active', mapperHeatmapSpeciesActive);
   }
 
   function mapperHeatmapExtendLabelConverterForSpecies() {
@@ -142,7 +142,7 @@
       var stem = o.stem;
       var humanOrthologs = (sd.by_stem[stem] || []).filter(function (x) { return x.is_human; });
       var humanEntry = humanOrthologs.length ? humanOrthologs[0].entry : null;
-      var baseMeta = humanEntry && window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[humanEntry];
+      var baseMeta = humanEntry && window.MAPPER_CORE_ENTRY_META && window.MAPPER_CORE_ENTRY_META[humanEntry];
       var baseIUPHAR = (baseMeta && baseMeta.name_plain) || stem.toUpperCase();
       var gene = (baseMeta && baseMeta.gene) || '';
       var tag  = mapperHeatmapSpeciesActive ? mapperHeatmapFormatSpeciesTag(o) : (o.is_human ? '' : mapperHeatmapFormatSpeciesTag(o));
@@ -160,12 +160,12 @@
     var data = {};
     $('#mapper-heatmap-input-tbody tr').each(function () {
       var $tr   = $(this);
-      var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+      var entry = ($tr.find('.mapper-core-receptor-entry').val() || '').trim();
       if (!entry) {
-        var ta       = ($tr.find('.mapper20-in-receptor').val() || '').trim();
-        var unmatched = ($tr.data('mapper20UnmatchedRaw') || '');
+        var ta       = ($tr.find('.mapper-core-in-receptor').val() || '').trim();
+        var unmatched = ($tr.data('mapperCoreUnmatchedRaw') || '');
         var up = String(ta || unmatched).trim().toUpperCase();
-        if (up && window.MAPPER20_RESOLVE) entry = window.MAPPER20_RESOLVE[up] || '';
+        if (up && window.MAPPER_CORE_RESOLVE) entry = window.MAPPER_CORE_RESOLVE[up] || '';
       }
       if (!entry) return;
 
@@ -206,7 +206,7 @@
 
   function mapperHeatmapSyncFirstRowPlaceholder() {
     $('#mapper-heatmap-input-tbody tr').each(function (idx) {
-      var $inp = $(this).find('.mapper20-in-receptor');
+      var $inp = $(this).find('.mapper-core-in-receptor');
       if (!$inp.length) return;
       if (idx === 0) $inp.attr('placeholder', MAPPER_HEATMAP_PLACEHOLDER);
       else           $inp.removeAttr('placeholder');
@@ -317,11 +317,11 @@
 
   // ── Row management ────────────────────────────────────────────────────────
   function mapperHeatmapCreateReceptorTd($td) {
-    var $hid  = $('<input type="hidden" class="mapper20-receptor-entry" value="">');
-    var $wrap = $('<div class="mapper20-receptor-input-wrap is-empty">');
-    var $inp  = $('<textarea class="form-control input-sm mapper20-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>');
-    var $view = $('<div class="form-control input-sm mapper20-receptor-html-view" tabindex="0"></div>');
-    var $clr  = $('<button type="button" class="mapper20-receptor-clear" aria-label="Clear receptor">&times;</button>');
+    var $hid  = $('<input type="hidden" class="mapper-core-receptor-entry" value="">');
+    var $wrap = $('<div class="mapper-core-receptor-input-wrap is-empty">');
+    var $inp  = $('<textarea class="form-control input-sm mapper-core-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>');
+    var $view = $('<div class="form-control input-sm mapper-core-receptor-html-view" tabindex="0"></div>');
+    var $clr  = $('<button type="button" class="mapper-core-receptor-clear" aria-label="Clear receptor">&times;</button>');
     $wrap.append($inp, $view, $clr);
     $td.append($hid, $wrap);
     $view.hide();
@@ -330,37 +330,37 @@
   }
 
   function mapperHeatmapRowBlank($tr) {
-    var entry   = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
-    var typed   = ($tr.find('.mapper20-in-receptor').val() || '').trim();
+    var entry   = ($tr.find('.mapper-core-receptor-entry').val() || '').trim();
+    var typed   = ($tr.find('.mapper-core-in-receptor').val() || '').trim();
     var hasVals = [1,2,3,4,5].some(function (i) { return (($tr.find('.mapper-heatmap-val' + i).val() || '').trim() !== ''); });
-    return !entry && !typed && !hasVals && !$tr.data('mapper20UnmatchedRaw');
+    return !entry && !typed && !hasVals && !$tr.data('mapperCoreUnmatchedRaw');
   }
 
   function mapperHeatmapSyncClearBtn($tr) {
-    var has = !!($tr.find('.mapper20-receptor-entry').val() || '').trim()
-           || !!($tr.find('.mapper20-in-receptor').val() || '').trim()
-           || !!($tr.data('mapper20UnmatchedRaw'));
-    $tr.find('.mapper20-receptor-input-wrap').toggleClass('is-empty', !has);
+    var has = !!($tr.find('.mapper-core-receptor-entry').val() || '').trim()
+           || !!($tr.find('.mapper-core-in-receptor').val() || '').trim()
+           || !!($tr.data('mapperCoreUnmatchedRaw'));
+    $tr.find('.mapper-core-receptor-input-wrap').toggleClass('is-empty', !has);
   }
 
   function mapperHeatmapSyncRemoveButtons() {
     $('#mapper-heatmap-input-tbody tr').each(function () {
-      $(this).find('.mapper20-remove-cell').toggleClass('is-remove-hidden', mapperHeatmapRowBlank($(this)));
+      $(this).find('.mapper-core-remove-cell').toggleClass('is-remove-hidden', mapperHeatmapRowBlank($(this)));
     });
   }
 
   function mapperHeatmapCompactReceptors() {
     var hasContent = false;
     $('#mapper-heatmap-input-tbody tr').each(function () { if (!mapperHeatmapRowBlank($(this))) { hasContent = true; return false; } });
-    $('#mapper-heatmap-input-table').toggleClass('mapper20-receptors-compact', hasContent);
+    $('#mapper-heatmap-input-table').toggleClass('mapper-core-receptors-compact', hasContent);
   }
 
   function mapperHeatmapAppendRow(skipTrail) {
     var $tr = $('<tr>');
-    $tr.append($('<td class="mapper20-remove-cell is-remove-hidden">').append(
-      $('<button type="button" class="mapper20-remove-row" aria-label="Remove row">&times;</button>')
+    $tr.append($('<td class="mapper-core-remove-cell is-remove-hidden">').append(
+      $('<button type="button" class="mapper-core-remove-row" aria-label="Remove row">&times;</button>')
     ));
-    var $tdR = $('<td class="mapper20-receptor-cell mapper20-value-cell">');
+    var $tdR = $('<td class="mapper-core-receptor-cell mapper-core-value-cell">');
     var $inp = mapperHeatmapCreateReceptorTd($tdR);
     $tr.append($tdR);
     // Species cell (hidden until species toggle is active)
@@ -368,7 +368,7 @@
     $tr.append($('<td class="mapper-heatmap-species-cell">').css('display', mapperHeatmapSpeciesActive ? '' : 'none').append($specSel));
 
     [1,2,3,4,5].forEach(function (i) {
-      $tr.append($('<td class="mapper-heatmap-val-cell mapper20-value-cell">').append(
+      $tr.append($('<td class="mapper-heatmap-val-cell mapper-core-value-cell">').append(
         $('<input type="text" class="form-control input-sm mapper-heatmap-val mapper-heatmap-val' + i + '" autocomplete="off">')
       ));
     });
@@ -392,7 +392,7 @@
 
   function mapperHeatmapDestroyAc($inp) { try { if ($inp.hasClass('ui-autocomplete-input')) $inp.autocomplete('destroy'); } catch (e) {} }
   function mapperHeatmapDestroyRowAc($tr) {
-    mapperHeatmapDestroyAc($tr.find('.mapper20-in-receptor'));
+    mapperHeatmapDestroyAc($tr.find('.mapper-core-in-receptor'));
     var $ss = $tr.find('.mapper-heatmap-species-select');
     if ($ss.length && $ss.data('select2')) { try { $ss.select2('destroy'); } catch (e) {} }
   }
@@ -400,7 +400,7 @@
 
   // ── Autocomplete ──────────────────────────────────────────────────────────
   function mapperHeatmapResolvedDisplay(entryId) {
-    var meta = window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[entryId] || {};
+    var meta = window.MAPPER_CORE_ENTRY_META && window.MAPPER_CORE_ENTRY_META[entryId] || {};
     var lt   = HeatmapDataStyling ? HeatmapDataStyling.LabelType : 'IUPHAR';
     if (lt === 'Gene' && meta.gene) return $('<span/>').text(meta.gene).html();
     if (lt === 'UniProt' && meta.uniprot) return $('<span/>').text(meta.uniprot).html();
@@ -409,7 +409,7 @@
 
   function mapperHeatmapEditSeed(entryId) {
     var sid = entryId != null ? String(entryId).trim() : '';
-    var meta = (window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[sid]) || {};
+    var meta = (window.MAPPER_CORE_ENTRY_META && window.MAPPER_CORE_ENTRY_META[sid]) || {};
     var lt = HeatmapDataStyling ? HeatmapDataStyling.LabelType : 'IUPHAR';
     if (lt === 'Gene' && meta.gene) { return meta.gene; }
     if (lt === 'UniProt' && meta.uniprot) { return meta.uniprot; }
@@ -418,13 +418,13 @@
 
   function mapperHeatmapSetResolved($tr, id) {
     var sid  = id != null ? String(id).trim() : '';
-    var $inp  = $tr.find('.mapper20-in-receptor');
-    var $hid  = $tr.find('.mapper20-receptor-entry');
-    var $view = $tr.find('.mapper20-receptor-html-view');
+    var $inp  = $tr.find('.mapper-core-in-receptor');
+    var $hid  = $tr.find('.mapper-core-receptor-entry');
+    var $view = $tr.find('.mapper-core-receptor-html-view');
     mapperHeatmapDestroyAc($inp);
     if (!sid) {
       $hid.val(''); $view.hide().empty(); $inp.val('').show();
-      mapperHeatmapBindAc($inp); $tr.removeClass('mapper20-row-invalid').removeData('mapper20UnmatchedRaw');
+      mapperHeatmapBindAc($inp); $tr.removeClass('mapper-core-row-invalid').removeData('mapperCoreUnmatchedRaw');
       mapperHeatmapSyncClearBtn($tr); mapperHeatmapSyncRemoveButtons(); mapperHeatmapCompactReceptors();
       mapperHeatmapScheduleRedraw(); return;
     }
@@ -432,7 +432,7 @@
     if (mapperHeatmapSpeciesActive) mapperHeatmapPopulateSpeciesSelect($tr, sid, false);
     $view.html(mapperHeatmapResolvedDisplay(sid)).show(); $inp.val('').hide();
     mapperHeatmapBindAc($inp);
-    $tr.removeClass('mapper20-row-invalid').removeData('mapper20UnmatchedRaw');
+    $tr.removeClass('mapper-core-row-invalid').removeData('mapperCoreUnmatchedRaw');
     mapperHeatmapSyncClearBtn($tr); mapperHeatmapSyncRemoveButtons(); mapperHeatmapCompactReceptors();
     if (!suppressRedraw) {
       window.setTimeout(function () { var $v = $tr.find('.mapper-heatmap-val1:visible').first(); if ($v.length) $v.focus().select(); }, 0);
@@ -443,7 +443,7 @@
   function mapperHeatmapFilterLocal(term) {
     var t = (term || '').trim().toUpperCase();
     if (!t || !window.receptorSelect2Data) return [];
-    var meta = window.MAPPER20_ENTRY_META || {};
+    var meta = window.MAPPER_CORE_ENTRY_META || {};
     var lt = HeatmapDataStyling ? HeatmapDataStyling.LabelType : 'IUPHAR';
     var results = [];
     window.receptorSelect2Data.forEach(function (item) {
@@ -477,13 +477,13 @@
     if (w) {
       w._renderItem = function (ul, item) {
         var inner = item.html || item.name_html || $('<span/>').text(item.label || '').html();
-        return $('<li>').append($('<div class="mapper20-ac-item-label">').html(inner)).appendTo(ul);
+        return $('<li>').append($('<div class="mapper-core-ac-item-label">').html(inner)).appendTo(ul);
       };
-      if (w.menu && w.menu.element) w.menu.element.addClass('mapper20-receptor-ac-menu');
+      if (w.menu && w.menu.element) w.menu.element.addClass('mapper-core-receptor-ac-menu');
     }
     $inp.on('keyup', function () {
       var $tr = $inp.closest('tr');
-      if (!$tr.find('.mapper20-receptor-entry').val()) { $tr.removeData('mapper20UnmatchedRaw'); $tr.removeClass('mapper20-row-invalid'); }
+      if (!$tr.find('.mapper-core-receptor-entry').val()) { $tr.removeData('mapperCoreUnmatchedRaw'); $tr.removeClass('mapper-core-row-invalid'); }
       mapperHeatmapSyncClearBtn($tr);
     });
     $inp.on('blur.mapperHeatmap', function () {
@@ -491,12 +491,12 @@
       window.setTimeout(function () {
         if (!$inp.is(':visible')) return;
         var raw = ($inp.val() || '').trim();
-        if (!raw || $tr.find('.mapper20-receptor-entry').val()) return;
-        var rid = window.MAPPER20_RESOLVE && window.MAPPER20_RESOLVE[raw.toUpperCase()];
+        if (!raw || $tr.find('.mapper-core-receptor-entry').val()) return;
+        var rid = window.MAPPER_CORE_RESOLVE && window.MAPPER_CORE_RESOLVE[raw.toUpperCase()];
         if (rid) { mapperHeatmapSetResolved($tr, rid); return; }
         var hit = (window.receptorSelect2Data||[]).filter(function(x){ return String(x.id)===raw; });
         if (hit.length) { mapperHeatmapSetResolved($tr, hit[0].id); return; }
-        if (raw) { $tr.addClass('mapper20-row-invalid'); $tr.data('mapper20UnmatchedRaw', raw); }
+        if (raw) { $tr.addClass('mapper-core-row-invalid'); $tr.data('mapperCoreUnmatchedRaw', raw); }
         mapperHeatmapSyncClearBtn($tr);
       }, 170);
     });
@@ -509,10 +509,10 @@
       var $tr = $(this);
       rows.push({
         ix: ix,
-        entry: ($tr.find('.mapper20-receptor-entry').val()||'').trim(),
-        typed: ($tr.find('.mapper20-in-receptor').val()||'').trim(),
-        unmatched: ($tr.data('mapper20UnmatchedRaw')||''),
-        invalid: $tr.hasClass('mapper20-row-invalid'),
+        entry: ($tr.find('.mapper-core-receptor-entry').val()||'').trim(),
+        typed: ($tr.find('.mapper-core-in-receptor').val()||'').trim(),
+        unmatched: ($tr.data('mapperCoreUnmatchedRaw')||''),
+        invalid: $tr.hasClass('mapper-core-row-invalid'),
         v1: ($tr.find('.mapper-heatmap-val1').val()||'').trim(),
         v2: ($tr.find('.mapper-heatmap-val2').val()||'').trim(),
         v3: ($tr.find('.mapper-heatmap-val3').val()||'').trim(),
@@ -532,9 +532,9 @@
       var $tr = $('#mapper-heatmap-input-tbody tr').last();
       if (r.entry) { mapperHeatmapSetResolved($tr, r.entry); }
       else if (r.typed) {
-        $tr.find('.mapper20-in-receptor').val(r.typed);
-        if (r.unmatched) $tr.data('mapper20UnmatchedRaw', r.unmatched);
-        if (r.invalid)   $tr.addClass('mapper20-row-invalid');
+        $tr.find('.mapper-core-in-receptor').val(r.typed);
+        if (r.unmatched) $tr.data('mapperCoreUnmatchedRaw', r.unmatched);
+        if (r.invalid)   $tr.addClass('mapper-core-row-invalid');
       }
       $tr.find('.mapper-heatmap-val1').val(r.v1);
       $tr.find('.mapper-heatmap-val2').val(r.v2);
@@ -566,12 +566,12 @@
   }
 
   function mapperHeatmapUpdateSortHeaders() {
-    $('#mapper-heatmap-input-table th.mapper20-sortable-head').each(function () {
+    $('#mapper-heatmap-input-table th.mapper-core-sortable-head').each(function () {
       var col    = $(this).attr('data-mapper-heatmap-sort-col');
       var active = SORT_STATE.col === col;
       var dir    = active ? SORT_STATE.dir : null;
       $(this).attr('aria-sort', active ? (dir==='desc'?'descending':'ascending') : 'none');
-      $(this).find('.mapper20-sort-indicator').text(active ? (dir==='desc'?'▼':'▲') : '↕');
+      $(this).find('.mapper-core-sort-indicator').text(active ? (dir==='desc'?'▼':'▲') : '↕');
     });
   }
 
@@ -583,13 +583,13 @@
     MAPPER_HEATMAP_DEMO_ROWS.forEach(function (r) {
       mapperHeatmapAppendRow(true);
       var $tr = $('#mapper-heatmap-input-tbody tr').last();
-      var rid = window.MAPPER20_RESOLVE && window.MAPPER20_RESOLVE[r.receptor.toUpperCase()];
+      var rid = window.MAPPER_CORE_RESOLVE && window.MAPPER_CORE_RESOLVE[r.receptor.toUpperCase()];
       if (rid) mapperHeatmapSetResolved($tr, rid);
-      else $tr.find('.mapper20-in-receptor').val(r.receptor);
+      else $tr.find('.mapper-core-in-receptor').val(r.receptor);
       [1,2,3,4,5].forEach(function (i) { $tr.find('.mapper-heatmap-val' + i).val(r.vals[i-1]); });
     });
     suppressRedraw = false;
-    $('#mapper-heatmap-clear-rows').removeClass('mapper20-clear-clean');
+    $('#mapper-heatmap-clear-rows').removeClass('mapper-core-clear-clean');
     mapperHeatmapEnsureTrailingBlankRow();
     mapperHeatmapSyncRemoveButtons();
     mapperHeatmapCompactReceptors();
@@ -608,7 +608,7 @@
 
   // ── Boot ──────────────────────────────────────────────────────────────────
   function mapperHeatmapBoot() {
-    $('.mapper20-booting').removeClass('mapper20-booting');
+    $('.mapper-core-booting').removeClass('mapper-core-booting');
     // Build converters
     mapperHeatmapBuildLabelConverter();
     try { mapperHeatmapExtendLabelConverterForSpecies(); } catch (e) { /* non-critical */ }
@@ -620,15 +620,15 @@
         (window.MAPPER_HEATMAP_SPECIES_DATA.nonhuman_only || []).forEach(function (nho) {
           var stem = nho.stem;
 
-          // Register MAPPER20_ENTRY_META for every individual species entry so that
+          // Register MAPPER_CORE_ENTRY_META for every individual species entry so that
           // whichever species is later picked in the row's species dropdown, the cell
           // always shows "STEM (no human ortholog)" in all Receptor Names modes.
           var stemU = stem.toUpperCase();
           var TAG = '(no human ortholog)';
           var dispText = stemU + ' ' + TAG;
           var nhoHtml = '<span>' + $('<span>').text(stemU).html() + ' <em>' + TAG + '</em></span>';
-          if (window.MAPPER20_ENTRY_META && !window.MAPPER20_ENTRY_META[nho.entry]) {
-            window.MAPPER20_ENTRY_META[nho.entry] = {
+          if (window.MAPPER_CORE_ENTRY_META && !window.MAPPER_CORE_ENTRY_META[nho.entry]) {
+            window.MAPPER_CORE_ENTRY_META[nho.entry] = {
               name_html:  nhoHtml,
               name_plain: dispText,
               uniprot:    dispText
@@ -637,8 +637,8 @@
 
           if (_seenNhoStems[stem]) return;
           _seenNhoStems[stem] = true;
-          if (window.MAPPER20_RESOLVE && (window.MAPPER20_RESOLVE[stem.toUpperCase()] ||
-              window.MAPPER20_RESOLVE[(stem + '_human').toUpperCase()])) return;
+          if (window.MAPPER_CORE_RESOLVE && (window.MAPPER_CORE_RESOLVE[stem.toUpperCase()] ||
+              window.MAPPER_CORE_RESOLVE[(stem + '_human').toUpperCase()])) return;
           var entryText = (nho.common || stem) + ' (no human ortholog)';
           if (window.receptorSelect2Data) {
             window.receptorSelect2Data.push({
@@ -647,9 +647,9 @@
               search_text: (stem + ' ' + (nho.common || '') + ' ' + (nho.latin || '')).toUpperCase()
             });
           }
-          if (window.MAPPER20_RESOLVE) {
-            window.MAPPER20_RESOLVE[stem.toUpperCase()] = nho.entry;
-            window.MAPPER20_RESOLVE[nho.entry.toUpperCase()] = nho.entry;
+          if (window.MAPPER_CORE_RESOLVE) {
+            window.MAPPER_CORE_RESOLVE[stem.toUpperCase()] = nho.entry;
+            window.MAPPER_CORE_RESOLVE[nho.entry.toUpperCase()] = nho.entry;
           }
         });
       }
@@ -692,9 +692,9 @@
       });
       // Refresh resolved receptor names in table
       $('#mapper-heatmap-input-tbody tr').each(function () {
-        var sid = ($( this).find('.mapper20-receptor-entry').val() || '').trim();
+        var sid = ($( this).find('.mapper-core-receptor-entry').val() || '').trim();
         if (!sid) return;
-        var $view = $(this).find('.mapper20-receptor-html-view');
+        var $view = $(this).find('.mapper-core-receptor-html-view');
         if ($view.length && $view.is(':visible')) $view.html(mapperHeatmapResolvedDisplay(sid));
       });
       mapperHeatmapScheduleRedraw();
@@ -752,43 +752,43 @@
       mapperHeatmapAppendRow();
       mapperHeatmapCompactReceptors();
       mapperHeatmapSyncFirstRowPlaceholder();
-      $('#mapper-heatmap-clear-rows').addClass('mapper20-clear-clean').blur();
+      $('#mapper-heatmap-clear-rows').addClass('mapper-core-clear-clean').blur();
       mapperHeatmapRedrawNow();
     });
-    $('.mapper20-clear-menu').on('click.mapperHeatmap', '[data-heatmap-col]', function(e) {
+    $('.mapper-core-clear-menu').on('click.mapperHeatmap', '[data-heatmap-col]', function(e) {
       e.preventDefault();
       var col = $(this).data('heatmap-col');
       $('#mapper-heatmap-input-tbody tr').each(function() {
         $(this).find('.mapper-heatmap-' + col).val('').trigger('input');
       });
-      $('#mapper-heatmap-clear-rows').removeClass('mapper20-clear-clean');
+      $('#mapper-heatmap-clear-rows').removeClass('mapper-core-clear-clean');
       mapperHeatmapScheduleRedraw();
     });
 
     // Remove row
-    $('#mapper-heatmap-input-table').on('click.mapperHeatmapRemove', '.mapper20-remove-row', function () {
+    $('#mapper-heatmap-input-table').on('click.mapperHeatmapRemove', '.mapper-core-remove-row', function () {
       var $tr = $(this).closest('tr');
       if (mapperHeatmapRowBlank($tr) && $tr.is(':last-child')) return;
       mapperHeatmapDestroyRowAc($tr); $tr.remove();
-      $('#mapper-heatmap-clear-rows').removeClass('mapper20-clear-clean');
+      $('#mapper-heatmap-clear-rows').removeClass('mapper-core-clear-clean');
       mapperHeatmapEnsureTrailingBlankRow(); mapperHeatmapCompactReceptors(); mapperHeatmapScheduleRedraw();
     });
 
     // Click resolved chip to re-enter edit mode
     $(document)
-      .off('click.mapperHeatmapHtmlEdit', '#mapper-heatmap-input-tbody .mapper20-receptor-html-view')
-      .on('click.mapperHeatmapHtmlEdit', '#mapper-heatmap-input-tbody .mapper20-receptor-html-view', function () {
+      .off('click.mapperHeatmapHtmlEdit', '#mapper-heatmap-input-tbody .mapper-core-receptor-html-view')
+      .on('click.mapperHeatmapHtmlEdit', '#mapper-heatmap-input-tbody .mapper-core-receptor-html-view', function () {
         var $tr  = $(this).closest('tr');
-        mapperHeatmapDestroyAc($tr.find('.mapper20-in-receptor'));
-        var hid  = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+        mapperHeatmapDestroyAc($tr.find('.mapper-core-in-receptor'));
+        var hid  = ($tr.find('.mapper-core-receptor-entry').val() || '').trim();
         $(this).hide().empty();
-        var $inp2 = $('<textarea class="form-control input-sm mapper20-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>');
+        var $inp2 = $('<textarea class="form-control input-sm mapper-core-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>');
         var seed  = mapperHeatmapEditSeed(hid);
         $inp2.val(seed);
-        if (!seed) { $tr.find('.mapper20-receptor-input-wrap').addClass('is-empty'); }
-        $tr.find('.mapper20-receptor-input-wrap .mapper20-in-receptor').remove();
-        $tr.find('.mapper20-receptor-input-wrap').prepend($inp2);
-        $tr.find('.mapper20-receptor-entry').val('');
+        if (!seed) { $tr.find('.mapper-core-receptor-input-wrap').addClass('is-empty'); }
+        $tr.find('.mapper-core-receptor-input-wrap .mapper-core-in-receptor').remove();
+        $tr.find('.mapper-core-receptor-input-wrap').prepend($inp2);
+        $tr.find('.mapper-core-receptor-entry').val('');
         mapperHeatmapBindAc($inp2);
         $inp2.show().focus();
         window.setTimeout(function () {
@@ -803,7 +803,7 @@
       });
 
     // Sort headers
-    $('#mapper-heatmap-input-table').on('click.mapperHeatmapSort', 'th.mapper20-sortable-head', function () {
+    $('#mapper-heatmap-input-table').on('click.mapperHeatmapSort', 'th.mapper-core-sortable-head', function () {
       mapperHeatmapSortRows($(this).attr('data-mapper-heatmap-sort-col'));
     });
 
@@ -813,7 +813,7 @@
       function () {
         var $tr = $(this).closest('tr');
         mapperHeatmapSyncClearBtn($tr);
-        $('#mapper-heatmap-clear-rows').removeClass('mapper20-clear-clean');
+        $('#mapper-heatmap-clear-rows').removeClass('mapper-core-clear-clean');
         mapperHeatmapEnsureTrailingBlankRow();
         mapperHeatmapSyncRemoveButtons();
         mapperHeatmapCompactReceptors();
@@ -828,7 +828,7 @@
       var text = ev.clipboardData ? ev.clipboardData.getData('text/plain') : '';
       if (!text || text.indexOf('\t') === -1) return;
       ePz.preventDefault();
-      $('#mapper-heatmap-clear-rows').removeClass('mapper20-clear-clean');
+      $('#mapper-heatmap-clear-rows').removeClass('mapper-core-clear-clean');
       suppressRedraw = true;
       text.split(/\r?\n/).forEach(function (ln) {
         if (!ln.trim()) return;
@@ -836,8 +836,8 @@
         var rawR  = (parts[0] || '').trim();
         var $tr   = mapperHeatmapFindBlankRow();
         if (!$tr.length) { mapperHeatmapAppendRow(true); $tr = $('#mapper-heatmap-input-tbody tr').last(); }
-        $tr.find('.mapper20-in-receptor').val(rawR);
-        var rid = window.MAPPER20_RESOLVE && window.MAPPER20_RESOLVE[rawR.toUpperCase()];
+        $tr.find('.mapper-core-in-receptor').val(rawR);
+        var rid = window.MAPPER_CORE_RESOLVE && window.MAPPER_CORE_RESOLVE[rawR.toUpperCase()];
         if (rid) mapperHeatmapSetResolved($tr, rid);
         [1,2,3,4,5].forEach(function (i) { if (parts[i]) $tr.find('.mapper-heatmap-val' + i).val((parts[i]||'').trim()); });
       });
@@ -848,15 +848,15 @@
     });
 
     // Receptor lookup modal
-    if (typeof window.mapper20InitGpcromePickerModal === 'function') {
-      window.mapper20InitGpcromePickerModal({
-        pickerRows: $.isArray(window.MAPPER20_GPCROME_PICKER_ROWS) ? window.MAPPER20_GPCROME_PICKER_ROWS : [],
+    if (typeof window.mapperCoreInitGpcromePickerModal === 'function') {
+      window.mapperCoreInitGpcromePickerModal({
+        pickerRows: $.isArray(window.MAPPER_CORE_GPCROME_PICKER_ROWS) ? window.MAPPER_CORE_GPCROME_PICKER_ROWS : [],
         maxRows: MAPPER_HEATMAP_MAX_ROWS,
         onAdd: function (entryIds, meta) {
           suppressRedraw = true;
           // Heatmap has no category/text mode — assigned values are always sequential numbers.
           var numberMap = (meta && meta.groupNameById)
-            ? window.mapper20BuildSequentialNumberMap(meta.groupNameById)
+            ? window.mapperCoreBuildSequentialNumberMap(meta.groupNameById)
             : null;
           (entryIds || []).forEach(function (id) {
             var $row = mapperHeatmapFindBlankRow();
@@ -867,7 +867,7 @@
             }
           });
           suppressRedraw = false;
-          $('#mapper-heatmap-clear-rows').removeClass('mapper20-clear-clean');
+          $('#mapper-heatmap-clear-rows').removeClass('mapper-core-clear-clean');
           mapperHeatmapEnsureTrailingBlankRow();
           mapperHeatmapCompactReceptors();
           mapperHeatmapScheduleRedraw();

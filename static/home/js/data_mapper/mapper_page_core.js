@@ -16,7 +16,7 @@
   /**
    * FNV-1a-style 32-bit string hash (shift-based variant). This exact
    * implementation was already shared verbatim by the tree, list and
-   * GPCRome-wheel pages (as mapper20FNV1a32) — Cluster carried a different
+   * GPCRome-wheel pages (as mapperWheelFNV1a32) — Cluster carried a different
    * multiplicative FNV-1a variant with the same seed; it now uses this one
    * too, so a given label's default colour is consistent across all 5 pages.
    */

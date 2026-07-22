@@ -20,8 +20,8 @@
   window.mapperTreeInputMode = 'numeric';
   window.mapperTreeRedrawNow = function () {};
 
-  window.MAPPER20_LABEL_COLORS = window.MAPPER20_LABEL_COLORS || {};
-  window.MAPPER20_LABEL_ENABLED = window.MAPPER20_LABEL_ENABLED || {};
+  window.MAPPER_CORE_LABEL_COLORS = window.MAPPER_CORE_LABEL_COLORS || {};
+  window.MAPPER_CORE_LABEL_ENABLED = window.MAPPER_CORE_LABEL_ENABLED || {};
   /** Stem-upper → label arrays for SVG leaf relabelling (`custom_changeLeavesLabels`). */
   window.mapperTreeStemLabelDicts = { IUPHAR: {}, Gene: {}, UniProt: {} };
 
@@ -216,7 +216,7 @@
       if (id == null) {
         return;
       }
-      var meta = (window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[id]) || {};
+      var meta = (window.MAPPER_CORE_ENTRY_META && window.MAPPER_CORE_ENTRY_META[id]) || {};
       var stemU = mapperTreeStemKeyUpper(id);
       if (!stemU) {
         return;
@@ -265,7 +265,7 @@
       if (id == null) {
         return;
       }
-      var meta = (window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[id]) || {};
+      var meta = (window.MAPPER_CORE_ENTRY_META && window.MAPPER_CORE_ENTRY_META[id]) || {};
       var uni = mapperFallbackUniprotFromEntry(id, meta);
       var stemKey = mapperTreeStemKeyUpper(id);
       function row() {
@@ -295,12 +295,12 @@
   // Returns the dedup key for a row (matches mapperTreeBuildTreeCircles key logic).
   // Returns null for blank / unresolvable rows.
   function mapperTreeRowUniKey($tr) {
-    var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
-    var ta    = (($tr.find('.mapper20-in-receptor').val() || '') + '').trim();
-    var unmatched = ($tr.data('mapper20UnmatchedRaw') || '') + '';
+    var entry = ($tr.find('.mapper-core-receptor-entry').val() || '').trim();
+    var ta    = (($tr.find('.mapper-core-in-receptor').val() || '') + '').trim();
+    var unmatched = ($tr.data('mapperCoreUnmatchedRaw') || '') + '';
     if (!entry && !ta && !String(unmatched).trim()) { return null; }
-    var id = entry || (window.MAPPER20_RESOLVE &&
-             window.MAPPER20_RESOLVE[String(ta || unmatched).trim().toUpperCase()]) || '';
+    var id = entry || (window.MAPPER_CORE_RESOLVE &&
+             window.MAPPER_CORE_RESOLVE[String(ta || unmatched).trim().toUpperCase()]) || '';
     if (!id) { return null; }
     if (mapperTreeSpeciesActive) {
       var specVal = ($tr.find('.mapper-tree-species-select').val() || '').trim();
@@ -326,7 +326,7 @@
           unique++;
         }
       }
-      $tr.toggleClass('mapper20-row-over-limit', over);
+      $tr.toggleClass('mapper-tree-row-over-limit', over);
     });
   }
 
@@ -422,7 +422,7 @@
   function mapperTreeInitAllSpeciesDropdowns() {
     $('#mapper-tree-input-tbody tr').each(function () {
       var $tr = $(this);
-      var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+      var entry = ($tr.find('.mapper-core-receptor-entry').val() || '').trim();
       if (entry) mapperTreePopulateSpeciesSelect($tr, entry, true);
     });
   }
@@ -457,7 +457,7 @@
     var stemSpeciesMap = {};
     $('#mapper-tree-input-tbody tr').each(function () {
       var $tr = $(this);
-      var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+      var entry = ($tr.find('.mapper-core-receptor-entry').val() || '').trim();
       if (!entry) return;
       var specVal = ($tr.find('.mapper-tree-species-select').val() || '').trim() || entry;
       var baseStem = entry.split('_')[0];
@@ -517,14 +517,14 @@
       }
     }
     var rawCandidate = unmatchedRaw || taRaw || '';
-    if (window.mapper20ResolveEntry && typeof window.mapper20ResolveEntry === 'function') {
-      var resolved = window.mapper20ResolveEntry(rawCandidate);
+    if (window.mapperTreeResolveEntry && typeof window.mapperTreeResolveEntry === 'function') {
+      var resolved = window.mapperTreeResolveEntry(rawCandidate);
       if (resolved) {
         return mapperTreeFindLeafNameExact(skel, resolved, '', '');
       }
-    } else if (window.MAPPER20_RESOLVE) {
+    } else if (window.MAPPER_CORE_RESOLVE) {
       var up = String(rawCandidate || '').trim().toUpperCase();
-      var rid = window.MAPPER20_RESOLVE[up];
+      var rid = window.MAPPER_CORE_RESOLVE[up];
       if (rid) {
         return mapperTreeFindLeafNameExact(skel, rid, '', '');
       }
@@ -536,9 +536,9 @@
     var map = {};
     $('#mapper-tree-input-tbody tr').each(function () {
       var $tr = $(this);
-      var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
-      var ta = (($tr.find('.mapper20-in-receptor').val() || '') + '').trim();
-      var unmatched = ($tr.data('mapper20UnmatchedRaw') || '') + '';
+      var entry = ($tr.find('.mapper-core-receptor-entry').val() || '').trim();
+      var ta = (($tr.find('.mapper-core-in-receptor').val() || '') + '').trim();
+      var unmatched = ($tr.data('mapperCoreUnmatchedRaw') || '') + '';
       if (!entry && !ta && !String(unmatched).trim()) {
         return;
       }
@@ -570,7 +570,7 @@
       ? MAPPER_TREE_PLACEHOLDER_CATMODE
       : MAPPER_TREE_PLACEHOLDER_NUMERIC;
     $('#mapper-tree-input-tbody tr').each(function (idx) {
-      var $inp = $(this).find('.mapper20-in-receptor');
+      var $inp = $(this).find('.mapper-core-in-receptor');
       if (!$inp.length) { return; }
       if (idx === 0) { $inp.attr('placeholder', hint); }
       else            { $inp.removeAttr('placeholder'); }
@@ -596,17 +596,17 @@
     var textMode = mapperTreeIsTextMode();
     $('#mapper-tree-input-tbody tr').each(function () {
       var $tr = $(this);
-      if ($tr.hasClass('mapper20-row-over-limit')) { return; }
-      var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
-      var ta = (($tr.find('.mapper20-in-receptor').val() || '') + '').trim();
-      var unmatched = ($tr.data('mapper20UnmatchedRaw') || '') + '';
+      if ($tr.hasClass('mapper-tree-row-over-limit')) { return; }
+      var entry = ($tr.find('.mapper-core-receptor-entry').val() || '').trim();
+      var ta = (($tr.find('.mapper-core-in-receptor').val() || '') + '').trim();
+      var unmatched = ($tr.data('mapperCoreUnmatchedRaw') || '') + '';
       if (!entry && !ta && !String(unmatched).trim()) {
         return;
       }
       var id = entry;
-      if (!id && window.MAPPER20_RESOLVE) {
+      if (!id && window.MAPPER_CORE_RESOLVE) {
         id =
-          window.MAPPER20_RESOLVE[String(ta || unmatched).trim().toUpperCase()] || '';
+          window.MAPPER_CORE_RESOLVE[String(ta || unmatched).trim().toUpperCase()] || '';
       }
       if (!id) {
         return;
@@ -651,12 +651,12 @@
         if (!innerRaw) {
           return;
         }
-        if (!window.MAPPER20_LABEL_COLORS[innerRaw]) {
-          window.MAPPER20_LABEL_COLORS[innerRaw] = mapperTreeDefaultHexForLabelKey(innerRaw);
+        if (!window.MAPPER_CORE_LABEL_COLORS[innerRaw]) {
+          window.MAPPER_CORE_LABEL_COLORS[innerRaw] = mapperTreeDefaultHexForLabelKey(innerRaw);
         }
-        var enabled = window.MAPPER20_LABEL_ENABLED[innerRaw] !== false;
+        var enabled = window.MAPPER_CORE_LABEL_ENABLED[innerRaw] !== false;
         o.Inner = innerRaw;
-        o.ColorValue = enabled ? window.MAPPER20_LABEL_COLORS[innerRaw] || mapperTreeDefaultHexForLabelKey(innerRaw) : '#ffffff';
+        o.ColorValue = enabled ? window.MAPPER_CORE_LABEL_COLORS[innerRaw] || mapperTreeDefaultHexForLabelKey(innerRaw) : '#ffffff';
       }
       out[uniKey] = o;
     });
@@ -727,9 +727,9 @@
     });
     // Refresh resolved receptor capsules in the input table to match the new label type
     $('#mapper-tree-input-tbody tr').each(function () {
-      var sid = ($(this).find('.mapper20-receptor-entry').val() || '').trim();
+      var sid = ($(this).find('.mapper-core-receptor-entry').val() || '').trim();
       if (!sid) { return; }
-      var $view = $(this).find('.mapper20-receptor-html-view');
+      var $view = $(this).find('.mapper-core-receptor-html-view');
       if ($view.length && $view.is(':visible')) {
         $view.html(mapperTreeResolvedDisplay(sid));
       }
@@ -1070,7 +1070,7 @@
   }, DEBOUNCE_MS);
 
   // ── Mode snapshots ──────────────────────────────────────────────────────
-  var MAPPER20_MODE_SNAPSHOTS_TREE = { numeric: null, categorical: null };
+  var MAPPER_TREE_MODE_SNAPSHOTS = { numeric: null, categorical: null };
 
   function mapperTreeCaptureSnapshot() {
     var mode = mapperTreeIsTextMode() ? 'categorical' : 'numeric';
@@ -1082,31 +1082,31 @@
                  invalid: r.invalid, inner: r.inner, o1: '', o2: '', o3: '', o4: '',
                  speciesEntry: r.speciesEntry };
       });
-      MAPPER20_MODE_SNAPSHOTS_TREE.categorical = {
+      MAPPER_TREE_MODE_SNAPSHOTS.categorical = {
         rows: rows,
-        labelColors: $.extend({}, window.MAPPER20_LABEL_COLORS || {})
+        labelColors: $.extend({}, window.MAPPER_CORE_LABEL_COLORS || {})
       };
     } else {
-      MAPPER20_MODE_SNAPSHOTS_TREE.numeric = { rows: rows };
+      MAPPER_TREE_MODE_SNAPSHOTS.numeric = { rows: rows };
     }
   }
 
   function mapperTreeSeedOppositeMode(targetMode) {
-    if (MAPPER20_MODE_SNAPSHOTS_TREE[targetMode] != null) { return; }
+    if (MAPPER_TREE_MODE_SNAPSHOTS[targetMode] != null) { return; }
     if (targetMode === 'categorical') {
-      MAPPER20_MODE_SNAPSHOTS_TREE.categorical = { rows: [], labelColors: {} };
+      MAPPER_TREE_MODE_SNAPSHOTS.categorical = { rows: [], labelColors: {} };
     } else {
-      MAPPER20_MODE_SNAPSHOTS_TREE.numeric = { rows: [] };
+      MAPPER_TREE_MODE_SNAPSHOTS.numeric = { rows: [] };
     }
   }
 
   function mapperTreeApplyLeftPanelWidth() {
     var text = mapperTreeIsTextMode();
     var speciesExtra = mapperTreeSpeciesActive ? 88 : 0;
-    $('.mapper20-wheel-wrap.mapper-tree-page .mapper20-wheel-left').css(
+    $('.mapper-core-wheel-wrap.mapper-tree-page .mapper-core-wheel-left').css(
       'width', text ? (400 + speciesExtra) + 'px' : ''
     );
-    $('.mapper20-wheel-wrap.mapper-tree-page').toggleClass('mapper-tree-species-active', mapperTreeSpeciesActive);
+    $('.mapper-core-wheel-wrap.mapper-tree-page').toggleClass('mapper-tree-species-active', mapperTreeSpeciesActive);
   }
 
   function mapperTreeSyncClearDropdown() {
@@ -1137,9 +1137,9 @@
     // Restore rows from snapshot — always rebuild, even when the target mode has
     // never been visited (snap.rows is []), so a genuinely empty mode shows as empty
     // rather than leaving the previous mode's rows sitting in the DOM.
-    var snap = MAPPER20_MODE_SNAPSHOTS_TREE[text ? 'categorical' : 'numeric'] || {};
+    var snap = MAPPER_TREE_MODE_SNAPSHOTS[text ? 'categorical' : 'numeric'] || {};
     if (text) {
-      window.MAPPER20_LABEL_COLORS = snap.labelColors ? $.extend({}, snap.labelColors) : {};
+      window.MAPPER_CORE_LABEL_COLORS = snap.labelColors ? $.extend({}, snap.labelColors) : {};
     }
     mapperTreeApplySerializedRows(snap.rows || []);
 
@@ -1151,7 +1151,7 @@
     });
 
     var $tbl = $('#mapper-tree-input-table');
-    $tbl.toggleClass('mapper20-text-mode', text);
+    $tbl.toggleClass('mapper-core-text-mode', text);
 
     // Disable hidden outer inputs (tab / screen reader skip)
     $tbl.find('.mapper-tree-o1,.mapper-tree-o2,.mapper-tree-o3,.mapper-tree-o4').prop('disabled', text);
@@ -1166,7 +1166,7 @@
     // Hide Legend labels button and spacer slider in categorical mode; shrink panel
     $('#mapper-tree-labels-dropdown').toggle(!text);
     $('#mapper-tree-spacer-section').toggle(!text);
-    $('.mapper20-wheel-wrap.mapper-tree-page').toggleClass('mapper-tree-catmode', text);
+    $('.mapper-core-wheel-wrap.mapper-tree-page').toggleClass('mapper-tree-catmode', text);
     // Drive the left panel to an explicit pixel width so the flex column actually shrinks
     mapperTreeApplyLeftPanelWidth();
 
@@ -1193,8 +1193,8 @@
         $td.removeClass('mapper-tree-inner-hint');
         return;
       }
-      var hasReceptor = !!($tr.find('.mapper20-receptor-entry').val() || '').trim() ||
-                        !!($tr.find('.mapper20-in-receptor').val() || '').trim();
+      var hasReceptor = !!($tr.find('.mapper-core-receptor-entry').val() || '').trim() ||
+                        !!($tr.find('.mapper-core-in-receptor').val() || '').trim();
       var hasInner = !!($tr.find('.mapper-tree-inner').val() || '').trim();
       $td.toggleClass('mapper-tree-inner-hint', hasReceptor && !hasInner);
     });
@@ -1216,13 +1216,13 @@
     if (!key || !color) {
       return;
     }
-    window.MAPPER20_LABEL_COLORS[key] = color;
+    window.MAPPER_CORE_LABEL_COLORS[key] = color;
     $('#mapper-tree-input-tbody tr').each(function () {
       var $tr = $(this);
       if (($tr.find('.mapper-tree-inner').val() || '').trim() !== key) {
         return;
       }
-      var $sw = $tr.find('.mapper20-row-color-picker');
+      var $sw = $tr.find('.mapper-core-row-color-picker');
       $sw.val(color).css('background-color', color);
       if ($activePicker && $activePicker.length && $sw[0] === $activePicker[0]) {
         return;
@@ -1234,7 +1234,7 @@
       }
     });
     // Sync the categorical Colors panel picker for this label
-    var $pp = $('#mapper-tree-label-color-pickers .mapper20-lcat-spectrum[data-mapper-tree-lcat-label="' + key + '"]');
+    var $pp = $('#mapper-tree-label-color-pickers .mapper-core-lcat-spectrum[data-mapper-tree-lcat-label="' + key + '"]');
     if ($pp.length && (!$activePicker || !$activePicker.length || $pp[0] !== $activePicker[0])) {
       if ($.fn.spectrum && ($pp.data('spectrum') || $pp.hasClass('sp-replaced'))) {
         try { $pp.spectrum('set', color); } catch (e4) {}
@@ -1265,8 +1265,8 @@
       showPalette: true,
       showSelectionPalette: true,
       clickoutFiresChange: true,
-      containerClassName: 'mapper20-row-color-spectrum',
-      replacerClassName: 'mapper20-row-swatch-replacer',
+      containerClassName: 'mapper-core-row-color-spectrum',
+      replacerClassName: 'mapper-tree-row-swatch-replacer',
       palette: [
         ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd'],
         ['#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'],
@@ -1283,21 +1283,21 @@
 
   function mapperTreeRefreshInnerSwatches() {
     if (!mapperTreeIsTextMode()) {
-      $('#mapper-tree-input-tbody .mapper20-row-color-picker').each(function () {
+      $('#mapper-tree-input-tbody .mapper-core-row-color-picker').each(function () {
         mapperTreeDestroyRowColorSpectrum($(this));
       });
-      $('#mapper-tree-input-tbody .mapper20-label-swatch').css('background-color', 'transparent');
+      $('#mapper-tree-input-tbody .mapper-tree-label-swatch').css('background-color', 'transparent');
       return;
     }
     $('#mapper-tree-input-tbody tr').each(function () {
-      var $sw = $(this).find('.mapper20-label-swatch');
+      var $sw = $(this).find('.mapper-tree-label-swatch');
       var inner = (($(this).find('.mapper-tree-inner').val() || '') + '').trim();
       if (!inner) {
         mapperTreeDestroyRowColorSpectrum($sw);
         $sw.css('background-color', '#f5f5f5');
         return;
       }
-      var hex = window.MAPPER20_LABEL_COLORS[inner] || mapperTreeDefaultHexForLabelKey(inner);
+      var hex = window.MAPPER_CORE_LABEL_COLORS[inner] || mapperTreeDefaultHexForLabelKey(inner);
       $sw.css('background-color', hex);
       mapperTreeEnsureRowColorSpectrum($sw, inner, hex);
     });
@@ -1309,7 +1309,7 @@
     if (!$mount.length) { return; }
 
     if (!mapperTreeIsTextMode()) {
-      $mount.find('.mapper20-lcat-spectrum').each(function () {
+      $mount.find('.mapper-core-lcat-spectrum').each(function () {
         try { if ($(this).data('spectrum')) { $(this).spectrum('destroy'); } } catch (eIgnore) {}
       });
       $mount.empty();
@@ -1335,7 +1335,7 @@
     }
 
     // Label set changed: full rebuild — destroy existing widgets first
-    $mount.find('.mapper20-lcat-spectrum').each(function () {
+    $mount.find('.mapper-core-lcat-spectrum').each(function () {
       try { if ($(this).data('spectrum')) { $(this).spectrum('destroy'); } } catch (eIgnore) {}
     });
     $mount.empty();
@@ -1345,11 +1345,11 @@
 
     // Initialize colour and enabled state for each label
     labels.forEach(function (lbl) {
-      if (!window.MAPPER20_LABEL_COLORS[lbl]) {
-        window.MAPPER20_LABEL_COLORS[lbl] = mapperTreeDefaultHexForLabelKey(lbl);
+      if (!window.MAPPER_CORE_LABEL_COLORS[lbl]) {
+        window.MAPPER_CORE_LABEL_COLORS[lbl] = mapperTreeDefaultHexForLabelKey(lbl);
       }
-      if (!Object.prototype.hasOwnProperty.call(window.MAPPER20_LABEL_ENABLED, lbl)) {
-        window.MAPPER20_LABEL_ENABLED[lbl] = true;
+      if (!Object.prototype.hasOwnProperty.call(window.MAPPER_CORE_LABEL_ENABLED, lbl)) {
+        window.MAPPER_CORE_LABEL_ENABLED[lbl] = true;
       }
     });
 
@@ -1360,15 +1360,15 @@
       return;
     }
 
-    // ── Build panel (matches wheel's mapper20RebuildLabelColorCustomizePanel) ──
+    // ── Build panel (matches wheel's mapperWheelRebuildLabelColorCustomizePanel) ──
 
     function domId(ix, kind) {
       return 'mapper_tree_l_' + kind + '_' + String(ix);
     }
 
     function updateMasterCheckbox() {
-      var allOn  = labels.length > 0 && labels.every(function (l) { return window.MAPPER20_LABEL_ENABLED[l] !== false; });
-      var allOff = labels.length > 0 && labels.every(function (l) { return window.MAPPER20_LABEL_ENABLED[l] === false; });
+      var allOn  = labels.length > 0 && labels.every(function (l) { return window.MAPPER_CORE_LABEL_ENABLED[l] !== false; });
+      var allOff = labels.length > 0 && labels.every(function (l) { return window.MAPPER_CORE_LABEL_ENABLED[l] === false; });
       var mx = $('#mapper-tree-label-cat-master')[0];
       if (!mx) { return; }
       mx.checked = !!allOn;
@@ -1378,16 +1378,16 @@
     function refreshGridRowUi(ix, lbl) {
       var $inp = $('#' + domId(ix, 'spe'));
       if (!$inp.length || !$inp.data('spectrum')) { return; }
-      var en = window.MAPPER20_LABEL_ENABLED[lbl] !== false;
+      var en = window.MAPPER_CORE_LABEL_ENABLED[lbl] !== false;
       try {
         if (en) { $inp.spectrum('enable').css('opacity', '1'); }
         else    { $inp.spectrum('disable').css('opacity', '0.5'); }
       } catch (eR) {}
     }
 
-    var $hdr = $('<div class="mapper20-label-cat-head">').append(
+    var $hdr = $('<div class="mapper-core-label-cat-head">').append(
       $('<input type="checkbox" id="mapper-tree-label-cat-master" aria-label="Toggle all label colours enabled">'),
-      $('<div class="mapper20-label-cat-head-title">Categories</div>')
+      $('<div class="mapper-core-label-cat-head-title">Categories</div>')
     );
     var $grid = $('<div class="color-grid" id="mapper-tree-label-color-grid">');
     $mount.append($hdr, $grid);
@@ -1397,7 +1397,7 @@
     $('#mapper-tree-label-cat-master').on('change.mapperTreeColors', function () {
       var checked = !!$(this).prop('checked');
       labels.forEach(function (lbl, ix) {
-        window.MAPPER20_LABEL_ENABLED[lbl] = checked;
+        window.MAPPER_CORE_LABEL_ENABLED[lbl] = checked;
         refreshGridRowUi(ix, lbl);
       });
       mapperTreeRefreshInnerSwatches();
@@ -1407,12 +1407,12 @@
     labels.forEach(function (lbl, ix) {
       var chkId   = domId(ix, 'chk');
       var spId    = domId(ix, 'spe');
-      var hex = window.MAPPER20_LABEL_COLORS[lbl] || mapperTreeDefaultHexForLabelKey(lbl);
-      window.MAPPER20_LABEL_COLORS[lbl] = hex;
-      var en = window.MAPPER20_LABEL_ENABLED[lbl] !== false;
+      var hex = window.MAPPER_CORE_LABEL_COLORS[lbl] || mapperTreeDefaultHexForLabelKey(lbl);
+      window.MAPPER_CORE_LABEL_COLORS[lbl] = hex;
+      var en = window.MAPPER_CORE_LABEL_ENABLED[lbl] !== false;
 
       var $spe = $('<input type="text">')
-        .addClass('mapper20-lcat-spectrum form-control input-sm')
+        .addClass('mapper-core-lcat-spectrum form-control input-sm')
         .attr('id', spId)
         .attr('data-mapper-tree-lcat-label', lbl);
 
@@ -1423,7 +1423,7 @@
       ));
 
       $('#' + chkId).on('change.mapperTreeColors', function () {
-        window.MAPPER20_LABEL_ENABLED[lbl] = !!$(this).prop('checked');
+        window.MAPPER_CORE_LABEL_ENABLED[lbl] = !!$(this).prop('checked');
         refreshGridRowUi(ix, lbl);
         updateMasterCheckbox();
         mapperTreeRefreshInnerSwatches();
@@ -1437,14 +1437,14 @@
         showButtons: false,
         preferredFormat: 'hex',
         appendTo: '#mapper-tree-colors-menu',
-        containerClassName: 'mapper20-lcat-sp-container',
-        replacerClassName: 'mapper20-lcat-replacer',
+        containerClassName: 'mapper-core-lcat-sp-container',
+        replacerClassName: 'mapper-core-lcat-replacer',
         palette: [
           ['#000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00'],
           ['#FF00FF', '#00FFFF', '#FFFFFF', '#C0C0C0', '#808080']
         ],
         change: function (c) {
-          if (window.MAPPER20_LABEL_ENABLED[lbl] === false) { return; }
+          if (window.MAPPER_CORE_LABEL_ENABLED[lbl] === false) { return; }
           var nextHex = c && c.toHexString ? c.toHexString() : hex;
           mapperTreeApplyLabelColor(lbl, nextHex, $spe);
         }
@@ -1458,7 +1458,7 @@
 
   function mapperTreeResolvedDisplay(entryId) {
     var sid = entryId != null ? String(entryId).trim() : '';
-    var meta = (window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[sid]) || {};
+    var meta = (window.MAPPER_CORE_ENTRY_META && window.MAPPER_CORE_ENTRY_META[sid]) || {};
     var ltype = mapperTreeActiveLeafDropdownVal();
     if (ltype === 'Gene' && meta.gene) {
       return $('<span/>').text(meta.gene).html();
@@ -1478,11 +1478,11 @@
   }
 
   function mapperTreeSyncClearBtn($tr) {
-    var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
-    var typed = (($tr.find('.mapper20-in-receptor').val() || '') + '').trim();
-    var um = $tr.data('mapper20UnmatchedRaw');
+    var entry = ($tr.find('.mapper-core-receptor-entry').val() || '').trim();
+    var typed = (($tr.find('.mapper-core-in-receptor').val() || '') + '').trim();
+    var um = $tr.data('mapperCoreUnmatchedRaw');
     var has = !!(entry || typed || (um != null && String(um).trim()));
-    $tr.find('.mapper20-receptor-input-wrap').toggleClass('is-empty', !has);
+    $tr.find('.mapper-core-receptor-input-wrap').toggleClass('is-empty', !has);
   }
 
   function mapperTreeFocusInnerCell($tr) {
@@ -1497,7 +1497,7 @@
   function mapperTreeSyncRemoveButtons() {
     $('#mapper-tree-input-tbody tr').each(function () {
       var $tr = $(this);
-      $tr.find('.mapper20-remove-cell').toggleClass('is-remove-hidden', mapperTreeRowBlank($tr));
+      $tr.find('.mapper-core-remove-cell').toggleClass('is-remove-hidden', mapperTreeRowBlank($tr));
     });
   }
 
@@ -1509,14 +1509,14 @@
         return false;
       }
     });
-    $('#mapper-tree-input-table').toggleClass('mapper20-receptors-compact', hasContent);
+    $('#mapper-tree-input-table').toggleClass('mapper-core-receptors-compact', hasContent);
   }
 
   function mapperTreeSetResolved($tr, id) {
     var sid = id != null ? String(id).trim() : '';
-    var $inp = $tr.find('.mapper20-in-receptor');
-    var $hid = $tr.find('.mapper20-receptor-entry');
-    var $view = $tr.find('.mapper20-receptor-html-view');
+    var $inp = $tr.find('.mapper-core-in-receptor');
+    var $hid = $tr.find('.mapper-core-receptor-entry');
+    var $view = $tr.find('.mapper-core-receptor-html-view');
     mapperTreeDestroyAc($inp);
     if (!sid) {
       $hid.val('');
@@ -1534,8 +1534,8 @@
     $inp.val('').hide();
     $view.show();
     mapperTreeBindAc($inp);
-    $tr.removeClass('mapper20-row-invalid');
-    $tr.removeData('mapper20UnmatchedRaw');
+    $tr.removeClass('mapper-core-row-invalid');
+    $tr.removeData('mapperCoreUnmatchedRaw');
     mapperTreeSyncClearBtn($tr);
     mapperTreeSyncRemoveButtons();
     mapperTreeCompactReceptorRowsAfterInput();
@@ -1551,7 +1551,7 @@
   /** Returns the label-type-appropriate seed text for a resolved receptor's edit field. */
   function mapperTreeEditSeed(entryId) {
     var sid = entryId != null ? String(entryId).trim() : '';
-    var meta = (window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[sid]) || {};
+    var meta = (window.MAPPER_CORE_ENTRY_META && window.MAPPER_CORE_ENTRY_META[sid]) || {};
     var ltype = mapperTreeActiveLeafDropdownVal();
     if (ltype === 'Gene' && meta.gene) { return meta.gene; }
     if (ltype === 'UniProt' && meta.uniprot) { return meta.uniprot; }
@@ -1564,7 +1564,7 @@
       return [];
     }
     var ltype = mapperTreeActiveLeafDropdownVal();
-    var meta = window.MAPPER20_ENTRY_META || {};
+    var meta = window.MAPPER_CORE_ENTRY_META || {};
     var results = [];
     window.receptorSelect2Data.forEach(function (item) {
       var m = meta[item.id] || {};
@@ -1613,7 +1613,7 @@
       w._renderItem = function (ul, item) {
         var inner = item.html || item.name_html || $('<span/>').text(item.label || '').html();
         return $('<li>')
-          .append($('<div class="mapper20-ac-item-label">').html(inner))
+          .append($('<div class="mapper-core-ac-item-label">').html(inner))
           .appendTo(ul);
       };
       if (w.menu && w.menu.element) {
@@ -1623,9 +1623,9 @@
 
     $inp.on('keyup', function () {
       var $tr = $inp.closest('tr');
-      if (!$tr.find('.mapper20-receptor-entry').val()) {
-        $tr.removeData('mapper20UnmatchedRaw');
-        $tr.removeClass('mapper20-row-invalid');
+      if (!$tr.find('.mapper-core-receptor-entry').val()) {
+        $tr.removeData('mapperCoreUnmatchedRaw');
+        $tr.removeClass('mapper-core-row-invalid');
       }
       mapperTreeSyncClearBtn($tr);
     });
@@ -1636,11 +1636,11 @@
           return;
         }
         var raw = ($inp.val() || '').trim();
-        if (!raw || $tr.find('.mapper20-receptor-entry').val()) {
+        if (!raw || $tr.find('.mapper-core-receptor-entry').val()) {
           return;
         }
-        if (window.mapper20ResolveEntry) {
-          var canon = window.mapper20ResolveEntry(raw);
+        if (window.mapperTreeResolveEntry) {
+          var canon = window.mapperTreeResolveEntry(raw);
           if (canon) {
             mapperTreeSetResolved($tr, canon);
           } else if (window.receptorSelect2Data) {
@@ -1652,16 +1652,16 @@
               return;
             }
             var up = raw.toUpperCase();
-            if (window.MAPPER20_RESOLVE && window.MAPPER20_RESOLVE[up]) {
-              mapperTreeSetResolved($tr, window.MAPPER20_RESOLVE[up]);
+            if (window.MAPPER_CORE_RESOLVE && window.MAPPER_CORE_RESOLVE[up]) {
+              mapperTreeSetResolved($tr, window.MAPPER_CORE_RESOLVE[up]);
               return;
             }
             var known = window.receptorSelect2Data.some(function (x) {
               return String(x.id) === raw;
             });
             if (!known && raw) {
-              $tr.addClass('mapper20-row-invalid');
-              $tr.data('mapper20UnmatchedRaw', raw);
+              $tr.addClass('mapper-core-row-invalid');
+              $tr.data('mapperCoreUnmatchedRaw', raw);
             }
           }
         }
@@ -1671,13 +1671,13 @@
   }
 
   function mapperTreeCreateReceptorTd($td) {
-    var $hid = $('<input type="hidden" class="mapper20-receptor-entry" value="">');
-    var $wrap = $('<div class="mapper20-receptor-input-wrap is-empty">');
+    var $hid = $('<input type="hidden" class="mapper-core-receptor-entry" value="">');
+    var $wrap = $('<div class="mapper-core-receptor-input-wrap is-empty">');
     var $inp = $(
-      '<textarea class="form-control input-sm mapper20-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>'
+      '<textarea class="form-control input-sm mapper-core-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>'
     );
-    var $view = $('<div class="form-control input-sm mapper20-receptor-html-view" tabindex="0"></div>');
-    var $clr = $('<button type="button" class="mapper20-receptor-clear" aria-label="Clear receptor">&times;</button>');
+    var $view = $('<div class="form-control input-sm mapper-core-receptor-html-view" tabindex="0"></div>');
+    var $clr = $('<button type="button" class="mapper-core-receptor-clear" aria-label="Clear receptor">&times;</button>');
     $wrap.append($inp, $view, $clr);
     $td.append($hid, $wrap);
     $view.hide();
@@ -1688,10 +1688,10 @@
   }
 
   function mapperTreeRowBlank($tr) {
-    var entry = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
+    var entry = ($tr.find('.mapper-core-receptor-entry').val() || '').trim();
     var inner = (($tr.find('.mapper-tree-inner').val() || '') + '').trim();
-    var typed = (($tr.find('.mapper20-in-receptor').val() || '') + '').trim();
-    var unmatched = ($tr.data('mapper20UnmatchedRaw') || '') + '';
+    var typed = (($tr.find('.mapper-core-in-receptor').val() || '') + '').trim();
+    var unmatched = ($tr.data('mapperCoreUnmatchedRaw') || '') + '';
     var outerHas = ['.mapper-tree-o1', '.mapper-tree-o2', '.mapper-tree-o3', '.mapper-tree-o4'].some(function (sel) {
       return (($tr.find(sel).val() || '') + '').trim() !== '';
     });
@@ -1699,8 +1699,8 @@
   }
 
   function mapperTreeDestroyRowAc($tr) {
-    mapperTreeDestroyAc($tr.find('.mapper20-in-receptor'));
-    $tr.find('.mapper20-row-color-picker').each(function () {
+    mapperTreeDestroyAc($tr.find('.mapper-core-in-receptor'));
+    $tr.find('.mapper-core-row-color-picker').each(function () {
       mapperTreeDestroyRowColorSpectrum($(this));
     });
   }
@@ -1708,11 +1708,11 @@
   function mapperTreeAppendRow(skipTrail) {
     var tr = $('<tr>');
     tr.append(
-      $('<td class="mapper20-remove-cell is-remove-hidden">').append(
-        $('<button type="button" class="mapper20-remove-row" aria-label="Remove row">&times;</button>')
+      $('<td class="mapper-core-remove-cell is-remove-hidden">').append(
+        $('<button type="button" class="mapper-core-remove-row" aria-label="Remove row">&times;</button>')
       )
     );
-    var $tdR = $('<td class="mapper20-receptor-cell">');
+    var $tdR = $('<td class="mapper-core-receptor-cell">');
     var $inp = mapperTreeCreateReceptorTd($tdR);
     tr.append($tdR);
     tr.append(
@@ -1721,7 +1721,7 @@
       ).css('display', mapperTreeSpeciesActive ? 'table-cell' : 'none')
     );
     tr.append(
-      $('<td class="mapper-tree-cell-inner mapper20-value-cell">').append(
+      $('<td class="mapper-tree-cell-inner mapper-core-value-cell">').append(
         $('<input type="text" class="form-control input-sm mapper-tree-inner" autocomplete="off">')
       )
     );
@@ -1731,12 +1731,12 @@
         $outerInput.prop('disabled', true);
       }
       tr.append(
-        $('<td class="mapper-tree-outer-cell mapper20-value-cell">').append($outerInput)
+        $('<td class="mapper-tree-outer-cell mapper-core-value-cell">').append($outerInput)
       );
     });
     tr.append(
-      $('<td class="mapper20-swatch-cell">').append(
-        '<input type="text" class="mapper20-label-swatch mapper20-row-color-picker" readonly="readonly" aria-label="Label color">'
+      $('<td class="mapper-tree-swatch-cell">').append(
+        '<input type="text" class="mapper-tree-label-swatch mapper-core-row-color-picker" readonly="readonly" aria-label="Label color">'
       )
     );
     $('#mapper-tree-input-tbody').append(tr);
@@ -1814,13 +1814,13 @@
   var mapperTreeSortState = { col: null, dir: 'asc' };
 
   function mapperTreeUpdateSortHeaders() {
-    $('#mapper-tree-input-table th.mapper20-sortable-head').each(function () {
+    $('#mapper-tree-input-table th.mapper-core-sortable-head').each(function () {
       var $th = $(this);
       var col = $th.attr('data-mapper-tree-sort-col');
       var active = mapperTreeSortState.col === col;
       var dir = active ? mapperTreeSortState.dir : null;
       $th.attr('aria-sort', active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none');
-      $th.find('.mapper20-sort-indicator').text(active ? (dir === 'asc' ? '↑' : '↓') : '↕');
+      $th.find('.mapper-core-sort-indicator').text(active ? (dir === 'asc' ? '↑' : '↓') : '↕');
     });
   }
 
@@ -1829,10 +1829,10 @@
     $('#mapper-tree-input-tbody tr').each(function () {
       var $tr = $(this);
       rows.push({
-        entry: ($tr.find('.mapper20-receptor-entry').val() || '').trim(),
-        receptorText: (($tr.find('.mapper20-in-receptor').val() || '') + '').trim(),
-        unmatched: ($tr.data('mapper20UnmatchedRaw') || '') + '',
-        invalid: $tr.hasClass('mapper20-row-invalid'),
+        entry: ($tr.find('.mapper-core-receptor-entry').val() || '').trim(),
+        receptorText: (($tr.find('.mapper-core-in-receptor').val() || '') + '').trim(),
+        unmatched: ($tr.data('mapperCoreUnmatchedRaw') || '') + '',
+        invalid: $tr.hasClass('mapper-core-row-invalid'),
         inner: (($tr.find('.mapper-tree-inner').val() || '') + '').trim(),
         o1: (($tr.find('.mapper-tree-o1').val() || '') + '').trim(),
         o2: (($tr.find('.mapper-tree-o2').val() || '') + '').trim(),
@@ -1877,12 +1877,12 @@
         if ($specSel.data('select2')) { $specSel.trigger('change.select2'); }
       }
     } else {
-      var $inp = $tr.find('.mapper20-in-receptor');
+      var $inp = $tr.find('.mapper-core-in-receptor');
       $inp.val(row.receptorText || row.unmatched || '');
       if (row.unmatched) {
-        $tr.data('mapper20UnmatchedRaw', row.unmatched);
+        $tr.data('mapperCoreUnmatchedRaw', row.unmatched);
       }
-      $tr.toggleClass('mapper20-row-invalid', !!row.invalid);
+      $tr.toggleClass('mapper-core-row-invalid', !!row.invalid);
       mapperTreeSyncClearBtn($tr);
     }
     $tr.find('.mapper-tree-inner').val(row.inner || '');
@@ -1937,16 +1937,16 @@
   }
 
   function mapperTreeFocusReceptorCell($tr) {
-    var $inp = $tr.find('.mapper20-in-receptor:visible').first();
+    var $inp = $tr.find('.mapper-core-in-receptor:visible').first();
     if ($inp.length) {
       $inp.focus();
       return;
     }
-    $tr.find('.mapper20-receptor-html-view:visible').first().focus();
+    $tr.find('.mapper-core-receptor-html-view:visible').first().focus();
   }
 
   function mapperTreeFocusableCellsForRow($tr) {
-    var selectors = ['.mapper20-in-receptor:visible', '.mapper20-receptor-html-view:visible', '.mapper-tree-inner:visible'];
+    var selectors = ['.mapper-core-in-receptor:visible', '.mapper-core-receptor-html-view:visible', '.mapper-tree-inner:visible'];
     if (!mapperTreeIsTextMode()) {
       selectors.push('.mapper-tree-o1:visible', '.mapper-tree-o2:visible', '.mapper-tree-o3:visible', '.mapper-tree-o4:visible');
     }
@@ -1990,20 +1990,20 @@
   function mapperTreeSetDemoReceptor($tr, receptor) {
     var raw = String(receptor || '').trim();
     var resolved = null;
-    if (raw && window.mapper20ResolveEntry) {
-      resolved = window.mapper20ResolveEntry(raw);
+    if (raw && window.mapperTreeResolveEntry) {
+      resolved = window.mapperTreeResolveEntry(raw);
     }
-    if (!resolved && raw && window.MAPPER20_RESOLVE) {
-      resolved = window.MAPPER20_RESOLVE[raw.toUpperCase()] || null;
+    if (!resolved && raw && window.MAPPER_CORE_RESOLVE) {
+      resolved = window.MAPPER_CORE_RESOLVE[raw.toUpperCase()] || null;
     }
     if (resolved) {
       mapperTreeSetResolved($tr, resolved);
       return;
     }
-    $tr.find('.mapper20-in-receptor').val(raw);
-    $tr.find('.mapper20-receptor-entry').val('');
-    $tr.removeData('mapper20UnmatchedRaw');
-    $tr.removeClass('mapper20-row-invalid');
+    $tr.find('.mapper-core-in-receptor').val(raw);
+    $tr.find('.mapper-core-receptor-entry').val('');
+    $tr.removeData('mapperCoreUnmatchedRaw');
+    $tr.removeClass('mapper-core-row-invalid');
     mapperTreeSyncClearBtn($tr);
   }
 
@@ -2020,8 +2020,8 @@
       if (textMode) {
         $tr.find('.mapper-tree-inner').val(row.text || '');
         $tr.find('.mapper-tree-o1, .mapper-tree-o2, .mapper-tree-o3, .mapper-tree-o4').val('');
-        if (row.text && !window.MAPPER20_LABEL_COLORS[row.text]) {
-          window.MAPPER20_LABEL_COLORS[row.text] = mapperTreeDefaultHexForLabelKey(row.text);
+        if (row.text && !window.MAPPER_CORE_LABEL_COLORS[row.text]) {
+          window.MAPPER_CORE_LABEL_COLORS[row.text] = mapperTreeDefaultHexForLabelKey(row.text);
         }
       } else {
         var values = row.numeric || [];
@@ -2038,7 +2038,7 @@
     mapperTreeSyncRemoveButtons();
     mapperTreeCompactReceptorRowsAfterInput();
     mapperTreeSyncInnerHints();
-    $('#mapper-tree-clear-rows').removeClass('mapper20-clear-clean');
+    $('#mapper-tree-clear-rows').removeClass('mapper-core-clear-clean');
     if (!textMode) {
       mapperTreeApplyDemoColorPresets();
     }
@@ -2196,7 +2196,7 @@
   }
 
   function mapperBoot() {
-    $('.mapper20-booting').removeClass('mapper20-booting');
+    $('.mapper-core-booting').removeClass('mapper-core-booting');
     var boot = window.MAPPER_TREE_BOOT || {};
     ORIG_SKEL = boot.tree_skeleton;
     if (typeof ORIG_SKEL === 'string') {
@@ -2234,18 +2234,18 @@
         var dispText = stemU + ' ' + TAG;
         var nhoHtml = '<span>' + $('<span>').text(stemU).html() + ' <em>' + TAG + '</em></span>';
 
-        // Register MAPPER20_ENTRY_META for every individual species entry so that
+        // Register MAPPER_CORE_ENTRY_META for every individual species entry so that
         // whichever species is later picked in the dropdown, the cell always shows
         // "STEM (no human ortholog)" in all Receptor Names modes.
-        if (window.MAPPER20_ENTRY_META && !window.MAPPER20_ENTRY_META[nho.entry]) {
-          window.MAPPER20_ENTRY_META[nho.entry] = {
+        if (window.MAPPER_CORE_ENTRY_META && !window.MAPPER_CORE_ENTRY_META[nho.entry]) {
+          window.MAPPER_CORE_ENTRY_META[nho.entry] = {
             name_html:  nhoHtml,
             name_plain: dispText,
             uniprot:    dispText   // UniProt mode also shows "(no human ortholog)"
           };
         }
-        if (window.MAPPER20_RESOLVE) {
-          window.MAPPER20_RESOLVE[nho.entry.toUpperCase()] = nho.entry;
+        if (window.MAPPER_CORE_RESOLVE) {
+          window.MAPPER_CORE_RESOLVE[nho.entry.toUpperCase()] = nho.entry;
         }
 
         // Only one autocomplete item per stem (keyed on the first species entry)
@@ -2261,8 +2261,8 @@
             name_plain: dispText,
             name_html: nhoHtml
           });
-          if (window.MAPPER20_RESOLVE) {
-            window.MAPPER20_RESOLVE[stemU] = nho.entry;
+          if (window.MAPPER_CORE_RESOLVE) {
+            window.MAPPER_CORE_RESOLVE[stemU] = nho.entry;
           }
         }
       });
@@ -2424,7 +2424,7 @@
       'input.mapperTree blur.mapperTree change.mapperTree',
       '#mapper-tree-input-tbody input, #mapper-tree-input-tbody textarea',
       function () {
-        $('#mapper-tree-clear-rows').removeClass('mapper20-clear-clean');
+        $('#mapper-tree-clear-rows').removeClass('mapper-core-clear-clean');
         mapperTreeEnsureTrailingBlankRow();
         _treeCosmeticSyncDebounced.schedule();
         mapperTreeScheduleRedraw();
@@ -2435,25 +2435,25 @@
       mapperTreeDestroyAllRows();
       $('#mapper-tree-input-tbody').empty();
       $('#mapper-tree-messages').empty();
-      MAPPER20_MODE_SNAPSHOTS_TREE.numeric = null;
-      MAPPER20_MODE_SNAPSHOTS_TREE.categorical = null;
+      MAPPER_TREE_MODE_SNAPSHOTS.numeric = null;
+      MAPPER_TREE_MODE_SNAPSHOTS.categorical = null;
       mapperTreeAppendRow();
       mapperTreeCompactReceptorRowsAfterInput();
       mapperTreeSyncFirstRowPlaceholder();
       mapperTreeRedrawNow();
-      $('#mapper-tree-clear-rows').addClass('mapper20-clear-clean').blur();
+      $('#mapper-tree-clear-rows').addClass('mapper-core-clear-clean').blur();
     }
     function mapperTreeDoCurrentModeClear() {
       var curKey = mapperTreeIsTextMode() ? 'categorical' : 'numeric';
       mapperTreeDestroyAllRows();
       $('#mapper-tree-input-tbody').empty();
       $('#mapper-tree-messages').empty();
-      MAPPER20_MODE_SNAPSHOTS_TREE[curKey] = null;
+      MAPPER_TREE_MODE_SNAPSHOTS[curKey] = null;
       mapperTreeAppendRow();
       mapperTreeCompactReceptorRowsAfterInput();
       mapperTreeSyncFirstRowPlaceholder();
       mapperTreeRedrawNow();
-      $('#mapper-tree-clear-rows').addClass('mapper20-clear-clean').blur();
+      $('#mapper-tree-clear-rows').addClass('mapper-core-clear-clean').blur();
     }
     $('#mapper-tree-clear-whole').off('click.mapperTree').on('click.mapperTree', function(e) {
       e.preventDefault(); mapperTreeDoWholeTableClear();
@@ -2461,13 +2461,13 @@
     $('#mapper-tree-clear-mode').off('click.mapperTree').on('click.mapperTree', function(e) {
       e.preventDefault(); mapperTreeDoCurrentModeClear();
     });
-    $('.mapper20-clear-menu').on('click.mapperTree', '[data-tree-col]', function(e) {
+    $('.mapper-core-clear-menu').on('click.mapperTree', '[data-tree-col]', function(e) {
       e.preventDefault();
       var col = $(this).data('tree-col');
       $('#mapper-tree-input-tbody tr').each(function() {
         $(this).find('.mapper-tree-' + col).val('').trigger('input');
       });
-      $('#mapper-tree-clear-rows').removeClass('mapper20-clear-clean');
+      $('#mapper-tree-clear-rows').removeClass('mapper-core-clear-clean');
       mapperTreeScheduleRedraw();
     });
 
@@ -2526,29 +2526,29 @@
       });
 
     $('#mapper-tree-input-table')
-      .off('click.mapperTreeRemove', '.mapper20-remove-row')
-      .on('click.mapperTreeRemove', '.mapper20-remove-row', function () {
+      .off('click.mapperTreeRemove', '.mapper-core-remove-row')
+      .on('click.mapperTreeRemove', '.mapper-core-remove-row', function () {
         var $trRemove = $(this).closest('tr');
         if (mapperTreeRowBlank($trRemove) && $trRemove.is(':last-child')) {
           return;
         }
         mapperTreeDestroyRowAc($trRemove);
         $trRemove.remove();
-        $('#mapper-tree-clear-rows').removeClass('mapper20-clear-clean');
+        $('#mapper-tree-clear-rows').removeClass('mapper-core-clear-clean');
         mapperTreeEnsureTrailingBlankRow();
         _treeCosmeticSyncDebounced.schedule();
         mapperTreeScheduleRedraw();
       });
 
     $('#mapper-tree-input-table')
-      .off('click.mapperTreeSort', 'th.mapper20-sortable-head')
-      .on('click.mapperTreeSort', 'th.mapper20-sortable-head', function () {
+      .off('click.mapperTreeSort', 'th.mapper-core-sortable-head')
+      .on('click.mapperTreeSort', 'th.mapper-core-sortable-head', function () {
         mapperTreeSortSerializedRows($(this).attr('data-mapper-tree-sort-col'));
       });
 
     $('#mapper-tree-input-table')
-      .off('keydown.mapperTreeSort', 'th.mapper20-sortable-head')
-      .on('keydown.mapperTreeSort', 'th.mapper20-sortable-head', function (eSort) {
+      .off('keydown.mapperTreeSort', 'th.mapper-core-sortable-head')
+      .on('keydown.mapperTreeSort', 'th.mapper-core-sortable-head', function (eSort) {
         if (eSort.which === 13 || eSort.which === 32) {
           eSort.preventDefault();
           mapperTreeSortSerializedRows($(this).attr('data-mapper-tree-sort-col'));
@@ -2556,12 +2556,12 @@
       });
 
     $('#mapper-tree-input-table')
-      .off('keydown.mapperTreeTab', '.mapper20-in-receptor, .mapper20-receptor-html-view, .mapper-tree-inner, .mapper-tree-o1, .mapper-tree-o2, .mapper-tree-o3, .mapper-tree-o4')
-      .on('keydown.mapperTreeTab', '.mapper20-in-receptor, .mapper20-receptor-html-view, .mapper-tree-inner, .mapper-tree-o1, .mapper-tree-o2, .mapper-tree-o3, .mapper-tree-o4', function (eTab) {
+      .off('keydown.mapperTreeTab', '.mapper-core-in-receptor, .mapper-core-receptor-html-view, .mapper-tree-inner, .mapper-tree-o1, .mapper-tree-o2, .mapper-tree-o3, .mapper-tree-o4')
+      .on('keydown.mapperTreeTab', '.mapper-core-in-receptor, .mapper-core-receptor-html-view, .mapper-tree-inner, .mapper-tree-o1, .mapper-tree-o2, .mapper-tree-o3, .mapper-tree-o4', function (eTab) {
         if (eTab.which !== 9 || eTab.shiftKey) {
           return;
         }
-        if ($(this).hasClass('mapper20-in-receptor') && $(this).data('ui-autocomplete')) {
+        if ($(this).hasClass('mapper-core-in-receptor') && $(this).data('ui-autocomplete')) {
           var $menu = $(this).autocomplete('widget');
           if ($menu && $menu.is(':visible') && $menu.find('.ui-state-focus, .ui-state-active').length) {
             return;
@@ -2590,7 +2590,7 @@
           return;
         }
         ePz.preventDefault();
-        $('#mapper-tree-clear-rows').removeClass('mapper20-clear-clean');
+        $('#mapper-tree-clear-rows').removeClass('mapper-core-clear-clean');
         suppressRedraw = true;
         textPz.split(/\r?\n/).forEach(function (ln) {
           if (!ln.trim()) {
@@ -2602,12 +2602,12 @@
             $trPZ = $('#mapper-tree-input-tbody tr').last();
           }
           var ps = mapperTreePasteSplit(ln);
-          mapperTreeDestroyAc($trPZ.find('.mapper20-in-receptor'));
-          $trPZ.find('.mapper20-receptor-input-wrap .mapper20-in-receptor').remove();
+          mapperTreeDestroyAc($trPZ.find('.mapper-core-in-receptor'));
+          $trPZ.find('.mapper-core-receptor-input-wrap .mapper-core-in-receptor').remove();
           var $tx = $(
-            '<textarea class="form-control input-sm mapper20-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>'
+            '<textarea class="form-control input-sm mapper-core-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>'
           ).val(ps.r || '');
-          $trPZ.find('.mapper20-receptor-input-wrap').prepend($tx);
+          $trPZ.find('.mapper-core-receptor-input-wrap').prepend($tx);
           mapperTreeBindAc($tx);
 
           var restPZ = [];
@@ -2637,8 +2637,8 @@
           }
 
           var upU = ps.r ? ps.r.trim().toUpperCase() : '';
-          if (upU && window.MAPPER20_RESOLVE && window.MAPPER20_RESOLVE[upU]) {
-            mapperTreeSetResolved($trPZ, window.MAPPER20_RESOLVE[upU]);
+          if (upU && window.MAPPER_CORE_RESOLVE && window.MAPPER_CORE_RESOLVE[upU]) {
+            mapperTreeSetResolved($trPZ, window.MAPPER_CORE_RESOLVE[upU]);
           }
         });
         suppressRedraw = false;
@@ -2649,15 +2649,15 @@
       }
     );
 
-    if (typeof window.mapper20InitGpcromePickerModal === 'function') {
-      window.mapper20InitGpcromePickerModal({
-        pickerRows: $.isArray(window.MAPPER20_GPCROME_PICKER_ROWS) ? window.MAPPER20_GPCROME_PICKER_ROWS : [],
+    if (typeof window.mapperCoreInitGpcromePickerModal === 'function') {
+      window.mapperCoreInitGpcromePickerModal({
+        pickerRows: $.isArray(window.MAPPER_CORE_GPCROME_PICKER_ROWS) ? window.MAPPER_CORE_GPCROME_PICKER_ROWS : [],
         maxRows: MAPPER_TREE_MAX_ROWS,
         onAdd: function (entryIds, meta) {
           suppressRedraw = true;
           var isNumberMode = !mapperTreeIsTextMode();
           var numberMap = (meta && meta.groupNameById && isNumberMode)
-            ? window.mapper20BuildSequentialNumberMap(meta.groupNameById)
+            ? window.mapperCoreBuildSequentialNumberMap(meta.groupNameById)
             : null;
           for (var ix = 0; ix < (entryIds || []).length; ix++) {
             var idPz = entryIds[ix];
@@ -2678,7 +2678,7 @@
             }
           }
           suppressRedraw = false;
-          $('#mapper-tree-clear-rows').removeClass('mapper20-clear-clean');
+          $('#mapper-tree-clear-rows').removeClass('mapper-core-clear-clean');
           mapperTreeEnsureTrailingBlankRow();
           mapperTreeCompactReceptorRowsAfterInput();
           mapperTreeScheduleRedraw();
@@ -2690,24 +2690,24 @@
 
     /** Resume editing receptor from resolved HTML capsule (delegated once). */
     $(document)
-      .off('click.mapperTreeHtmlEdit', '#mapper-tree-input-tbody .mapper20-receptor-html-view')
+      .off('click.mapperTreeHtmlEdit', '#mapper-tree-input-tbody .mapper-core-receptor-html-view')
       .on(
         'click.mapperTreeHtmlEdit',
-        '#mapper-tree-input-tbody .mapper20-receptor-html-view',
+        '#mapper-tree-input-tbody .mapper-core-receptor-html-view',
         function () {
           var $trEv = $(this).closest('tr');
-          mapperTreeDestroyAc($trEv.find('.mapper20-in-receptor'));
-          var hidEv = ($trEv.find('.mapper20-receptor-entry').val() || '').trim();
+          mapperTreeDestroyAc($trEv.find('.mapper-core-in-receptor'));
+          var hidEv = ($trEv.find('.mapper-core-receptor-entry').val() || '').trim();
           $(this).hide().empty();
           var $inp2 = $(
-            '<textarea class="form-control input-sm mapper20-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>'
+            '<textarea class="form-control input-sm mapper-core-in-receptor" rows="1" autocomplete="off" spellcheck="false"></textarea>'
           );
           var seedEv = mapperTreeEditSeed(hidEv);
           $inp2.val(seedEv);
-          if (!seedEv) { $trEv.find('.mapper20-receptor-input-wrap').addClass('is-empty'); }
-          $trEv.find('.mapper20-receptor-input-wrap .mapper20-in-receptor').remove();
-          $trEv.find('.mapper20-receptor-input-wrap').prepend($inp2);
-          $trEv.find('.mapper20-receptor-entry').val('');
+          if (!seedEv) { $trEv.find('.mapper-core-receptor-input-wrap').addClass('is-empty'); }
+          $trEv.find('.mapper-core-receptor-input-wrap .mapper-core-in-receptor').remove();
+          $trEv.find('.mapper-core-receptor-input-wrap').prepend($inp2);
+          $trEv.find('.mapper-core-receptor-entry').val('');
           mapperTreeBindAc($inp2);
           $inp2.show().focus();
           window.setTimeout(function () {
@@ -2723,12 +2723,12 @@
     mapperTreeSyncClearDropdown();
   }
 
-  if (typeof window.mapper20ResolveEntry !== 'function' && window.MAPPER20_RESOLVE) {
-    window.mapper20ResolveEntry = function (raw) {
+  if (typeof window.mapperTreeResolveEntry !== 'function' && window.MAPPER_CORE_RESOLVE) {
+    window.mapperTreeResolveEntry = function (raw) {
       if (!raw || !String(raw).trim()) {
         return null;
       }
-      return window.MAPPER20_RESOLVE[String(raw).trim().toUpperCase()] || null;
+      return window.MAPPER_CORE_RESOLVE[String(raw).trim().toUpperCase()] || null;
     };
   }
 

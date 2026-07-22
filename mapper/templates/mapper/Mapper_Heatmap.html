@@ -7,246 +7,34 @@
 <link rel="stylesheet" href="{% static 'home/css/Spectrum_1_8_1.css' %}" type="text/css" />
 <link rel="stylesheet" href="{% static 'home/css/select2_4.1.0-rc.0._full.css' %}" type="text/css">
 <link rel="stylesheet" href="{% static 'home/css/NewDrugsBrowser_datatables.min.css' %}" type="text/css" />
-<style>
-/* Clear table dropdown */
-.mapper20-clear-menu { min-width: 180px; }
-.mapper20-clear-menu > li > a { padding: 4px 16px; }
-.mapper20-clear-menu > li > a:hover { background-color: #fdecea; color: #a94442; }
-.mapper20-clear-menu > li:first-child > a:hover { background-color: #a94442 !important; color: #fff !important; }
-/* ── Layout ─────────────────────────────────────────────────────────── */
-.mapper20-wheel-wrap { margin-bottom: 24px; }
-.mapper20-wheel-wrap.row { display: flex; flex-wrap: wrap; align-items: flex-start; }
-@media (min-width: 992px) {
-  .mapper20-wheel-primary-col.col-xs-12 { width: auto; float: none; flex: 0 1 auto; max-width: 100%; }
-  .mapper20-wheel-plot-col.col-xs-12    { width: auto; float: none; flex: 1 1 0; min-width: 0; }
-}
-@media (max-width: 991px) {
-  .mapper20-wheel-wrap.row { display: block; }
-  .mapper20-wheel-primary-col, .mapper20-wheel-plot-col { width: 100%; float: none; }
-  .mapper20-wheel-plot-col { margin-top: 20px; }
-}
-/* ── Left panel ─────────────────────────────────────────────────────── */
-.mapper20-wheel-left {
-  display: inline-block; width: max-content; max-width: 100%;
-  box-sizing: border-box; vertical-align: top; background: #fff;
-  border: 1px solid rgba(26,43,60,0.08); border-radius: 10px;
-  padding: 10px 10px 12px; box-shadow: 0 4px 14px rgba(26,43,60,0.05);
-  font-size: 11px; line-height: 1.35; color: #333;
-}
-.mapper20-wheel-left .table-responsive { width: max-content; max-width: 100%; }
-.mapper20-wheel-top-row {
-  display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px; row-gap: 4px;
-  position: relative; width: auto; max-width: 100%; box-sizing: border-box; margin-bottom: 8px; min-height: 28px;
-}
-.mapper20-wheel-page-title {
-  flex: 1 1 100%; min-width: 0; margin: 0; padding: 0; align-self: center;
-  text-align: center; white-space: nowrap; font-size: 14px; font-weight: 600; line-height: 1.2; color: #1a2b3c;
-}
-/* ── Toolbar ─────────────────────────────────────────────────────────── */
-.mapper20-wheel-toolbar-stack { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; width: max-content; max-width: 100%; }
-.mapper20-wheel-toolbar-grid  { display: flex; flex-direction: column; row-gap: 6px; width: 510px; max-width: 100%; }
-.mapper20-wheel-toolbar-stack .mapper20-wheel-toolbar { margin-bottom: 0; }
-.mapper20-wheel-toolbar {
-  display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: center; margin-bottom: 8px;
-}
-.mapper20-wheel-toolbar .btn { font-size: 12px; padding: 4px 10px; line-height: 1.35; }
-.mapper20-wheel-toolbar .btn-primary, .mapper20-wheel-toolbar .btn-default {
-  color: #fff; background-color: #337ab7; border-color: #2e6da4;
-}
-.mapper20-wheel-toolbar .btn-primary:hover, .mapper20-wheel-toolbar .btn-default:hover {
-  color: #fff; background-color: #286090; border-color: #204d74;
-}
-.mapper20-wheel-toolbar #mapper-heatmap-howto-btn {
-  color: #fff; background-color: #f0ad4e; border-color: #eea236; font-weight: 700; padding-left: 7px; padding-right: 7px;
-}
-.mapper20-wheel-toolbar #mapper-heatmap-howto-btn:hover { color: #fff; background-color: #ec971f; border-color: #d58512; }
-.mapper20-howto-mark {
-  display: inline-flex; position: relative; top: -1px; align-items: center; justify-content: center;
-  width: 11px; height: 11px; margin-left: 3px; border: 1px solid currentColor; border-radius: 50%;
-  font-size: 8px; line-height: 1; font-weight: 700;
-}
-.mapper20-wheel-toolbar #mapper-heatmap-clear-rows:not(.mapper20-clear-clean):hover { color: #fff; background-color: #a94442; border-color: #843534; }
-.mapper20-wheel-toolbar #mapper-heatmap-clear-rows.mapper20-clear-clean, .mapper20-wheel-toolbar #mapper-heatmap-clear-rows:focus {
-  color: #fff; background-color: #337ab7; border-color: #2e6da4; outline: none;
-}
-/* ── Input data label + static Numerical badge ─────────────────────── */
-.mapper20-input-mode-wrap { display: inline-flex; flex-direction: row; align-items: center; gap: 5px; }
-.mapper20-input-mode-label { font-size: 13px; font-weight: 600; color: #555; line-height: 1; user-select: none; white-space: nowrap; }
-/* ── Left panel overrides ───────────────────────────────────────────── */
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-primary-col { flex: 0 0 auto; min-width: 0; }
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-plot-col { flex: 1 1 0; min-width: 0; }
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left {
-  display: block; width: 100%; max-width: min(550px, calc(100vw - 48px)); box-sizing: border-box;
-}
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left .table-responsive {
-  width: max-content; max-width: 100%; padding-left: 14px; overflow: visible;
-}
-/* ── Input table ─────────────────────────────────────────────────────── */
-.mapper20-wheel-left .table { margin-bottom: 8px; font-size: 11px; }
-.mapper20-wheel-left .table thead th { border-bottom-width: 1px; padding: 4px 5px; }
-.mapper20-wheel-left .table tbody td { padding: 3px 4px; vertical-align: middle; }
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table {
-  table-layout: fixed; width: 510px; max-width: 100%; border-collapse: collapse;
-}
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table thead th,
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table tbody td {
-  box-sizing: border-box; overflow: hidden; word-wrap: break-word; word-break: break-word;
-}
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table th.mapper20-th-remove,
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table td.mapper20-remove-cell {
-  position: relative; width: 0; max-width: 0; padding: 0 !important; border: 0 !important;
-  background: transparent !important; overflow: visible; text-align: center; vertical-align: middle !important;
-}
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table th.mapper20-th-receptor,
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table td.mapper20-receptor-cell {
-  min-width: 165px;
-}
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table th.mapper-heatmap-val-h,
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table td.mapper-heatmap-val-cell {
-  width: 65px;
-}
-/* Species column */
-.mapper20-wheel-wrap.mapper-heatmap-page #mapper-heatmap-input-table .mapper-heatmap-species-h,
-.mapper20-wheel-wrap.mapper-heatmap-page #mapper-heatmap-input-table .mapper-heatmap-species-cell {
-  width: 88px; min-width: 88px; max-width: 88px;
-}
-/* Species-active: wider panel + table */
-.mapper20-wheel-wrap.mapper-heatmap-page.mapper-heatmap-species-active .mapper20-wheel-left {
-  max-width: min(660px, calc(100vw - 48px));
-}
-.mapper20-wheel-wrap.mapper-heatmap-page.mapper-heatmap-species-active #mapper-heatmap-input-table {
-  width: 598px; /* 510 + 88 */
-}
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table tbody td.mapper20-receptor-cell,
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table tbody td.mapper20-value-cell {
-  max-width: 0;
-}
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table tbody td.mapper20-receptor-cell { vertical-align: top; }
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table tbody td.mapper20-value-cell  { vertical-align: middle; }
-/* Critical: counteract max-width:0 on <td> */
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table .form-control.input-sm {
-  display: block; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box;
-}
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table .mapper-heatmap-val.form-control.input-sm {
-  height: 26px; padding: 2px 6px; font-size: 11px; line-height: 1.3; text-align: center;
-}
-/* Compact receptor */
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table textarea.mapper20-in-receptor.form-control.input-sm {
-  height: auto; min-height: 44px; max-height: 200px; padding: 4px 6px; font-size: 11px; line-height: 1.38;
-  resize: vertical; overflow-x: hidden; overflow-y: hidden; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word;
-}
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table.mapper20-receptors-compact textarea.mapper20-in-receptor.form-control.input-sm {
-  min-height: 26px; max-height: 26px; height: 26px; padding-top: 2px; padding-bottom: 2px; line-height: 1.3;
-  resize: none; overflow-x: auto; overflow-y: hidden; white-space: nowrap;
-}
-.mapper20-wheel-wrap.mapper-heatmap-page .mapper20-wheel-left #mapper-heatmap-input-table.mapper20-receptors-compact .mapper20-receptor-html-view {
-  min-height: 26px; max-height: 26px; height: 26px; overflow: hidden;
-}
-/* Center val column headers */
-#mapper-heatmap-input-table thead th.mapper-heatmap-val-h { text-align: center !important; }
-/* Placeholder + orange border on first row */
-.mapper20-in-receptor::placeholder, .mapper20-in-receptor::-webkit-input-placeholder,
-.mapper20-in-receptor::-moz-placeholder, .mapper20-in-receptor:-ms-input-placeholder {
-  color: #8a9399; opacity: 1; white-space: pre-line;
-}
-#mapper-heatmap-input-tbody tr:first-child .mapper20-receptor-input-wrap.is-empty .mapper20-in-receptor { border-color: #e0892e !important; }
-/* Receptor controls */
-.mapper20-remove-row {
-  width: 17px; height: 17px; margin: 0; padding: 0; border: 1px solid rgba(169,68,66,0.35);
-  border-radius: 50%; background: #fff; color: #a94442; font-size: 14px; line-height: 14px; cursor: pointer;
-  box-shadow: 0 1px 3px rgba(26,43,60,0.12); position: absolute; top: 50%; right: 3px; transform: translateY(-50%);
-}
-.mapper20-remove-row:hover, .mapper20-remove-row:focus { color: #fff; border-color: #a94442; background: #a94442; outline: none; }
-.mapper20-remove-cell.is-remove-hidden .mapper20-remove-row { visibility: hidden; pointer-events: none; }
-.mapper20-sortable-head { cursor: pointer; position: relative; padding-right: 18px; user-select: none; }
-.mapper20-sort-indicator { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); color: #666; font-size: 10px; line-height: 1; }
-.mapper20-receptor-input-wrap { position: relative; width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
-.mapper20-receptor-clear {
-  display: block; position: absolute; top: 4px; right: 3px; z-index: 2; width: 18px; height: 18px;
-  margin: 0; padding: 0; border: 0; background: transparent; line-height: 16px; font-size: 16px;
-  font-weight: 400; color: #8a9399; cursor: pointer; border-radius: 2px;
-}
-.mapper20-receptor-clear:hover, .mapper20-receptor-clear:focus { color: #333; background: rgba(0,0,0,0.05); outline: none; }
-.mapper20-receptor-input-wrap.is-empty .mapper20-receptor-clear { display: none; }
-.mapper20-receptor-html-view {
-  display: none; cursor: text; min-height: 44px; height: auto; max-width: 100%;
-  overflow: hidden; white-space: normal; word-break: break-word;
-}
-.mapper20-receptor-html-view:focus { outline: thin dotted #333; outline-offset: 1px; }
-.mapper20-receptor-html-view:not(:empty) { padding-top: 5px; padding-bottom: 5px; }
-.mapper20-receptor-input-wrap .mapper20-in-receptor, .mapper20-receptor-input-wrap .mapper20-receptor-html-view { padding-right: 26px; }
-.mapper20-wheel-left .mapper20-receptor-ac-menu.ui-autocomplete { z-index: 4000; max-height: 224px; overflow-y: auto; overflow-x: hidden; }
-.mapper20-wheel-left .mapper20-receptor-ac-menu .ui-menu-item { padding: 0; margin: 0; }
-.mapper20-wheel-left .mapper20-receptor-ac-menu .mapper20-ac-item-label { padding: 4px 8px; font-size: 11px; line-height: 1.35; }
-.mapper20-input-table tbody tr.mapper20-row-invalid td.mapper20-receptor-cell { border: 2px solid #a94442 !important; background-color: rgba(169,68,66,0.06); }
-/* Messages */
-#mapper-heatmap-messages { margin-top: 8px; font-size: 10px; max-height: 160px; overflow: auto; color: #a94442; }
-#mapper-heatmap-messages:empty { display: none; }
-/* Picker modal */
-#mapper20-gpcrome-picker-modal { padding-top: 30px !important; }
-#mapper20-gpcrome-picker-modal .modal-dialog { width: 95%; max-width: 1200px; margin: 0 auto; }
-#mapper20-gpcrome-picker-modal table.dataTable { font-size: 12px; }
-#mapper20-gpcrome-picker-modal .select2-container--open .select2-dropdown { z-index: 2060 !important; }
-#mapper20-gpcrome-picker-modal #mapper20-picker-filter-row th { padding: 3px 2px; }
-#mapper20-gpcrome-picker-modal .modal-content { display: flex; flex-direction: column; max-height: calc(100vh - 20px); }
-#mapper20-gpcrome-picker-modal .modal-body { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
-.mapper20-picker-gpcrdb-label { white-space: nowrap; }
-/* Right panel */
-.mapper20-plot-panel { background: transparent; border-radius: 12px; padding: 8px 8px 16px; border: none; max-width: 100%; box-sizing: border-box; }
-.mapper-heatmap-plot-toolbar {
-  display: flex; justify-content: center; align-items: center; gap: 12px;
-  flex-wrap: wrap; font-size: 11px; margin-bottom: 8px; padding-top: 8px;
-}
-.mapper-heatmap-plot-toolbar .dropdown-toggle { font-size: 13px; line-height: 1.35; }
-.mapper-heatmap-plot-wrap { margin-top: 8px; width: 100%; max-width: 100%; overflow-x: auto; text-align: center; }
-.mapper-heatmap-plot-placeholder {
-  box-sizing: border-box; margin: 0 auto; max-width: 560px; min-height: clamp(240px, 40vh, 480px);
-  padding: 28px 20px; border: 1px dashed rgba(26,43,60,0.18); border-radius: 12px;
-  background: linear-gradient(180deg, #fafcfd 0%, #f5f8fb 100%); color: #4a5f73;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 10px;
-}
-.mapper-heatmap-plot-placeholder-title { margin: 0; font-size: 14px; font-weight: 600; color: #1a2b3c; }
-.mapper-heatmap-plot-placeholder-hint  { margin: 0; font-size: 12px; line-height: 1.45; max-width: 420px; }
-/* Colors dropdown */
-.mapper-heatmap-color-picker-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.mapper-heatmap-color-label-row  { display: flex; gap: 8px; justify-content: flex-end; font-size: 11px; margin-bottom: 3px; }
-.mapper-heatmap-color-label-row div, .mapper-heatmap-color-picker-row > div { width: 72px; text-align: center; }
-/* Loading overlay */
-.mapper20-wheel-wrap .mapper20-wheel-left { position: relative; }
-.mapper20-boot-overlay {
-  display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-  z-index: 10; background: rgba(255,255,255,0.80); border-radius: 10px;
-  align-items: center; justify-content: center; font-size: 13px; color: #666;
-  pointer-events: all;
-}
-.mapper20-booting .mapper20-boot-overlay { display: flex; }
-</style>
+<link rel="stylesheet" href="{% static 'home/css/data_mapper/core.css' %}" type="text/css" />
+<link rel="stylesheet" href="{% static 'home/css/data_mapper/heatmap.css' %}" type="text/css" />
 {% endblock %}
 
 {% block content %}
-<div class="mapper20-wheel-wrap row mapper-heatmap-page mapper20-booting">
-  <div class="col-xs-12 mapper20-wheel-primary-col">
-    <div class="mapper20-wheel-left">
-      <div class="mapper20-boot-overlay">Loading…</div>
-      <div class="mapper20-wheel-top-row">
-        <h2 class="mapper20-wheel-page-title">Heatmap</h2>
+<div class="mapper-core-wheel-wrap row mapper-heatmap-page mapper-core-booting">
+  <div class="col-xs-12 mapper-core-wheel-primary-col">
+    <div class="mapper-core-wheel-left">
+      <div class="mapper-core-boot-overlay">Loading…</div>
+      <div class="mapper-core-wheel-top-row">
+        <h2 class="mapper-core-wheel-page-title">Heatmap</h2>
       </div>
-      <div class="mapper20-wheel-toolbar-stack" style="width:100%;">
-        <div class="mapper20-wheel-toolbar" aria-label="Mapper heatmap tools" style="justify-content:center;">
+      <div class="mapper-core-wheel-toolbar-stack" style="width:100%;">
+        <div class="mapper-core-wheel-toolbar" aria-label="Mapper heatmap tools" style="justify-content:center;">
           <button type="button" class="btn btn-default btn-xs" id="mapper-heatmap-howto-btn"
                   data-toggle="modal" data-target="#mapper-heatmap-howto-modal"
                   title="How to use the heatmap mapper">
-            How to<span class="mapper20-howto-mark" aria-hidden="true">?</span>
+            How to<span class="mapper-core-howto-mark" aria-hidden="true">?</span>
           </button>
           <button type="button" class="btn btn-default btn-xs" id="mapper-heatmap-demo-rows">Demo</button>
           <button type="button" class="btn btn-default btn-xs" id="mapper-heatmap-species-toggle">Species</button>
           <button type="button" class="btn btn-primary btn-xs" id="mapper-heatmap-open-picker"
-                  data-toggle="modal" data-target="#mapper20-gpcrome-picker-modal">Receptor lookup</button>
+                  data-toggle="modal" data-target="#mapper-core-gpcrome-picker-modal">Receptor lookup</button>
           <div class="dropdown" style="position:relative;">
             <button type="button" class="btn btn-default btn-xs dropdown-toggle" data-toggle="dropdown" id="mapper-heatmap-clear-rows">
               Clear <span class="caret"></span>
             </button>
-            <ul class="dropdown-menu mapper20-clear-menu">
+            <ul class="dropdown-menu mapper-core-clear-menu">
               <li><a href="#" id="mapper-heatmap-clear-whole">Whole table</a></li>
               <li class="divider"></li>
               <li><a href="#" data-heatmap-col="val1">Column 1</a></li>
@@ -260,13 +48,13 @@
         </div>
       </div>
       <div class="table-responsive">
-        <table class="table table-bordered table-condensed mapper20-input-table" id="mapper-heatmap-input-table">
+        <table class="table table-bordered table-condensed mapper-core-input-table" id="mapper-heatmap-input-table">
           <thead>
             <tr>
-              <th class="mapper20-th-remove" aria-label="Remove row"></th>
-              <th class="mapper20-th-receptor mapper20-sortable-head" data-mapper-heatmap-sort-col="receptor" tabindex="0" role="button" aria-sort="none">Receptor <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
+              <th class="mapper-core-th-remove" aria-label="Remove row"></th>
+              <th class="mapper-core-th-receptor mapper-core-sortable-head" data-mapper-heatmap-sort-col="receptor" tabindex="0" role="button" aria-sort="none">Receptor <span class="mapper-core-sort-indicator" aria-hidden="true"></span></th>
               <th class="mapper-heatmap-species-h" style="display:none;">Species</th>
-              <th class="mapper-heatmap-val-h mapper20-sortable-head" data-mapper-heatmap-sort-col="val1" tabindex="0" role="button" aria-sort="none">Col 1 <span class="mapper20-sort-indicator" aria-hidden="true"></span></th>
+              <th class="mapper-heatmap-val-h mapper-core-sortable-head" data-mapper-heatmap-sort-col="val1" tabindex="0" role="button" aria-sort="none">Col 1 <span class="mapper-core-sort-indicator" aria-hidden="true"></span></th>
               <th class="mapper-heatmap-val-h" data-mapper-heatmap-sort-col="val2">Col 2</th>
               <th class="mapper-heatmap-val-h" data-mapper-heatmap-sort-col="val3">Col 3</th>
               <th class="mapper-heatmap-val-h" data-mapper-heatmap-sort-col="val4">Col 4</th>
@@ -280,8 +68,8 @@
     </div>
   </div>
 
-  <div class="col-xs-12 mapper20-wheel-plot-col">
-    <div class="mapper20-plot-panel">
+  <div class="col-xs-12 mapper-core-wheel-plot-col">
+    <div class="mapper-core-plot-panel">
       <div class="mapper-heatmap-plot-toolbar" aria-label="Heatmap plot toolbar">
 
         <!-- Receptor names -->
@@ -295,7 +83,7 @@
         </div>
 
         <!-- Species names (only when species toggle is on) -->
-        <div id="mapper-heatmap-species-names-wrap" style="display:none; position:relative;" class="dropdown mapper20-dropdown-anchor-topleft">
+        <div id="mapper-heatmap-species-names-wrap" style="display:none; position:relative;" class="dropdown mapper-core-dropdown-anchor-topleft">
           <button type="button" class="btn btn-primary dropdown-toggle btn-sm" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Species names</button>
           <div class="dropdown-menu" style="min-width:160px; padding:10px 14px; left:100%; top:50%; margin-left:5px; position:absolute; transform:translateY(-30%); font-size:11px;">
             <button class="btn btn-primary btn-block mb-1 mapper-heatmap-species-name-btn" data-value="common">Common name</button>
@@ -305,9 +93,9 @@
         </div>
 
         <!-- Colors -->
-        <div class="dropdown mapper20-dropdown-anchor-topleft" style="position:relative;">
+        <div class="dropdown mapper-core-dropdown-anchor-topleft" style="position:relative;">
           <button type="button" class="btn btn-primary dropdown-toggle btn-sm" data-toggle="dropdown">Colors</button>
-          <div class="dropdown-menu dropdown-menu-listplot mapper20-dropdown-menu-topleft"
+          <div class="dropdown-menu dropdown-menu-listplot mapper-core-dropdown-menu-topleft"
                style="min-width:420px; padding:10px 15px; left:100%; margin-left:5px; position:absolute;">
             <div style="display:flex; gap:20px; align-items:flex-start; padding:5px 0;">
               <div>
@@ -336,9 +124,9 @@
         </div>
 
         <!-- Layout -->
-        <div class="dropdown mapper20-dropdown-anchor-topleft" style="position:relative;">
+        <div class="dropdown mapper-core-dropdown-anchor-topleft" style="position:relative;">
           <button type="button" class="btn btn-primary dropdown-toggle btn-sm" data-toggle="dropdown">Layout</button>
-          <div class="dropdown-menu dropdown-menu-listplot mapper20-dropdown-menu-topleft"
+          <div class="dropdown-menu dropdown-menu-listplot mapper-core-dropdown-menu-topleft"
                style="min-width:240px; padding:12px 15px; left:100%; margin-left:5px; position:absolute; font-size:12px;">
             <strong style="display:block; margin-bottom:8px; border-bottom:1px solid #ddd; padding-bottom:5px;">Labels</strong>
             <div style="display:flex; align-items:center; margin-bottom:8px;">
@@ -377,9 +165,9 @@
         </div>
 
         <!-- Labels -->
-        <div class="dropdown mapper20-dropdown-anchor-topleft" style="position:relative;">
+        <div class="dropdown mapper-core-dropdown-anchor-topleft" style="position:relative;">
           <button type="button" class="btn btn-primary dropdown-toggle btn-sm" data-toggle="dropdown">Column labels</button>
-          <div class="dropdown-menu dropdown-menu-listplot mapper20-dropdown-menu-topleft"
+          <div class="dropdown-menu dropdown-menu-listplot mapper-core-dropdown-menu-topleft"
                style="min-width:280px; padding:10px 14px; right:0; left:auto; position:absolute; font-size:11px;">
             <div style="font-weight:600; margin-bottom:8px; border-bottom:1px solid #ddd; padding-bottom:5px;">Dataset label text</div>
             <div style="display:flex; flex-direction:column; gap:5px;">
@@ -450,23 +238,23 @@
 </div>
 
 <!-- Receptor lookup modal (shared) -->
-<div class="modal fade" id="mapper20-gpcrome-picker-modal" tabindex="-1" role="dialog">
+<div class="modal fade" id="mapper-core-gpcrome-picker-modal" tabindex="-1" role="dialog">
   <div class="modal-dialog" role="document">
     <div class="modal-content">
       <div class="modal-header">
-        <button type="button" class="close" id="mapper20-gpcrome-picker-dismiss-x" data-dismiss="modal"><span>&times;</span></button>
+        <button type="button" class="close" id="mapper-core-gpcrome-picker-dismiss-x" data-dismiss="modal"><span>&times;</span></button>
         <h4 class="modal-title">Select receptors</h4>
       </div>
       <div class="modal-body">
         <div style="overflow-x:auto;">
-          <table width="100%" class="display compact" id="mapper20-gpcrome-picker-table">
+          <table width="100%" class="display compact" id="mapper-core-gpcrome-picker-table">
             <thead>
               <tr>
-                <th data-dt-order="disable"><input type="checkbox" id="mapper20-gpcrome-picker-select-all" title="Select all filtered rows"></th>
-                <th class="mapper20-picker-gpcrdb-label" data-dt-order="disable">GPCRdb</th>
+                <th data-dt-order="disable"><input type="checkbox" id="mapper-core-gpcrome-picker-select-all" title="Select all filtered rows"></th>
+                <th class="mapper-core-picker-gpcrdb-label" data-dt-order="disable">GPCRdb</th>
                 <th>GtoPdb</th><th>Gene</th><th>UniProt</th><th>family</th><th>class</th>
               </tr>
-              <tr id="mapper20-picker-filter-row">
+              <tr id="mapper-core-picker-filter-row">
                 <th></th><th></th><th></th><th></th><th></th><th></th><th></th>
               </tr>
             </thead>
@@ -475,18 +263,18 @@
       </div>
       <div class="modal-footer" style="display:flex; align-items:center; justify-content:space-between;">
         <div class="dropdown" style="position:relative;">
-          <button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown"><span class="mapper20-picker-assign-toggle-label">Assign value: None</span> <span class="caret"></span></button>
-          <div class="dropdown-menu p-2" id="mapper20-gpcrome-picker-assign-menu" style="min-width:220px; padding:10px 15px; bottom:100%; top:auto;">
+          <button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown"><span class="mapper-core-picker-assign-toggle-label">Assign value: None</span> <span class="caret"></span></button>
+          <div class="dropdown-menu p-2" id="mapper-core-gpcrome-picker-assign-menu" style="min-width:220px; padding:10px 15px; bottom:100%; top:auto;">
             <div style="font-weight:bold; margin-bottom:4px;">Value</div>
-            <button type="button" class="btn btn-primary btn-block btn-sm mb-1 mapper20-picker-assign-src" data-src="none">None</button>
-            <button type="button" class="btn btn-outline-primary btn-block btn-sm mb-1 mapper20-picker-assign-src" data-src="class">Class</button>
-            <button type="button" class="btn btn-outline-primary btn-block btn-sm mb-1 mapper20-picker-assign-src" data-src="ligandtype">Chemotype</button>
-            <button type="button" class="btn btn-outline-primary btn-block btn-sm mapper20-picker-assign-src" data-src="family">Receptor family</button>
+            <button type="button" class="btn btn-primary btn-block btn-sm mb-1 mapper-core-picker-assign-src" data-src="none">None</button>
+            <button type="button" class="btn btn-outline-primary btn-block btn-sm mb-1 mapper-core-picker-assign-src" data-src="class">Class</button>
+            <button type="button" class="btn btn-outline-primary btn-block btn-sm mb-1 mapper-core-picker-assign-src" data-src="ligandtype">Chemotype</button>
+            <button type="button" class="btn btn-outline-primary btn-block btn-sm mapper-core-picker-assign-src" data-src="family">Receptor family</button>
           </div>
         </div>
         <div>
-          <button type="button" class="btn btn-default" data-dismiss="modal" id="mapper20-gpcrome-picker-cancel">Cancel</button>
-          <button type="button" class="btn btn-primary" id="mapper20-gpcrome-picker-add">Add to table</button>
+          <button type="button" class="btn btn-default" data-dismiss="modal" id="mapper-core-gpcrome-picker-cancel">Cancel</button>
+          <button type="button" class="btn btn-primary" id="mapper-core-gpcrome-picker-add">Add to table</button>
         </div>
       </div>
     </div>
@@ -509,7 +297,7 @@
 <script src="{% static 'home/js/xlsx.full.min.js' %}"></script>
 
 <script>
-$('.dropdown-menu:not(.mapper20-clear-menu)').on('click', function(e){ e.stopPropagation(); });
+$('.dropdown-menu:not(.mapper-core-clear-menu)').on('click', function(e){ e.stopPropagation(); });
 $('.dropdown-menu input[type="range"]').on('mouseenter pointerdown', function() { this.focus(); });
 // Download dropdown manual toggle
 (function(){
@@ -522,18 +310,18 @@ $('.dropdown-menu input[type="range"]').on('mouseenter pointerdown', function() 
 })();
 
 var receptorSelect2Data = {{ receptor_select2_json|safe }};
-var MAPPER20_RESOLVE    = {{ gpcrome_resolve_json|safe }};
-var MAPPER20_GPCROME_PICKER_ROWS    = {{ gpcrome_picker_rows_json|safe }};
+var MAPPER_CORE_RESOLVE    = {{ gpcrome_resolve_json|safe }};
+var MAPPER_CORE_GPCROME_PICKER_ROWS    = {{ gpcrome_picker_rows_json|safe }};
 window.MAPPER_HEATMAP_SPECIES_DATA  = {{ ortholog_species_json|safe }};
 
-window.MAPPER20_ENTRY_META = {};
+window.MAPPER_CORE_ENTRY_META = {};
 (function(){
   if (receptorSelect2Data && receptorSelect2Data.length) {
     receptorSelect2Data.forEach(function(item){
       var uni = item.uniprot != null ? String(item.uniprot).trim().toUpperCase() : '';
       if (!uni && item.id && String(item.id).indexOf('_') !== -1) uni = String(item.id).split('_')[0].trim().toUpperCase();
       else if (!uni && item.id) uni = String(item.id).trim().toUpperCase();
-      window.MAPPER20_ENTRY_META[item.id] = {
+      window.MAPPER_CORE_ENTRY_META[item.id] = {
         name_html:  item.name_html  || '',
         name_plain: item.name_plain || '',
         text:       item.text       || '',
@@ -557,12 +345,12 @@ function mapperHeatmapDownloadTable() {
   var rows = [headers];
   $('#mapper-heatmap-input-tbody tr').each(function() {
     var $tr = $(this);
-    var entryId = ($tr.find('.mapper20-receptor-entry').val() || '').trim();
-    var unmatched = $tr.data('mapper20UnmatchedRaw');
-    var ta = ($tr.find('.mapper20-in-receptor').val() || '').trim();
+    var entryId = ($tr.find('.mapper-core-receptor-entry').val() || '').trim();
+    var unmatched = $tr.data('mapperCoreUnmatchedRaw');
+    var ta = ($tr.find('.mapper-core-in-receptor').val() || '').trim();
     var receptor = '';
-    if (entryId && window.MAPPER20_ENTRY_META && window.MAPPER20_ENTRY_META[entryId]) {
-      receptor = window.MAPPER20_ENTRY_META[entryId].name_plain || window.MAPPER20_ENTRY_META[entryId].text || entryId;
+    if (entryId && window.MAPPER_CORE_ENTRY_META && window.MAPPER_CORE_ENTRY_META[entryId]) {
+      receptor = window.MAPPER_CORE_ENTRY_META[entryId].name_plain || window.MAPPER_CORE_ENTRY_META[entryId].text || entryId;
     } else if (unmatched != null && String(unmatched).trim()) {
       receptor = String(unmatched).trim();
     } else {
