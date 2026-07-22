@@ -1055,6 +1055,20 @@
     _treeRedrawDebounced.schedule();
   }
 
+  // Batches the full-table cosmetic syncs triggered by the two hottest, highest-frequency
+  // actions (typing in a value cell, deleting a row) so they run once per debounce window
+  // instead of once per keystroke/click at large row counts. Structural row-count upkeep
+  // (mapperTreeEnsureTrailingBlankRow) stays synchronous — it's already bounded to the last
+  // two rows, not a full-table scan. Every other call site of these sync functions
+  // (restore, demo-fill, paste, clear) is untouched and keeps calling them directly.
+  var _treeCosmeticSyncDebounced = MapperPageCore.debounce(function () {
+    mapperTreeRefreshInnerSwatches();
+    mapperTreeSyncInnerHints();
+    mapperTreeSyncRemoveButtons();
+    mapperTreeCompactReceptorRowsAfterInput();
+    mapperTreeSyncFirstRowPlaceholder();
+  }, DEBOUNCE_MS);
+
   // ── Mode snapshots ──────────────────────────────────────────────────────
   var MAPPER20_MODE_SNAPSHOTS_TREE = { numeric: null, categorical: null };
 
@@ -2412,11 +2426,7 @@
       function () {
         $('#mapper-tree-clear-rows').removeClass('mapper20-clear-clean');
         mapperTreeEnsureTrailingBlankRow();
-        mapperTreeRefreshInnerSwatches();
-        mapperTreeSyncInnerHints();
-        mapperTreeSyncRemoveButtons();
-        mapperTreeCompactReceptorRowsAfterInput();
-        mapperTreeSyncFirstRowPlaceholder();
+        _treeCosmeticSyncDebounced.schedule();
         mapperTreeScheduleRedraw();
       }
     );
@@ -2526,8 +2536,7 @@
         $trRemove.remove();
         $('#mapper-tree-clear-rows').removeClass('mapper20-clear-clean');
         mapperTreeEnsureTrailingBlankRow();
-        mapperTreeRefreshInnerSwatches();
-        mapperTreeCompactReceptorRowsAfterInput();
+        _treeCosmeticSyncDebounced.schedule();
         mapperTreeScheduleRedraw();
       });
 

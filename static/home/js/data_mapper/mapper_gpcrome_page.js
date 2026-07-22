@@ -1586,18 +1586,30 @@ function mapper20AutoSizeReceptorTextarea($ta) {
   });
 }
 
+// Set once the compact-mode full-table cleanup below has run with nothing left to clean —
+// avoids re-touching every row's textarea style on every keystroke once the table has
+// settled into compact mode (that pass was a no-op past the initial tall->compact
+// transition, but still forced a layout reflow across every row each time it ran).
+var mapper20ReceptorTextareaCompactClean = false;
+
 function mapper20SyncReceptorTextareaHeights() {
   $('#mapper20-input-table').toggleClass('mapper20-receptors-compact', !mapper20ReceptorTallPlaceholderIntro);
-  $('#mapper20-input-tbody .mapper20-in-receptor').each(function() {
-    var el = this;
-    if (mapper20ReceptorTallPlaceholderIntro) {
-      el.style.overflowY = '';
+  if (mapper20ReceptorTallPlaceholderIntro) {
+    mapper20ReceptorTextareaCompactClean = false;
+    $('#mapper20-input-tbody .mapper20-in-receptor').each(function() {
+      this.style.overflowY = '';
       mapper20AutoSizeReceptorTextarea($(this));
-    } else {
-      el.style.height = '';
-      el.style.overflowY = 'hidden';
-    }
+    });
+    return;
+  }
+  if (mapper20ReceptorTextareaCompactClean) {
+    return;
+  }
+  $('#mapper20-input-tbody .mapper20-in-receptor').each(function() {
+    this.style.height = '';
+    this.style.overflowY = 'hidden';
   });
+  mapper20ReceptorTextareaCompactClean = true;
 }
 
 function mapper20CompactReceptorRowsAfterInput() {
@@ -1937,7 +1949,16 @@ function mapper20SyncFirstRowReceptorPlaceholder() {
   });
 }
 
-function mapper20EnsureTrailingBlankRow() {
+// Batches the two full-table cosmetic syncs (placeholder text, remove-button visibility)
+// so they run once per debounce window instead of once per keystroke/click when
+// mapper20EnsureTrailingBlankRow(true) is called from the hottest, highest-frequency
+// actions (typing in a value cell, deleting a row) at large row counts.
+var _wheelCosmeticSyncDebounced = MapperPageCore.debounce(function () {
+  mapper20SyncFirstRowReceptorPlaceholder();
+  mapper20SyncRemoveRowButtons();
+}, 200);
+
+function mapper20EnsureTrailingBlankRow(deferCosmetics) {
   var $tbody = $('#mapper20-input-tbody');
 
   function rows() {
@@ -1966,9 +1987,13 @@ function mapper20EnsureTrailingBlankRow() {
     }
   }
 
-  mapper20SyncFirstRowReceptorPlaceholder();
   mapper20SyncReceptorTextareaHeights();
-  mapper20SyncRemoveRowButtons();
+  if (deferCosmetics) {
+    _wheelCosmeticSyncDebounced.schedule();
+  } else {
+    mapper20SyncFirstRowReceptorPlaceholder();
+    mapper20SyncRemoveRowButtons();
+  }
   if (!mapper20RestoringDomRows) {
     mapper20ScheduleRebuildPlot();
   }
@@ -2863,7 +2888,7 @@ $(document).ready(function() {
     }
     mapper20DestroyRowReceptorWidgetForTr($tr);
     $tr.remove();
-    mapper20EnsureTrailingBlankRow();
+    mapper20EnsureTrailingBlankRow(true);
   });
 
   $('#mapper20-input-tbody').on('input', '.mapper20-in-value', function() {
@@ -2873,7 +2898,7 @@ $(document).ready(function() {
     if (mapper20IsTextMode()) {
       mapper20ScheduleLabelColorPanelRebuildSoon();
     }
-    mapper20EnsureTrailingBlankRow();
+    mapper20EnsureTrailingBlankRow(true);
   });
 
   $('#mapper20-input-tbody').on('paste', '.mapper20-in-value', function(e) {

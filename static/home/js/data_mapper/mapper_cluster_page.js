@@ -826,7 +826,7 @@ function mapperClusterGetLabelColor(lbl) {
       $tr.remove();
       positionResultCache[plotMode] = null;
       if (inPositionMode) positionProcessed = false;
-      mapperClusterEnsureTrailingBlankRow();
+      _clusterTrailingBlankRowDebounced.schedule();
       mapperClusterCheckPositionMode();
       if (!inPositionMode) mapperClusterScheduleRedraw();
     });
@@ -905,6 +905,13 @@ function mapperClusterGetLabelColor(lbl) {
       }
     });
   }
+
+  // Batches mapperClusterEnsureTrailingBlankRow's full-table scan so repeated row
+  // deletions (the only hot path that hits it — value edits are already row-scoped)
+  // coalesce into one pass per debounce window instead of one per click.
+  var _clusterTrailingBlankRowDebounced = MapperPageCore.debounce(function () {
+    mapperClusterEnsureTrailingBlankRow();
+  }, 200);
 
   function mapperClusterEnsureTrailingBlankRow() {
     var $tbody = $('#mapper-cluster-input-tbody');

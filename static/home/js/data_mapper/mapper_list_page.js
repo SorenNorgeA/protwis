@@ -473,6 +473,20 @@
     _listRedrawDebounced.schedule();
   }
 
+  // Batches the full-table cosmetic syncs triggered by the two hottest, highest-frequency
+  // actions (typing in a value cell, deleting a row) so they run once per debounce window
+  // instead of once per keystroke/click at large row counts. Structural row-count upkeep
+  // (mapperListEnsureTrailingBlankRow) stays synchronous — it's already bounded to the last
+  // two rows, not a full-table scan. Every other call site of these sync functions
+  // (restore, demo-fill, paste, clear) is untouched and keeps calling them directly.
+  var _listCosmeticSyncDebounced = MapperPageCore.debounce(function () {
+    mapperListRefreshSwatches();
+    mapperListSyncCatHints();
+    mapperListSyncRemoveButtons();
+    mapperListCompactReceptors();
+    mapperListSyncFirstRowPlaceholder();
+  }, DEBOUNCE_MS);
+
   // Show / hide which color rows have data
   function mapperListSyncColorDataRows() {
     if (mapperListIsTextMode()) return;
@@ -1436,8 +1450,9 @@
       if (mapperListRowBlank($tr) && $tr.is(':last-child')) return;
       mapperListDestroyRowAc($tr); $tr.remove();
       $('#mapper-list-clear-rows').removeClass('mapper20-clear-clean');
-      mapperListEnsureTrailingBlankRow(); mapperListRefreshSwatches();
-      mapperListCompactReceptors(); mapperListScheduleRedraw();
+      mapperListEnsureTrailingBlankRow();
+      _listCosmeticSyncDebounced.schedule();
+      mapperListScheduleRedraw();
     });
 
     // Click resolved chip to re-enter edit mode
@@ -1481,11 +1496,7 @@
         mapperListSyncClearBtn($tr);   // keep is-empty in sync → removes orange border when filled
         $('#mapper-list-clear-rows').removeClass('mapper20-clear-clean');
         mapperListEnsureTrailingBlankRow();
-        mapperListRefreshSwatches();
-        mapperListSyncCatHints();
-        mapperListSyncRemoveButtons();
-        mapperListCompactReceptors();
-        mapperListSyncFirstRowPlaceholder();
+        _listCosmeticSyncDebounced.schedule();
         mapperListScheduleRedraw();
       }
     );
