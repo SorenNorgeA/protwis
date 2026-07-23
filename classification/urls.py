@@ -49,35 +49,5 @@ urlpatterns = [
     url(r'^Classification_tree[/]?$', views.Classification_tree.as_view(), name='classification-tree'),
     url(r'^CrossClassSimilarity[/]?$', views.CrossClassSimilarity.as_view(), name='classification-crossclass'),
     url(r'^NewClassClusterTree[/]?$', views.NewClassClusterTree.as_view(), name='classification-newclassclustertree'),
-
-    # Backwards-compatible aliases (old URL shape)
-    url(
-        r'^class_similarity/GPCRBrowser[/]?$',
-        RedirectView.as_view(url='/classification/GPCRBrowser', permanent=False),
-    ),
-    url(
-        r'^class_similarity/Classification[/]?$',
-        RedirectView.as_view(url='/classification/Classification', permanent=False),
-    ),
-    url(
-        r'^class_similarity/ClassificationWheel[/]?$',
-        RedirectView.as_view(url='/classification/ClassificationWheel', permanent=False),
-    ),
-    url(
-        r'^class_similarity/StructureSim[/]?$',
-        RedirectView.as_view(url='/classification/StructureSim', permanent=False),
-    ),
-    url(
-        r'^class_similarity/Classification_tree[/]?$',
-        RedirectView.as_view(url='/classification/Classification_tree', permanent=False),
-    ),
-    url(
-        r'^class_similarity/CrossClassSimilarity[/]?$',
-        RedirectView.as_view(url='/classification/CrossClassSimilarity', permanent=False),
-    ),
-    url(
-        r'^class_similarity/NewClassClusterTree[/]?$',
-        RedirectView.as_view(url='/classification/NewClassClusterTree', permanent=False),
-    ),
 ]
 

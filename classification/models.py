@@ -75,69 +75,6 @@ class ReceptorSimilarity(models.Model):
         return f'{self.protein_ref} vs {self.protein_target}: sim={self.similarity} id={self.identity}'
 
 
-class ReceptorSimilarity2(models.Model):
-    protein_ref = models.ForeignKey(
-        'protein.Protein',
-        on_delete=models.CASCADE,
-        related_name='receptor_similarity2_as_ref',
-        db_column='ref',
-        db_index=True,
-    )
-    protein_target = models.ForeignKey(
-        'protein.Protein',
-        on_delete=models.CASCADE,
-        related_name='receptor_similarity2_as_target',
-        db_column='target',
-        db_index=True,
-    )
-    identity = models.PositiveSmallIntegerField()
-    similarity = models.PositiveSmallIntegerField()
-
-    ref_class = models.ForeignKey(
-        'protein.ProteinFamily',
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-        related_name='sim2_as_ref_class',
-        db_column='ref_class',
-        db_index=True,
-    )
-    target_class = models.ForeignKey(
-        'protein.ProteinFamily',
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-        related_name='sim2_as_target_class',
-        db_column='target_class',
-        db_index=True,
-    )
-
-    objects = models.Manager()
-    custom_objects = CustomReceptorSimilarityManager()
-
-    class Meta:
-        db_table = 'classification_receptorsimilarity2'
-        constraints = [
-            models.UniqueConstraint(
-                fields=['protein_ref', 'protein_target'],
-                name='crs2_uniq_pair',
-            ),
-            models.CheckConstraint(
-                check=~models.Q(protein_ref=models.F('protein_target')),
-                name='crs2_ref_ne_target',
-            ),
-        ]
-        indexes = [
-            models.Index(fields=['ref_class', 'target_class', 'identity'], name='crs2_cls_id_idx'),
-            models.Index(fields=['ref_class', 'target_class', 'similarity'], name='crs2_cls_sim_idx'),
-            models.Index(fields=['target_class', 'ref_class', 'identity'], name='crs2_cls_id_rev_idx'),
-            models.Index(fields=['target_class', 'ref_class', 'similarity'], name='crs2_cls_sim_rev_idx'),
-        ]
-
-    def __str__(self):
-        return f'{self.protein_ref} vs {self.protein_target}: sim={self.similarity} id={self.identity}'
-
-
 class _StructureSimilarityBase(models.Model):
     """
     Pairwise structural distance between two representative structures.
@@ -227,29 +164,19 @@ class ClusterCoord(models.Model):
     """
 
     DATASET_SEQUENCE = 'sequence'
-    DATASET_GN_SEQUENCE = 'gn_seq'
     DATASET_STRUCTURE_ACTIVE = 'structure_active'
     DATASET_STRUCTURE_INACTIVE = 'structure_inactive'
 
     PLOT_TSNE = 'tsne'
-    PLOT_PCA_TSNE = 'pca_tsne'
-    PLOT_TSNE_P60 = 'tsne_p60'
-    PLOT_TSNE_P80 = 'tsne_p80'
-    PLOT_TSNE_P100 = 'tsne_p100'
 
     DATASET_CHOICES = (
         (DATASET_SEQUENCE, 'Sequence'),
-        (DATASET_GN_SEQUENCE, 'GN Sequence'),
         (DATASET_STRUCTURE_ACTIVE, 'Structure (active)'),
         (DATASET_STRUCTURE_INACTIVE, 'Structure (inactive)'),
     )
 
     PLOT_CHOICES = (
         (PLOT_TSNE, 't-SNE'),
-        (PLOT_PCA_TSNE, 'PCA→t-SNE'),
-        (PLOT_TSNE_P60, 't-SNE (p=60)'),
-        (PLOT_TSNE_P80, 't-SNE (p=80)'),
-        (PLOT_TSNE_P100, 't-SNE (p=100)'),
     )
 
     protein = models.ForeignKey(

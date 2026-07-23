@@ -19,7 +19,6 @@ from mapper.views import DataMapperHome
 from protein.models import Gene, Protein, ProteinFamily, ProteinFamilyClassification, ProteinState
 from collections import OrderedDict, defaultdict
 import math
-import time
 import json
 import os
 import re
@@ -866,15 +865,18 @@ class ClassificationVisualizationDetail(ClassificationVisualizationMixin, Templa
             cluster_query,
         )
         if self.class_config["has_tree"]:
-            tree_query = urlencode({
-                "type": "Class",
-                "selection": class_key,
-                "locked": "1",
-                "embed": "1",
-            })
-            ctx["tree_url"] = "{}?{}".format(reverse("classification-tree"), tree_query)
+            tree_view = Classification_tree()
+            tree_ctx, tree_sets = tree_view._build_tree_datasets()
+            if "error" not in tree_ctx:
+                tree_ctx.update(Classification_tree.build_selection_context(
+                    tree_sets,
+                    requested_type="Class",
+                    requested_selection=class_key,
+                    locked=True,
+                    embed_mode=True,
+                ))
+            ctx.update(tree_ctx)
         else:
-            ctx["tree_url"] = ""
             ctx["tree_note"] = (
                 "Due to the unclassified nature of these receptors, a classification tree is unavailable."
             )
@@ -893,12 +895,6 @@ class ClassificationTreeVisualizationDetail(ClassificationVisualizationMixin, Te
         except ValueError as e:
             raise Http404(str(e))
 
-        tree_query = urlencode({
-            "type": selection_info["type"],
-            "selection": selection_info["selection"],
-            "locked": "1",
-            "embed": "1",
-        })
         class_keys = selection_info["class_keys"]
         has_cluster = len(class_keys) == 1 and selection_info["receptor_count"] >= 2
         cluster_url = ""
@@ -926,10 +922,21 @@ class ClassificationTreeVisualizationDetail(ClassificationVisualizationMixin, Te
                     "Cluster is unavailable because this selection could not be mapped to a single GPCR class."
                 )
 
+        tree_view = Classification_tree()
+        tree_ctx, tree_sets = tree_view._build_tree_datasets()
+        if "error" not in tree_ctx:
+            tree_ctx.update(Classification_tree.build_selection_context(
+                tree_sets,
+                requested_type=selection_info["type"],
+                requested_selection=selection_info["selection"],
+                locked=True,
+                embed_mode=True,
+            ))
+        ctx.update(tree_ctx)
+
         ctx["page_title"] = selection_info["selection"]
         ctx["tree_type"] = selection_info["type"]
         ctx["tree_selection"] = selection_info["selection"]
-        ctx["tree_url"] = "{}?{}".format(reverse("classification-tree"), tree_query)
         ctx["has_cluster"] = has_cluster
         ctx["cluster_url"] = cluster_url
         ctx["cluster_note"] = cluster_note
@@ -975,32 +982,23 @@ class GPCRSuperfamilyVisualizationDetail(TemplateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["page_title"] = "GPCR superfamily"
-        ctx["wheel_classic_url"] = "{}?{}".format(
-            reverse("classification-wheel"),
-            urlencode({"embed": "1", "wheel": "classic"}),
-        )
-        ctx["wheel_odorant_url"] = "{}?{}".format(
-            reverse("classification-wheel"),
-            urlencode({"embed": "1", "wheel": "odorant"}),
-        )
-        ctx["cluster_url"] = "{}?{}".format(
-            reverse("classification-newclassclustertree"),
-            urlencode({
-                "variant": "max",
-                "cluster_only": "1",
-                "embed": "1",
-                "layout": "superfamily",
-                "title": "GPCR superfamily cluster",
-                "intro": (
-                    "This page summarizes GPCR superfamily relationships using the maximum "
-                    "sequence similarity observed between each class pair."
-                ),
-            }),
-        )
-        ctx["matrix_url"] = "{}?{}".format(
-            reverse("classification-crossclass"),
-            urlencode({"embed": "1"}),
-        )
+        ctx.update(ClassificationWheel.build_wheel_context(selected_wheel=""))
+        ctx.update(NewClassClusterTree.build_cluster_tree_context(
+            self.request,
+            cluster_only=True,
+            layout="superfamily",
+            variant="max",
+            title="GPCR superfamily cluster",
+            intro=(
+                "This page summarizes GPCR superfamily relationships using the maximum "
+                "sequence similarity observed between each class pair."
+            ),
+        ))
+        matrix_view = CrossClassSimilarity()
+        matrix_view.request = self.request
+        matrix_ctx = matrix_view.get_context_data()
+        matrix_ctx.pop("view", None)
+        ctx.update(matrix_ctx)
         return ctx
 
 class Classification(TemplateView):
@@ -1627,24 +1625,32 @@ class Classification_tree(TemplateView):
         root = OrderedDict([("name", ""), ("value", 3000), ("color", ""), ("children", class_children)])
         return root
 
-    def get_context_data(self, **kwargs):
+    def _build_tree_datasets(self, **kwargs):
+        """
+        Build the Excel-derived tree datasets independent of the current request,
+        so a parent page (e.g. ClassificationVisualizationDetail) can inline this
+        content with its own fixed type/selection.
+
+        Returns (ctx, tree_sets) where tree_sets is the raw dict (not JSON-serialized)
+        needed by build_selection_context to validate/resolve a selection.
+        """
         ctx = super().get_context_data(**kwargs)
 
         try:
             df = self._load_df()
         except FileNotFoundError as e:
             ctx["error"] = f"File not found: {e}"
-            return ctx
+            return ctx, {}
         except Exception as e:
             ctx["error"] = f"Error loading Classification.xlsx: {e}"
-            return ctx
+            return ctx, {}
 
         # Check if required columns exist
         required_cols = ["Class", "Chemotype", "Modality", "Receptor family", "GPCRs (UniProt)"]
         missing_cols = [col for col in required_cols if col not in df.columns]
         if missing_cols:
             ctx["error"] = f"Missing required columns in Classification.xlsx: {', '.join(missing_cols)}"
-            return ctx
+            return ctx, {}
 
         # Define classes to process
         class_configs = {
@@ -1881,27 +1887,42 @@ class Classification_tree(TemplateView):
         ctx["classes_data"] = json.dumps(classes_data)  # legacy (test template / backwards compat)
         ctx["tree_sets"] = json.dumps(tree_sets)
         ctx["tree_leaf_label_lookup"] = json.dumps(leaf_label_lookup)
-        requested_type = str(self.request.GET.get("type") or "Class").strip()
+        return ctx, tree_sets
+
+    def get_context_data(self, **kwargs):
+        ctx, tree_sets = self._build_tree_datasets(**kwargs)
+        if "error" in ctx:
+            return ctx
+        ctx.update(self.build_selection_context(
+            tree_sets,
+            requested_type=str(self.request.GET.get("type") or "Class").strip(),
+            requested_selection=str(self.request.GET.get("selection") or "").strip(),
+            locked=str(self.request.GET.get("locked") or "").strip().lower() in {"1", "true", "yes"},
+            embed_mode=str(self.request.GET.get("embed") or "").strip().lower() in {"1", "true", "yes"},
+        ))
+        return ctx
+
+    @staticmethod
+    def build_selection_context(tree_sets, requested_type="Class", requested_selection="",
+                                 locked=False, embed_mode=False):
         if requested_type not in tree_sets:
             requested_type = "Class"
         available_options = tree_sets.get(requested_type, {}).get("options", [])
         available_keys = [str(opt.get("key")) for opt in available_options]
-        requested_selection = str(self.request.GET.get("selection") or "").strip()
         if requested_selection not in available_keys:
             if requested_type == "Class" and "A" in available_keys:
                 requested_selection = "A"
             else:
                 requested_selection = available_keys[0] if available_keys else ""
-        locked = str(self.request.GET.get("locked") or "").strip().lower() in {"1", "true", "yes"}
-        embed_mode = str(self.request.GET.get("embed") or "").strip().lower() in {"1", "true", "yes"}
-        ctx["tree_initial_type"] = requested_type
-        ctx["tree_initial_selection"] = requested_selection
-        ctx["tree_locked"] = locked and bool(requested_selection)
-        ctx["tree_embed_mode"] = embed_mode
-        ctx["tree_locked_type"] = requested_type if ctx["tree_locked"] else ""
-        ctx["tree_locked_selection"] = requested_selection if ctx["tree_locked"] else ""
-
-        return ctx
+        tree_locked = locked and bool(requested_selection)
+        return {
+            "tree_initial_type": requested_type,
+            "tree_initial_selection": requested_selection,
+            "tree_locked": tree_locked,
+            "tree_embed_mode": embed_mode,
+            "tree_locked_type": requested_type if tree_locked else "",
+            "tree_locked_selection": requested_selection if tree_locked else "",
+        }
 
 class GPCRBrowser(TemplateView):
     template_name = "classification/GPCRBrowser.html"
@@ -2184,7 +2205,19 @@ class ClassificationWheel(TemplateView):
         context = super().get_context_data(**kwargs)
         context["embed_mode"] = str(self.request.GET.get("embed") or "").strip().lower() in {"1", "true", "yes"}
         requested_wheel = str(self.request.GET.get("wheel") or "").strip().lower()
-        context["selected_wheel"] = requested_wheel if requested_wheel in {"classic", "odorant"} else ""
+        selected_wheel = requested_wheel if requested_wheel in {"classic", "odorant"} else ""
+        context.update(self.build_wheel_context(selected_wheel=selected_wheel))
+        return context
+
+    @staticmethod
+    def build_wheel_context(selected_wheel=""):
+        """
+        Build the wheel-data context independent of any request, so it can be
+        reused both by this view (standalone access) and by pages that inline
+        the wheel content directly (e.g. GPCRSuperfamilyVisualizationDetail).
+        """
+        context = {"selected_wheel": selected_wheel}
+        loader = ClassificationWheel()
 
         # --- Step 1: Load Excel metadata (Classification.xlsx) ---
         meta_lookup = {}
@@ -2216,7 +2249,7 @@ class ClassificationWheel(TemplateView):
             return s
 
         try:
-            df = self._load_df()
+            df = loader._load_df()
         except FileNotFoundError as e:
             # Wheel can still render; it will just miss annotations
             context["error"] = f"File not found: {e}"
@@ -3544,25 +3577,41 @@ class NewClassClusterTree(ClassSimilarityDataMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         ctx = super(NewClassClusterTree, self).get_context_data(**kwargs)
-        base = self.request.build_absolute_uri(self.request.path)
-        params = self.request.GET.copy()
-        params.pop("format", None)
-        params.pop("data", None)
-        params["format"] = "json"
         requested_variant = str(self.request.GET.get("variant") or "").strip()
-        if requested_variant not in self.SUMMARY_VARIANTS:
-            requested_variant = "max"
-        ctx["embed_url"] = "{}?{}".format(base, params.urlencode())
-        ctx["ncct_embed_mode"] = str(self.request.GET.get("embed") or "").strip().lower() in {"1", "true", "yes"}
-        ctx["ncct_cluster_only"] = str(self.request.GET.get("cluster_only") or "").strip().lower() in {"1", "true", "yes"}
-        ctx["ncct_layout_mode"] = str(self.request.GET.get("layout") or "").strip().lower() or "default"
-        ctx["ncct_initial_variant"] = requested_variant
-        ctx["ncct_page_title"] = str(self.request.GET.get("title") or "").strip() or "Class clusters"
-        ctx["ncct_intro"] = (
-            str(self.request.GET.get("intro") or "").strip()
-            or "This page summarizes the highest sequence similarity between GPCR classes as a compact 2D class-cluster plot and a distance-driven hierarchical dendrogram."
-        )
+        ctx.update(self.build_cluster_tree_context(
+            self.request,
+            embed_mode=str(self.request.GET.get("embed") or "").strip().lower() in {"1", "true", "yes"},
+            cluster_only=str(self.request.GET.get("cluster_only") or "").strip().lower() in {"1", "true", "yes"},
+            layout=str(self.request.GET.get("layout") or "").strip().lower() or "default",
+            variant=requested_variant,
+            title=str(self.request.GET.get("title") or "").strip(),
+            intro=str(self.request.GET.get("intro") or "").strip(),
+        ))
         return ctx
+
+    @classmethod
+    def build_cluster_tree_context(cls, request, *, embed_mode=False, cluster_only=False,
+                                    layout="default", variant="max", title="", intro=""):
+        """
+        Build the class-cluster-tree context independent of the current view's
+        own query string, so a parent page (e.g. GPCRSuperfamilyVisualizationDetail)
+        can inline this content with its own fixed parameters.
+        """
+        if variant not in cls.SUMMARY_VARIANTS:
+            variant = "max"
+        base = request.build_absolute_uri(reverse("classification-newclassclustertree"))
+        return {
+            "embed_url": "{}?{}".format(base, urlencode({"format": "json"})),
+            "ncct_embed_mode": embed_mode,
+            "ncct_cluster_only": cluster_only,
+            "ncct_layout_mode": layout or "default",
+            "ncct_initial_variant": variant,
+            "ncct_page_title": title or "Class clusters",
+            "ncct_intro": (
+                intro
+                or "This page summarizes the highest sequence similarity between GPCR classes as a compact 2D class-cluster plot and a distance-driven hierarchical dendrogram."
+            ),
+        }
 
 
 class ReceptorFamilyVisualizationDetail(ClassificationVisualizationMixin, ClassSimilarityDataMixin, TemplateView):
@@ -4408,18 +4457,6 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
     # -------------------------- DB-backed embedding + annotations --------------------------
 
     @staticmethod
-    def _sequence_only_plot_types():
-        return {
-            ClusterCoord.PLOT_TSNE_P60,
-            ClusterCoord.PLOT_TSNE_P80,
-            ClusterCoord.PLOT_TSNE_P100,
-        }
-
-    @classmethod
-    def _is_sequence_only_plot_type(cls, plot_type):
-        return plot_type in cls._sequence_only_plot_types()
-
-    @staticmethod
     def _plot_method_key(plot_type):
         return plot_type
 
@@ -4957,16 +4994,8 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
                 filter_entry_names=filter_entry_names,
             ),
             "structure": {
-                "inactive": (
-                    {"method": self._plot_method_key(plot_type), "points": [], "n": 0, "state": "inactive"}
-                    if self._is_sequence_only_plot_type(plot_type)
-                    else self._build_structure_dataset_db("inactive", pf_class_map, plot_type, group_key=group_key, filter_entry_names=filter_entry_names)
-                ),
-                "active": (
-                    {"method": self._plot_method_key(plot_type), "points": [], "n": 0, "state": "active"}
-                    if self._is_sequence_only_plot_type(plot_type)
-                    else self._build_structure_dataset_db("active", pf_class_map, plot_type, group_key=group_key, filter_entry_names=filter_entry_names)
-                ),
+                "inactive": self._build_structure_dataset_db("inactive", pf_class_map, plot_type, group_key=group_key, filter_entry_names=filter_entry_names),
+                "active": self._build_structure_dataset_db("active", pf_class_map, plot_type, group_key=group_key, filter_entry_names=filter_entry_names),
             },
         }
         # DB-only mode: coordinates must exist; otherwise instruct user to build them.
@@ -4975,13 +5004,11 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
             missing.append("sequence")
         if (
             (not is_class_scoped)
-            and (not self._is_sequence_only_plot_type(plot_type))
             and not (payload.get("structure", {}).get("inactive", {}).get("n") or 0)
         ):
             missing.append("structure_inactive")
         if (
             (not is_class_scoped)
-            and (not self._is_sequence_only_plot_type(plot_type))
             and not (payload.get("structure", {}).get("active", {}).get("n") or 0)
         ):
             missing.append("structure_active")
@@ -5035,73 +5062,8 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
         restrict_neighbor_targets_to_refs = scope["class_key"] is None or bool(filter_entry_names)
         if want_json:
             try:
-                plots_param = request.GET.get("plots")
-                if plots_param:
-                    plots = []
-                    for raw in str(plots_param).split(","):
-                        p = (raw or "").strip().lower()
-                        if p and p not in plots:
-                            plots.append(p)
-
-                    out = {}
-                    errors = {}
-                    key_to_plot_type = {
-                        "tsne": ClusterCoord.PLOT_TSNE,
-                        "tsne_p60": ClusterCoord.PLOT_TSNE_P60,
-                        "tsne-p60": ClusterCoord.PLOT_TSNE_P60,
-                        "p60": ClusterCoord.PLOT_TSNE_P60,
-                        "tsne_p80": ClusterCoord.PLOT_TSNE_P80,
-                        "tsne-p80": ClusterCoord.PLOT_TSNE_P80,
-                        "p80": ClusterCoord.PLOT_TSNE_P80,
-                        "tsne_p100": ClusterCoord.PLOT_TSNE_P100,
-                        "tsne-p100": ClusterCoord.PLOT_TSNE_P100,
-                        "p100": ClusterCoord.PLOT_TSNE_P100,
-                        "pca": ClusterCoord.PLOT_PCA_TSNE,
-                        "pca_tsne": ClusterCoord.PLOT_PCA_TSNE,
-                        "pca-tsne": ClusterCoord.PLOT_PCA_TSNE,
-                    }
-                    for p in plots:
-                        t0 = time.time()
-                        print(f"[StructureSim] Calculating {p.upper()}…")
-                        try:
-                            plot_type = key_to_plot_type.get(p, ClusterCoord.PLOT_TSNE)
-                            out_key = plot_type
-                            out[out_key] = self._build_payload_db(
-                                plot_type,
-                                group_key=group_key,
-                                restrict_neighbor_targets_to_refs=restrict_neighbor_targets_to_refs,
-                                filter_entry_names=filter_entry_names,
-                            )
-                        except Exception as e:
-                            errors[p] = str(e)
-                        finally:
-                            dt = time.time() - t0
-                            print(f"[StructureSim] {p.upper()} done in {dt:.2f}s")
-
-                    payload = {"plots": out}
-                    if errors:
-                        payload["plot_errors"] = errors
-                    return JsonResponse(payload, safe=True)
-
-                plot = (request.GET.get("plot") or "tsne").strip().lower()
-                key_to_plot_type = {
-                    "tsne": ClusterCoord.PLOT_TSNE,
-                    "tsne_p60": ClusterCoord.PLOT_TSNE_P60,
-                    "tsne-p60": ClusterCoord.PLOT_TSNE_P60,
-                    "p60": ClusterCoord.PLOT_TSNE_P60,
-                    "tsne_p80": ClusterCoord.PLOT_TSNE_P80,
-                    "tsne-p80": ClusterCoord.PLOT_TSNE_P80,
-                    "p80": ClusterCoord.PLOT_TSNE_P80,
-                    "tsne_p100": ClusterCoord.PLOT_TSNE_P100,
-                    "tsne-p100": ClusterCoord.PLOT_TSNE_P100,
-                    "p100": ClusterCoord.PLOT_TSNE_P100,
-                    "pca": ClusterCoord.PLOT_PCA_TSNE,
-                    "pca_tsne": ClusterCoord.PLOT_PCA_TSNE,
-                    "pca-tsne": ClusterCoord.PLOT_PCA_TSNE,
-                }
-                plot_type = key_to_plot_type.get(plot, ClusterCoord.PLOT_TSNE)
                 payload = self._build_payload_db(
-                    plot_type,
+                    ClusterCoord.PLOT_TSNE,
                     group_key=group_key,
                     restrict_neighbor_targets_to_refs=restrict_neighbor_targets_to_refs,
                     filter_entry_names=filter_entry_names,

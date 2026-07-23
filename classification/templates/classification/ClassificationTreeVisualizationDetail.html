@@ -1,6 +1,7 @@
 {% extends "home/base.html" %}
 
 {% block addon_css %}
+{% include "classification/_tree_assets_css.html" %}
 <style>
 .cv-detail {
   width: 100%;
@@ -115,10 +116,6 @@
 
 .cv-detail-frame--cluster {
   height: 640px;
-}
-
-.cv-detail-frame--tree {
-  height: 900px;
 }
 
 .cv-detail-note {
@@ -392,15 +389,7 @@
 
     <div class="tab-content cv-detail-body">
       <div role="tabpanel" class="tab-pane active" id="cv-tree-tab">
-        <iframe
-          id="cvTreeFrame"
-          class="cv-detail-frame cv-detail-frame--tree"
-          src="{{ tree_url }}"
-          title="{{ page_title }} tree"
-          data-initial-height="900"
-          scrolling="no"
-          loading="lazy"
-        ></iframe>
+        {% include "classification/_tree_content.html" %}
       </div>
 
       {% if has_cluster %}
@@ -450,6 +439,8 @@
 {% endblock %}
 
 {% block addon_js %}
+{% include "classification/_tree_assets_js.html" %}
+{% include "classification/_tree_script.html" %}
 <script>
   var matrixPayload = JSON.parse('{{ matrix_payload_json|escapejs }}');
 </script>
@@ -692,19 +683,6 @@
   }
   renderMatrix();
 
-  function anchoredFrameHeight(doc, selector) {
-    if (!doc || !selector) return 0;
-    const anchor = doc.querySelector(selector);
-    if (!anchor) return 0;
-    const body = doc.body;
-    const html = doc.documentElement;
-    const bodyTop = body ? body.getBoundingClientRect().top : 0;
-    const htmlTop = html ? html.getBoundingClientRect().top : 0;
-    const topBase = Math.min(bodyTop || 0, htmlTop || 0);
-    const rect = anchor.getBoundingClientRect();
-    return Math.ceil(rect.bottom - topBase);
-  }
-
   function resizeFrame(frame) {
     if (!frame || !frame.contentWindow || !frame.contentWindow.document) return;
     const initialHeight = Number(frame.getAttribute("data-initial-height") || 720) || 720;
@@ -712,35 +690,15 @@
       const doc = frame.contentWindow.document;
       const body = doc.body;
       const html = doc.documentElement;
-      const isTreeFrame = frame.id === "cvTreeFrame";
-      const explicitHeight = Number(frame.getAttribute("data-content-height") || 0) || 0;
-      const anchoredHeight = isTreeFrame
-        ? anchoredFrameHeight(doc, ".plot-container")
-        : 0;
-      const nextHeight = isTreeFrame
-        ? (explicitHeight || anchoredHeight || initialHeight)
-        : Math.max(
-            body ? body.scrollHeight : 0,
-            html ? html.scrollHeight : 0,
-            initialHeight
-          );
-      const extraPad = isTreeFrame ? 8 : 24;
-      frame.style.height = (nextHeight + extraPad) + "px";
+      const nextHeight = Math.max(
+        body ? body.scrollHeight : 0,
+        html ? html.scrollHeight : 0,
+        initialHeight
+      );
+      frame.style.height = (nextHeight + 24) + "px";
     } catch (err) {
       frame.style.height = initialHeight + "px";
     }
-  }
-
-  function requestEmbeddedTreeResize(frame) {
-    if (!frame || frame.id !== "cvTreeFrame" || !frame.contentWindow) return;
-    try {
-      if (typeof frame.contentWindow.notifyEmbeddedParentHeightChanged === "function") {
-        frame.contentWindow.notifyEmbeddedParentHeightChanged();
-      }
-      if (typeof frame.contentWindow.scheduleEmbeddedHeightSync === "function") {
-        frame.contentWindow.scheduleEmbeddedHeightSync();
-      }
-    } catch (err) {}
   }
 
   function wireFrame(frameId) {
@@ -748,11 +706,8 @@
     if (!frame) return;
     frame.addEventListener("load", function() {
       resizeFrame(frame);
-      requestEmbeddedTreeResize(frame);
       window.setTimeout(function() { resizeFrame(frame); }, 300);
       window.setTimeout(function() { resizeFrame(frame); }, 1000);
-      window.setTimeout(function() { requestEmbeddedTreeResize(frame); }, 120);
-      window.setTimeout(function() { requestEmbeddedTreeResize(frame); }, 400);
     });
     frame.addEventListener("cv:content-resize", function() {
       resizeFrame(frame);
@@ -761,16 +716,10 @@
     });
   }
 
-  wireFrame("cvTreeFrame");
   wireFrame("cvClusterFrame");
 
   $('a[data-toggle="tab"]').on('shown.bs.tab', function () {
     resizeFrame(document.getElementById("cvClusterFrame"));
-    const treeFrame = document.getElementById("cvTreeFrame");
-    resizeFrame(treeFrame);
-    requestEmbeddedTreeResize(treeFrame);
-    window.setTimeout(function() { requestEmbeddedTreeResize(treeFrame); }, 120);
-    window.setTimeout(function() { requestEmbeddedTreeResize(treeFrame); }, 360);
   });
 })();
 </script>
