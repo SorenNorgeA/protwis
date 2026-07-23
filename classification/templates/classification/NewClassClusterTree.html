@@ -1,0 +1,1030 @@
+{% extends "home/base.html" %}
+{% load static %}
+
+{% block addon_css %}
+<style>
+.ncct-embed-mode {
+  padding-top: 8px;
+}
+
+{% if ncct_embed_mode %}
+body > nav.navbar {
+  display: none !important;
+}
+
+body > #content.container {
+  width: 100%;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+body > #content.container > #gpcrdb_alert_placeholder {
+  display: none !important;
+}
+{% endif %}
+
+.ncct-page {
+  padding: 16px 20px 28px;
+}
+.ncct-layout-superfamily.ncct-page {
+  padding: 8px 12px 18px;
+}
+.ncct-status {
+  text-align: center;
+  font-size: 15px;
+  margin-bottom: 14px;
+  color: #555;
+}
+.ncct-intro {
+  max-width: 1080px;
+  margin: 0 auto 18px;
+  text-align: center;
+  color: #444;
+}
+.ncct-global-toolbar {
+  max-width: 1180px;
+  margin: 0 auto 14px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ncct-toolbar-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #555;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.ncct-tabs {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+.ncct-pane {
+  padding-top: 16px;
+}
+.ncct-plot-card {
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px 16px 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.ncct-toolbar {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.ncct-plot-title {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.ncct-plot {
+  min-height: 620px;
+}
+.ncct-class-key {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 14px;
+  margin-top: 14px;
+}
+.ncct-class-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e1e1e1;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: #fafafa;
+  font-size: 12px;
+  color: #333;
+}
+.ncct-class-key-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  flex: 0 0 auto;
+}
+.ncct-meta {
+  text-align: center;
+  font-size: 12px;
+  color: #666;
+  margin-top: 12px;
+}
+.ncct-layout-superfamily .ncct-intro,
+.ncct-layout-superfamily .ncct-global-toolbar,
+.ncct-layout-superfamily .ncct-class-key {
+  display: none;
+}
+.ncct-layout-superfamily .ncct-tabs {
+  max-width: none;
+  margin: 0;
+}
+.ncct-layout-superfamily .ncct-status {
+  display: none;
+}
+.ncct-layout-superfamily .ncct-pane {
+  padding-top: 0;
+}
+.ncct-superfamily-shell {
+  display: grid;
+  grid-template-columns: 245px minmax(0, 1fr) 300px;
+  gap: 12px;
+  align-items: stretch;
+}
+.ncct-superfamily-side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid #e3ebf5;
+  border-radius: 10px;
+  background: #fbfdff;
+  padding: 12px 14px;
+}
+.ncct-superfamily-side-title {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #516577;
+  text-align: center;
+}
+.ncct-superfamily-labels {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+}
+.ncct-superfamily-label {
+  flex: 1 1 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 7fr);
+  align-items: center;
+  column-gap: 10px;
+  border: 1px solid #d9e2ef;
+  border-radius: 10px;
+  background: #fff;
+  padding: 9px 12px;
+  min-height: 62px;
+  color: #33475b;
+}
+.ncct-superfamily-label:hover,
+.ncct-superfamily-label:focus {
+  border-color: #89abd3;
+  outline: 0;
+  box-shadow: 0 0 0 2px rgba(31, 120, 180, 0.12);
+}
+.ncct-superfamily-label.is-active {
+  border-color: #4f86c6;
+  background: #f3f8fe;
+  box-shadow: 0 0 0 2px rgba(31, 120, 180, 0.14);
+}
+.ncct-superfamily-label-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+}
+.ncct-superfamily-label-swatch {
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  flex: 0 0 auto;
+}
+.ncct-superfamily-label-symbol {
+  font-size: 13px;
+  font-weight: 700;
+  color: #213547;
+  line-height: 1;
+}
+.ncct-superfamily-label-text {
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: center;
+}
+.ncct-superfamily-plot-card {
+  padding: 8px 0 6px;
+}
+.ncct-superfamily-plot-wrap {
+  min-height: 520px;
+  width: 100%;
+}
+.ncct-superfamily-plot-wrap .js-plotly-plot,
+.ncct-superfamily-plot-wrap .plot-container,
+.ncct-superfamily-plot-wrap .svg-container {
+  width: 100% !important;
+}
+.ncct-layout-superfamily .ncct-plot {
+  min-height: 520px;
+}
+.ncct-layout-superfamily .ncct-meta {
+  margin-top: 6px;
+  padding: 0 8px;
+}
+.ncct-superfamily-hover-empty {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  color: #607385;
+  line-height: 1.6;
+  text-align: center;
+}
+.ncct-superfamily-hover-list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+}
+.ncct-superfamily-hover-row {
+  flex: 1 1 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(96px, 0.8fr);
+  gap: 10px;
+  border: 1px solid #dfe7f1;
+  border-radius: 10px;
+  background: #fff;
+  padding: 9px 11px;
+  min-height: 62px;
+  align-items: stretch;
+}
+.ncct-superfamily-hover-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-width: 0;
+  height: 100%;
+  text-align: center;
+}
+.ncct-superfamily-hover-metric {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  text-align: center;
+  padding: 6px 8px;
+}
+.ncct-superfamily-hover-metric-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6d8194;
+  margin-bottom: 2px;
+}
+.ncct-superfamily-hover-metric-value {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  color: #1f3347;
+}
+.ncct-superfamily-hover-value {
+  color: #1f5b96;
+}
+.ncct-superfamily-hover-value-box .ncct-superfamily-hover-metric-value {
+  color: #1f5b96;
+}
+.ncct-superfamily-hover-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: #2d4257;
+  text-align: center;
+  position: relative;
+  top: 1px;
+}
+.ncct-superfamily-hover-text strong {
+  color: #1f3347;
+}
+.ncct-superfamily-secondary {
+  display: block;
+  color: #607385;
+  font-size: 12px;
+  line-height: 1.25;
+}
+.ncct-layout-superfamily #ncct-cluster-plot {
+  width: 100%;
+}
+.ncct-layout-superfamily #ncct-superfamily-hover {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+@media (max-width: 1199px) {
+  .ncct-superfamily-shell {
+    grid-template-columns: 1fr;
+  }
+  .ncct-superfamily-side,
+  .ncct-superfamily-plot-wrap {
+    min-height: 0;
+  }
+}
+.ncct-tree-plot .annotation-text {
+  font-weight: 700;
+}
+.ncct-tree-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 580px;
+}
+.ncct-tree-container svg {
+  max-width: 100%;
+}
+.ncct-tree-container .branch {
+  fill: none;
+  stroke: #999;
+  stroke-width: 2px;
+}
+.ncct-tree-container .branch-tracer {
+  fill: none;
+  stroke: #bbb;
+  stroke-width: 1px;
+  stroke-dasharray: 3, 4;
+}
+.ncct-tree-container .internal-node circle {
+  display: none;
+}
+.ncct-tree-container .node.leaf circle {
+  stroke: #444;
+  stroke-width: 1px;
+}
+.ncct-tree-container .node text {
+  font: 10px sans-serif;
+  fill: #111;
+  cursor: default;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid ncct-page{% if ncct_embed_mode %} ncct-embed-mode{% endif %}{% if ncct_layout_mode == 'superfamily' %} ncct-layout-superfamily{% endif %}">
+  <div id="ncct-status" class="ncct-status">Loading {{ ncct_page_title|lower }}…</div>
+
+  <div class="ncct-intro">
+    {{ ncct_intro }}
+  </div>
+
+  <div class="ncct-global-toolbar">
+    <span class="ncct-toolbar-label">Distance summary</span>
+    <div class="ncct-toolbar" id="ncct-distance-methods" aria-label="Distance summary methods"></div>
+  </div>
+
+  <div class="ncct-tabs">
+    {% if not ncct_cluster_only %}
+      <ul class="nav nav-tabs" role="tablist">
+        <li role="presentation" class="active">
+          <a href="#ncct-cluster-pane" aria-controls="ncct-cluster-pane" role="tab" data-toggle="tab">Cluster</a>
+        </li>
+        <li role="presentation">
+          <a href="#ncct-tree-pane" aria-controls="ncct-tree-pane" role="tab" data-toggle="tab">Tree</a>
+        </li>
+      </ul>
+    {% endif %}
+
+    <div class="tab-content">
+      <div role="tabpanel" class="tab-pane active ncct-pane" id="ncct-cluster-pane">
+        {% if ncct_layout_mode == 'superfamily' %}
+          <div class="ncct-superfamily-shell">
+            <div class="ncct-superfamily-side">
+              <div class="ncct-superfamily-side-title">Classes</div>
+              <div id="ncct-superfamily-labels" class="ncct-superfamily-labels"></div>
+            </div>
+
+            <div class="ncct-plot-card ncct-superfamily-plot-card">
+              <div class="ncct-toolbar" id="ncct-cluster-methods" aria-label="Cluster methods"></div>
+              <div class="ncct-superfamily-plot-wrap">
+                <div id="ncct-cluster-plot" class="ncct-plot"></div>
+              </div>
+              <div id="ncct-cluster-meta" class="ncct-meta"></div>
+            </div>
+
+            <div class="ncct-superfamily-side">
+              <div id="ncct-superfamily-similarity-title" class="ncct-superfamily-side-title">Similarity</div>
+              <div id="ncct-superfamily-hover"></div>
+            </div>
+          </div>
+          <div id="ncct-class-key" class="ncct-class-key"></div>
+        {% else %}
+          <div class="ncct-plot-card">
+            <div class="ncct-toolbar" id="ncct-cluster-methods" aria-label="Cluster methods"></div>
+            <div id="ncct-cluster-title" class="ncct-plot-title">{{ ncct_page_title }}</div>
+            <div id="ncct-cluster-plot" class="ncct-plot"></div>
+            <div id="ncct-class-key" class="ncct-class-key"></div>
+            <div id="ncct-cluster-meta" class="ncct-meta"></div>
+          </div>
+        {% endif %}
+      </div>
+
+      {% if not ncct_cluster_only %}
+        <div role="tabpanel" class="tab-pane ncct-pane" id="ncct-tree-pane">
+          <div class="ncct-plot-card">
+            <div class="ncct-plot-title">Distance dendrogram</div>
+            <div class="ncct-tree-container ncct-plot">
+              <svg id="ncct-clustering-tree"></svg>
+            </div>
+            <div id="ncct-tree-meta" class="ncct-meta"></div>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block addon_js %}
+<script src="{% static 'home/js/plotly_v1_58_5.js' %}"></script>
+<script src="{% static 'home/js/d3.v3.min.js' %}"></script>
+<script src="{% static 'home/js/d3-color.v1.min.js' %}"></script>
+<script src="{% static 'home/js/d3-interpolate.v1.min.js' %}"></script>
+<script src="{% static 'home/js/d3-scale-chromatic.v1.min.js' %}"></script>
+<script src="{% static 'home/js/d3-selection-multi.v1.min.js' %}"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.3/underscore-min.js" charset="utf-8"></script>
+<script src="{% static 'home/js/phylo_library.js' %}"></script>
+<script src="{% static 'home/js/structures_clustering.js' %}"></script>
+<script>
+(function() {
+  const EMBED_URL = "{{ embed_url }}";
+  const LAYOUT_MODE = "{{ ncct_layout_mode|default:'default'|escapejs }}";
+  const INITIAL_VARIANT = "{{ ncct_initial_variant|default:'max'|escapejs }}";
+  const IS_SUPERFAMILY_LAYOUT = LAYOUT_MODE === "superfamily";
+  const CLUSTER_ONLY = {% if ncct_cluster_only %}true{% else %}false{% endif %};
+  const PAGE_TITLE = "{{ ncct_page_title|default:'Class clusters'|escapejs }}";
+  const statusEl = document.getElementById('ncct-status');
+  const clusterPlotEl = document.getElementById('ncct-cluster-plot');
+  const treeContainerEl = document.querySelector('.ncct-tree-container');
+  const classKeyEl = document.getElementById('ncct-class-key');
+  const distanceMethodsEl = document.getElementById('ncct-distance-methods');
+  const clusterMethodsEl = document.getElementById('ncct-cluster-methods');
+  const clusterTitleEl = document.getElementById('ncct-cluster-title');
+  const clusterMetaEl = document.getElementById('ncct-cluster-meta');
+  const treeMetaEl = document.getElementById('ncct-tree-meta');
+  const superfamilyLabelsEl = document.getElementById('ncct-superfamily-labels');
+  const superfamilySimilarityTitleEl = document.getElementById('ncct-superfamily-similarity-title');
+  const superfamilyHoverEl = document.getElementById('ncct-superfamily-hover');
+  let currentDistanceVariant = INITIAL_VARIANT || 'max';
+  let currentClusterMethod = 'tsne';
+  let currentPayload = null;
+  let hoveredClassId = null;
+
+  function notifyEmbeddedParentHeightChanged() {
+    try {
+      if (window.frameElement) {
+        window.frameElement.dispatchEvent(new Event('cv:content-resize'));
+      }
+    } catch (err) {}
+  }
+
+  function notifyEmbeddedParentContentReady() {
+    try {
+      if (window.frameElement) {
+        window.frameElement.dispatchEvent(new Event('cv:content-ready'));
+      }
+    } catch (err) {}
+  }
+
+  function notifyEmbeddedParentContentFailed() {
+    try {
+      if (window.frameElement) {
+        window.frameElement.dispatchEvent(new Event('cv:content-error'));
+      }
+    } catch (err) {}
+  }
+
+  function scheduleEmbeddedHeightSync() {
+    window.setTimeout(notifyEmbeddedParentHeightChanged, 0);
+    window.setTimeout(notifyEmbeddedParentHeightChanged, 180);
+    window.setTimeout(notifyEmbeddedParentHeightChanged, 420);
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function titleCaseFragment(value) {
+    const normalizedValue = String(value || '').trim().toLowerCase();
+    if (normalizedValue === 'tetrapod-specific olfactory receptors') {
+      return 'Tetrapod-specific olfactory receptors';
+    }
+    if (normalizedValue === 'fish-like olfactory receptors') {
+      return 'Fish-like olfactory receptors';
+    }
+    return String(value || '').replace(/\b([A-Za-z][A-Za-z'-]*)/g, function(match) {
+      return match.charAt(0).toUpperCase() + match.slice(1).toLowerCase();
+    });
+  }
+
+  function normalizeClassName(name) {
+    return String(name || '')
+      .replace('Class O1 (fish-like)', 'Class O1 (fish-like olfactory receptors)')
+      .replace('Class O2 (tetrapod specific)', 'Class O2 (tetrapod-specific olfactory receptors)');
+  }
+
+  function formattedClassNameHtml(name) {
+    const raw = normalizeClassName(name).trim();
+    if (!raw) return '';
+    const match = raw.match(/^(.*?)(\s*\(([^)]+)\))$/);
+    if (!match) return escapeHtml(raw);
+    const main = escapeHtml(match[1].trim());
+    const secondary = escapeHtml('(' + titleCaseFragment(match[3].trim()) + ')');
+    return main + '<span class="ncct-superfamily-secondary">' + secondary + '</span>';
+  }
+
+  function formatPercent(value) {
+    if (value === null || value === undefined || value === '') return 'n/a';
+    const rounded = Math.round(Number(value) * 10) / 10;
+    if (!isFinite(rounded)) return 'n/a';
+    return (Math.round(rounded) === rounded ? String(Math.round(rounded)) : rounded.toFixed(1)) + '%';
+  }
+
+  function variantMatrixFor(variantKey) {
+    const variant = ((currentPayload || {}).variants || {})[variantKey] || currentVariantPayload();
+    return variant.matrix || ((variant.render_payload || {}).matrix) || [];
+  }
+
+  function matrixEntryFor(sourceId, targetId) {
+    const matrix = variantMatrixFor(currentDistanceVariant);
+    if (!matrix[sourceId] || !matrix[sourceId][targetId]) return null;
+    return matrix[sourceId][targetId];
+  }
+
+  function buildMarkerSizes(points, activeClassId) {
+    return points.map(function(point) {
+      if (!IS_SUPERFAMILY_LAYOUT) return 18;
+      return point.id === activeClassId ? 48 : 36;
+    });
+  }
+
+  function buildMarkerOpacities(points, activeClassId) {
+    return points.map(function(point) {
+      if (!IS_SUPERFAMILY_LAYOUT || activeClassId === null || activeClassId === undefined) return 1;
+      return point.id === activeClassId ? 1 : 0.72;
+    });
+  }
+
+  function buildBasePlotLabels(points, activeClassId) {
+    return points.map(function(point) {
+      return '<b>' + point.symbol + '</b>';
+    });
+  }
+
+  function buildLabelSizes(points, activeClassId) {
+    return points.map(function(point) {
+      if (!IS_SUPERFAMILY_LAYOUT) return 14;
+      return point.id === activeClassId ? 28 : 14;
+    });
+  }
+
+  function setActiveSuperfamilyLabel(classId) {
+    if (!superfamilyLabelsEl) return;
+    const buttons = superfamilyLabelsEl.querySelectorAll('.ncct-superfamily-label');
+    Array.prototype.forEach.call(buttons, function(button) {
+      const isActive = Number(button.getAttribute('data-class-id')) === classId;
+      button.classList.toggle('is-active', isActive);
+    });
+  }
+
+  function updateSuperfamilySimilarityTitle(classId) {
+    if (!superfamilySimilarityTitleEl) return;
+    const classes = (currentPayload || {}).classes || [];
+    const classRow = classes[classId];
+    if (!classRow) {
+      superfamilySimilarityTitleEl.textContent = 'Similarity ranking';
+      return;
+    }
+    const classSymbol = escapeHtml(classRow.symbol || '');
+    const formattedName = formattedClassNameHtml(classRow.name || classRow.symbol || '');
+    const secondaryMatch = formattedName.match(/<span class="ncct-superfamily-secondary">([\s\S]+?)<\/span>/);
+    const secondaryHtml = secondaryMatch ? secondaryMatch[0] : '';
+    if (classSymbol) {
+      superfamilySimilarityTitleEl.innerHTML = 'Class ' + classSymbol + ' similarity ranking' + secondaryHtml;
+      return;
+    }
+    superfamilySimilarityTitleEl.textContent = 'Class similarity ranking';
+  }
+
+  function renderSuperfamilyHoverCard(classId) {
+    if (!superfamilyHoverEl) return;
+    const classes = (currentPayload || {}).classes || [];
+    const classRow = classes[classId];
+    if (!classRow) {
+      superfamilyHoverEl.innerHTML = '<p class="ncct-superfamily-hover-empty">Hover a class point to inspect its max similarity against the rest of the GPCR superfamily.</p>';
+      return;
+    }
+
+    const peers = [];
+    classes.forEach(function(otherClass, otherId) {
+      if (otherId === classId) return;
+      const cell = matrixEntryFor(classId, otherId) || {};
+      peers.push({
+        id: otherId,
+        symbol: otherClass.symbol,
+        name: otherClass.name,
+        color: otherClass.color || '#808080',
+        similarity: cell.similarity,
+        similarityDisplay: cell.similarity_display,
+        distance: cell.distance,
+      });
+    });
+    peers.sort(function(a, b) {
+      const simA = (a.similarity === null || a.similarity === undefined) ? -Infinity : Number(a.similarity);
+      const simB = (b.similarity === null || b.similarity === undefined) ? -Infinity : Number(b.similarity);
+      return simB - simA;
+    });
+
+    const rowsHtml = peers.map(function(peer) {
+      return (
+        '<div class="ncct-superfamily-hover-row">' +
+          '<div class="ncct-superfamily-hover-label">' +
+            '<span class="ncct-superfamily-label-swatch" style="background:' + peer.color + ';"></span>' +
+            '<div class="ncct-superfamily-hover-text"><strong>' + peer.symbol + '</strong></div>' +
+          '</div>' +
+          '<div class="ncct-superfamily-hover-metric ncct-superfamily-hover-value-box">' +
+            '<div class="ncct-superfamily-hover-metric-label">Similarity</div>' +
+            '<div class="ncct-superfamily-hover-metric-value ncct-superfamily-hover-value">' + escapeHtml(peer.similarityDisplay || formatPercent(peer.similarity)) + '</div>' +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
+    superfamilyHoverEl.innerHTML = '<div class="ncct-superfamily-hover-list">' + rowsHtml + '</div>';
+  }
+
+  function updateSuperfamilyPointHighlight(classId) {
+    if (!IS_SUPERFAMILY_LAYOUT || !clusterPlotEl || !currentPayload) return;
+    const variant = currentVariantPayload();
+    const scatter = variant.scatter || {};
+    const methods = scatter.methods || {};
+    const methodPayload = methods[currentClusterMethod] || { points: [] };
+    const points = methodPayload.points || [];
+    if (!points.length) return;
+    const markerSizes = buildMarkerSizes(points, classId);
+    const markerLineWidths = points.map(function(point) { return point.id === classId ? 2.5 : 1; });
+    const markerOpacities = buildMarkerOpacities(points, classId);
+    Plotly.restyle(clusterPlotEl, {
+      'marker.size': [markerSizes],
+      'marker.line.width': [markerLineWidths],
+      'marker.opacity': [markerOpacities],
+    }, [0]);
+    Plotly.restyle(clusterPlotEl, {
+      text: [buildBasePlotLabels(points, classId)],
+      'textfont.size': [buildLabelSizes(points, classId)],
+    }, [1]);
+  }
+
+  function setHoveredClass(classId) {
+    hoveredClassId = classId;
+    setActiveSuperfamilyLabel(classId);
+    updateSuperfamilySimilarityTitle(classId);
+    renderSuperfamilyHoverCard(classId);
+    updateSuperfamilyPointHighlight(classId);
+  }
+
+  function renderSuperfamilyLabels(classes) {
+    if (!superfamilyLabelsEl) return;
+    superfamilyLabelsEl.innerHTML = '';
+    (classes || []).forEach(function(cls, idx) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'ncct-superfamily-label';
+      button.setAttribute('data-class-id', idx);
+      button.innerHTML =
+        '<span class="ncct-superfamily-label-marker">' +
+          '<span class="ncct-superfamily-label-swatch" style="background:' + (cls.color || '#808080') + ';"></span>' +
+          '<span class="ncct-superfamily-label-symbol">' + (cls.symbol || '') + '</span>' +
+        '</span>' +
+        '<span class="ncct-superfamily-label-text">' + formattedClassNameHtml(cls.name) + '</span>';
+      button.addEventListener('mouseenter', function() {
+        setHoveredClass(idx);
+      });
+      button.addEventListener('focus', function() {
+        setHoveredClass(idx);
+      });
+      superfamilyLabelsEl.appendChild(button);
+    });
+  }
+
+  function makeClassKey(classes) {
+    if (IS_SUPERFAMILY_LAYOUT) {
+      classKeyEl.innerHTML = '';
+      return;
+    }
+    classKeyEl.innerHTML = '';
+    (classes || []).forEach(cls => {
+      const item = document.createElement('div');
+      item.className = 'ncct-class-key-item';
+
+      const swatch = document.createElement('span');
+      swatch.className = 'ncct-class-key-swatch';
+      swatch.style.backgroundColor = cls.color || '#808080';
+      item.appendChild(swatch);
+
+      const text = document.createElement('span');
+      text.textContent = (cls.symbol || '') + ' - ' + (cls.name || '');
+      item.appendChild(text);
+
+      classKeyEl.appendChild(item);
+    });
+  }
+
+  function clusterMethodLabel(methodKey) {
+    const variant = currentVariantPayload();
+    const methods = ((variant || {}).scatter || {}).methods || {};
+    return (methods[methodKey] && methods[methodKey].label) || methodKey.toUpperCase();
+  }
+
+  function distanceVariantLabel(variantKey) {
+    const variants = ((currentPayload || {}).variants) || {};
+    return (variants[variantKey] && variants[variantKey].label) || variantKey;
+  }
+
+  function currentVariantPayload() {
+    const variants = ((currentPayload || {}).variants) || {};
+    if (variants[currentDistanceVariant]) return variants[currentDistanceVariant];
+    const defaultKey = (currentPayload && currentPayload.default_variant) || 'max';
+    if (variants[defaultKey]) return variants[defaultKey];
+    const firstKey = Object.keys(variants)[0];
+    return firstKey ? variants[firstKey] : {};
+  }
+
+  function renderCluster(payload, variantKey, methodKey) {
+    const variants = payload.variants || {};
+    const variant = variants[variantKey] || currentVariantPayload();
+    const scatter = variant.scatter || {};
+    const methods = scatter.methods || {};
+    const method = methods[methodKey] ? methodKey : (scatter.default_method || 'tsne');
+    const methodPayload = methods[method] || { points: [] };
+    const points = methodPayload.points || [];
+
+    const activeClassId = IS_SUPERFAMILY_LAYOUT ? hoveredClassId : null;
+
+    const trace = {
+      type: 'scatter',
+      mode: 'markers',
+      x: points.map(p => p.x),
+      y: points.map(p => p.y),
+      customdata: points.map(p => p.id),
+      hoverinfo: IS_SUPERFAMILY_LAYOUT ? 'none' : 'skip',
+      marker: {
+        size: buildMarkerSizes(points, activeClassId),
+        color: points.map(p => p.color),
+        opacity: buildMarkerOpacities(points, activeClassId),
+        line: {
+          width: 1,
+          color: '#222',
+        },
+      },
+    };
+
+    const labelTrace = {
+      type: 'scatter',
+      mode: 'text',
+      x: points.map(p => p.x),
+      y: points.map(p => p.y),
+      text: buildBasePlotLabels(points, activeClassId),
+      textposition: IS_SUPERFAMILY_LAYOUT ? 'middle center' : 'top center',
+      textfont: {
+        size: buildLabelSizes(points, activeClassId),
+        color: '#111',
+        family: 'Source Code Pro, monospace',
+      },
+      hoverinfo: 'skip',
+    };
+
+    const layout = {
+      margin: IS_SUPERFAMILY_LAYOUT ? { l: 24, r: 24, t: 12, b: 36 } : { l: 30, r: 20, t: 10, b: 30 },
+      paper_bgcolor: '#fff',
+      plot_bgcolor: '#fff',
+      showlegend: false,
+      hovermode: IS_SUPERFAMILY_LAYOUT ? 'closest' : false,
+      xaxis: {
+        showgrid: false,
+        zeroline: false,
+        showticklabels: false,
+        title: '',
+        fixedrange: !!IS_SUPERFAMILY_LAYOUT,
+      },
+      yaxis: {
+        showgrid: false,
+        zeroline: false,
+        showticklabels: false,
+        title: '',
+        fixedrange: !!IS_SUPERFAMILY_LAYOUT,
+      },
+      dragmode: IS_SUPERFAMILY_LAYOUT ? false : 'zoom',
+      font: {
+        family: 'Source Code Pro, monospace',
+        color: '#111',
+      },
+    };
+
+    const config = {
+      responsive: true,
+      displayModeBar: false,
+      scrollZoom: false,
+      doubleClick: false,
+    };
+
+    Plotly.newPlot(clusterPlotEl, [trace, labelTrace], layout, config);
+    if (IS_SUPERFAMILY_LAYOUT && typeof clusterPlotEl.removeAllListeners === 'function') {
+      clusterPlotEl.removeAllListeners('plotly_hover');
+      clusterPlotEl.removeAllListeners('plotly_unhover');
+    }
+    if (IS_SUPERFAMILY_LAYOUT && typeof clusterPlotEl.on === 'function') {
+      clusterPlotEl.on('plotly_hover', function(eventData) {
+        const pointData = eventData && eventData.points && eventData.points[0];
+        if (!pointData) return;
+        setHoveredClass(Number(pointData.customdata));
+      });
+      clusterPlotEl.on('plotly_unhover', function() {
+        if (hoveredClassId === null || hoveredClassId === undefined) return;
+        setHoveredClass(hoveredClassId);
+      });
+    }
+    if (clusterTitleEl) {
+      clusterTitleEl.textContent = PAGE_TITLE;
+    }
+    clusterMetaEl.textContent = IS_SUPERFAMILY_LAYOUT
+      ? ''
+      : ('Projection: ' + clusterMethodLabel(method) + ' using ' + distanceVariantLabel(currentDistanceVariant) + '.');
+    currentClusterMethod = method;
+    if (IS_SUPERFAMILY_LAYOUT) {
+      if (hoveredClassId === null || hoveredClassId === undefined) {
+        hoveredClassId = points.length ? Number(points[0].id) : null;
+      }
+      setHoveredClass(hoveredClassId);
+    }
+    scheduleEmbeddedHeightSync();
+  }
+
+  function renderClusterMethodButtons(payload, variantKey) {
+    const variant = (payload.variants || {})[variantKey] || currentVariantPayload();
+    const scatter = variant.scatter || {};
+    const methods = scatter.methods || {};
+    clusterMethodsEl.innerHTML = '';
+    if (Object.keys(methods).length <= 1) {
+      clusterMethodsEl.style.display = 'none';
+      return;
+    }
+    clusterMethodsEl.style.display = '';
+    Object.keys(methods).forEach(methodKey => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-sm ' + (methodKey === currentClusterMethod ? 'btn-primary' : 'btn-default');
+      btn.textContent = clusterMethodLabel(methodKey);
+      btn.addEventListener('click', function() {
+        if (methodKey === currentClusterMethod) return;
+        renderCluster(payload, currentDistanceVariant, methodKey);
+        renderClusterMethodButtons(payload, currentDistanceVariant);
+      });
+      clusterMethodsEl.appendChild(btn);
+    });
+  }
+
+  function renderDistanceVariantButtons(payload) {
+    if (IS_SUPERFAMILY_LAYOUT) {
+      distanceMethodsEl.innerHTML = '';
+      distanceMethodsEl.style.display = 'none';
+      return;
+    }
+    const variants = payload.variants || {};
+    distanceMethodsEl.innerHTML = '';
+    Object.keys(variants).forEach(variantKey => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-sm ' + (variantKey === currentDistanceVariant ? 'btn-primary' : 'btn-default');
+      btn.textContent = distanceVariantLabel(variantKey);
+      btn.addEventListener('click', function() {
+        if (variantKey === currentDistanceVariant) return;
+        currentDistanceVariant = variantKey;
+        const variant = variants[currentDistanceVariant] || {};
+        const scatter = variant.scatter || {};
+        if (!((scatter.methods || {})[currentClusterMethod])) {
+          currentClusterMethod = scatter.default_method || 'tsne';
+        }
+        renderDistanceVariantButtons(payload);
+        renderCluster(payload, currentDistanceVariant, currentClusterMethod);
+        renderClusterMethodButtons(payload, currentDistanceVariant);
+        if (!CLUSTER_ONLY) renderTree(payload, currentDistanceVariant);
+        renderStatus(payload, currentDistanceVariant);
+      });
+      distanceMethodsEl.appendChild(btn);
+    });
+  }
+
+  function renderTree(payload, variantKey) {
+    if (!treeContainerEl) return;
+
+    var variant = (payload.variants || {})[variantKey] || currentVariantPayload();
+    var tree = variant.tree || {};
+    var newick = tree.newick || '';
+
+    if (!newick || newick.trim() === '') {
+      treeContainerEl.innerHTML = '<div style="text-align:center;padding:80px 20px;color:#666;">No tree data (need at least 2 classes).</div>';
+      treeMetaEl.textContent = '';
+      return;
+    }
+
+    var colorBySymbol = {};
+    (payload.classes || []).forEach(function(cls) {
+      colorBySymbol[String(cls.symbol || '')] = cls.color || '#808080';
+    });
+
+    if (typeof renderTreeFromNewick === 'function') {
+      renderTreeFromNewick(newick, colorBySymbol, '.ncct-tree-container', 580);
+    }
+
+    treeMetaEl.textContent = 'Circular dendrogram. Linkage: ' + (tree.linkage_method || 'average') + '. Branch lengths use ' + distanceVariantLabel(currentDistanceVariant) + '.';
+  }
+
+  function renderStatus(payload, variantKey) {
+    const variant = (payload.variants || {})[variantKey] || currentVariantPayload();
+    const meta = variant.meta || {};
+    const notes = [];
+    notes.push((meta.n_classes || 0) + ' classes');
+    notes.push(distanceVariantLabel(variantKey));
+    if (meta.missing_pairs) {
+      notes.push(String(meta.missing_pairs) + ' missing pairs filled with max observed distance');
+    }
+    statusEl.textContent = notes.join(' | ');
+    scheduleEmbeddedHeightSync();
+  }
+
+  async function loadPage() {
+    try {
+      const res = await fetch(EMBED_URL, { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) {
+        let detail = '';
+        try {
+          const err = await res.json();
+          if (err && err.error) detail = String(err.error);
+        } catch (e) {}
+        throw new Error('HTTP ' + res.status + (detail ? ': ' + detail : ''));
+      }
+
+      const payload = await res.json();
+      currentPayload = payload;
+      currentDistanceVariant = (payload.variants || {})[currentDistanceVariant]
+        ? currentDistanceVariant
+        : (payload.default_variant || 'max');
+      const initialVariant = currentVariantPayload();
+      currentClusterMethod = ((initialVariant.scatter || {}).default_method) || 'tsne';
+      makeClassKey(payload.classes || []);
+      if (IS_SUPERFAMILY_LAYOUT) {
+        renderSuperfamilyLabels(payload.classes || []);
+        renderSuperfamilyHoverCard(null);
+      }
+      renderDistanceVariantButtons(payload);
+      renderCluster(payload, currentDistanceVariant, currentClusterMethod);
+      renderClusterMethodButtons(payload, currentDistanceVariant);
+      if (!CLUSTER_ONLY) renderTree(payload, currentDistanceVariant);
+      renderStatus(payload, currentDistanceVariant);
+      scheduleEmbeddedHeightSync();
+      notifyEmbeddedParentContentReady();
+    } catch (err) {
+      statusEl.textContent = 'Failed to load class cluster data.';
+      clusterMetaEl.textContent = String(err && err.message ? err.message : err);
+      treeMetaEl.textContent = '';
+      scheduleEmbeddedHeightSync();
+      notifyEmbeddedParentContentFailed();
+    }
+  }
+
+  $('a[data-toggle="tab"]').on('shown.bs.tab', function () {
+    try { Plotly.Plots.resize(clusterPlotEl); } catch (e) {}
+    if (currentPayload && !CLUSTER_ONLY) renderTree(currentPayload, currentDistanceVariant);
+  });
+
+  window.addEventListener('resize', function() {
+    try { Plotly.Plots.resize(clusterPlotEl); } catch (e) {}
+    if (currentPayload && !CLUSTER_ONLY) renderTree(currentPayload, currentDistanceVariant);
+    scheduleEmbeddedHeightSync();
+  });
+
+  loadPage();
+})();
+</script>
+{% endblock %}

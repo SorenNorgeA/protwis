@@ -56,6 +56,7 @@ INSTALLED_APPS = (
     'seqsign',
     'angles',
     'hotspots',
+    'classification',
     'django_rdkit',
 )
 

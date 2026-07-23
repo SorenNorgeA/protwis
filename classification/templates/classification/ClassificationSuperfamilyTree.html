@@ -1,0 +1,361 @@
+{% extends "home/base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="tab-content clearfix">
+  <div class="tab-pane active" id="single-crystal-group-tab">
+    <div class="row">
+      <div class="col-md-12 tab-content">
+        <div class="tab-pane active" id="single-group-tree-tab">
+          <div class="sftree-page sftree-pending" id="sftree-page">
+            <div class="tree-shell">
+              <div class="sftree-plot-wrap">
+                <span class="zoombutton-container hidden">
+                  <span class="pull-right glyphicon glyphicon-resize-full btn-zoomsize" data-toggle="tooltip" data-placement="bottom" title="Fit" onClick="resizeTree()"></span>
+                  <span class="pull-right glyphicon glyphicon-plus btn-zoomin" data-toggle="tooltip" data-placement="bottom" title="Zoom-in" onClick="zoomInTree()"></span>
+                  <span class="pull-right glyphicon glyphicon-minus btn-zoomout" data-toggle="tooltip" data-placement="bottom" title="Zoom-out" onClick="zoomOutTree()"></span>
+                </span>
+                <div class="tree-container" id="tree-container">
+                  <svg id="clustering-tree"></svg>
+                </div>
+              </div>
+
+              <div class="sftree-side">
+                <div class="sftree-side-title"></div>
+                <div id="sftree-hover" class="sftree-hover">
+                  <p class="sftree-hover-empty">Hover a class pill to inspect its distances and similarities to the other GPCR classes.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="hidden">
+              <div id="submit-group" class="hidden"></div>
+              <div id="output-group0" class="hidden">
+                <textarea name="input-targets-0" id="input-targets-0" readonly></textarea>
+              </div>
+              <div id="output-group1" class="hidden">
+                <textarea name="input-targets-1" id="input-targets-1" readonly></textarea>
+              </div>
+              <div class="btn-group tree-toggles hidden">
+                <ul class="dropdown-menu names" role="menu"></ul>
+              </div>
+              <div class="btn-group tree-toggles hidden">
+                <ul class="dropdown-menu treetypes" role="menu"></ul>
+              </div>
+              <div class="btn-group tree-toggles hidden">
+                <ul class="dropdown-menu dataouter" role="menu"></ul>
+              </div>
+              <div class="btn-group tree-toggles hidden">
+                <ul class="dropdown-menu datainner" role="menu"></ul>
+              </div>
+              <div class="legend_box hidden">
+                <div class="outer_legend"></div>
+                <div class="inner_legend"></div>
+              </div>
+              <div id="single-crystal-group-pdbs-modal-table"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block addon_js %}
+<script type="text/javascript">
+  var data = JSON.parse('{{ data_json|escapejs }}');
+</script>
+
+<script type="text/javascript" src="{% static 'home/js/snap.svg-min.js' %}"></script>
+<script type="text/javascript" src="{% static 'home/js/typeahead.bundle.min.js' %}"></script>
+<script type="text/javascript" src="{% static 'home/js/d3.v3.min.js' %}"></script>
+<script src="{% static 'home/js/d3-color.v1.min.js' %}"></script>
+<script src="{% static 'home/js/d3-interpolate.v1.min.js' %}"></script>
+<script src="{% static 'home/js/d3-scale-chromatic.v1.min.js' %}"></script>
+<script src="{% static 'home/js/d3-selection-multi.v1.min.js' %}"></script>
+<script src="{% static 'home/js/phylo_library.js' %}"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.3/underscore-min.js" charset="utf-8"></script>
+<script src="{% static 'home/js/saveSvgAsPng.js' %}"></script>
+<script>
+  window.classificationPhyloTreeBaseSrc = "{% static 'home/js/phylotree.js' %}";
+  window.classificationPhyloTreeShowInternalNodes = false;
+  window.classificationPhyloTreePanelTitle = "";
+  window.classificationPhyloTreeRadialFitScale = 0.9;
+</script>
+<script src="{% static 'home/js/classification_phylotree.js' %}"></script>
+{% endblock %}
+
+{% block addon_css %}
+<meta name="csrf-token" content="{{ csrf_token }}">
+<style type="text/css">
+  .navbar.navbar-inverse.navbar-static-top,
+  #ref_widget_div,
+  #joinus_widget_div {
+    display: none !important;
+  }
+
+  body {
+    padding-top: 0 !important;
+  }
+
+  #content.container {
+    width: 100%;
+    padding-top: 0;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  #content.container > .tab-content.clearfix {
+    margin-top: 0;
+  }
+
+  .sftree-page {
+    padding: 8px 12px 18px;
+  }
+
+  .tree-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 14px;
+    align-items: stretch;
+    min-height: 520px;
+  }
+
+  .sftree-page.sftree-pending .tree-shell {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .sftree-plot-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .sftree-side {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border: 1px solid #e3ebf5;
+    border-radius: 10px;
+    background: #fbfdff;
+    padding: 12px 14px;
+  }
+
+  .sftree-side-title {
+    margin: 0 0 12px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: #516577;
+    text-align: center;
+  }
+
+  .sftree-hover {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+  }
+
+  .sftree-hover-empty {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    color: #607385;
+    line-height: 1.6;
+    text-align: center;
+  }
+
+  .sftree-hover-header {
+    margin-bottom: 10px;
+    border: 1px solid #dfe7f1;
+    border-radius: 10px;
+    background: #fff;
+    padding: 10px 12px;
+    text-align: center;
+  }
+
+  .sftree-hover-header-symbol {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1;
+    color: #1f3347;
+  }
+
+  .sftree-hover-header-name {
+    font-size: 13px;
+    line-height: 1.4;
+    color: #607385;
+  }
+
+  .sftree-hover-header-name strong {
+    display: block;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1;
+    color: #1f3347;
+    margin-bottom: 6px;
+  }
+
+  .sftree-secondary {
+    display: block;
+    color: #607385;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  .sftree-hover-list {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .sftree-hover-row {
+    flex: 1 1 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(76px, 0.55fr) minmax(84px, 0.6fr);
+    gap: 10px;
+    border: 1px solid #dfe7f1;
+    border-radius: 10px;
+    background: #fff;
+    padding: 9px 11px;
+    min-height: 62px;
+    align-items: stretch;
+  }
+
+  .sftree-hover-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 0;
+    height: 100%;
+    text-align: center;
+  }
+
+  .sftree-hover-swatch {
+    width: 13px;
+    height: 13px;
+    border-radius: 999px;
+    border: 1px solid rgba(0, 0, 0, 0.18);
+    flex: 0 0 auto;
+  }
+
+  .sftree-hover-text {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+    color: #1f3347;
+    text-align: center;
+  }
+
+  .sftree-hover-metrics {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    text-align: center;
+    padding: 6px 8px;
+  }
+
+  .sftree-hover-metrics.is-similarity {
+    border-left: 1px solid #ebf0f5;
+  }
+
+  .sftree-hover-metric-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #6d8194;
+    margin-bottom: 2px;
+  }
+
+  .sftree-hover-distance {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+    color: #1f5b96;
+  }
+
+  .sftree-hover-similarity {
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1;
+    color: #3c5977;
+  }
+
+  #submit-group,
+  #output-group0,
+  #output-group1,
+  .tree-toggles,
+  .zoombutton-container,
+  .legend_box,
+  #single-crystal-group-pdbs-modal-table {
+    display: none !important;
+  }
+
+  #tree-container {
+    width: 100%;
+    max-width: 760px;
+    min-width: 420px;
+    min-height: 440px;
+    margin: 0 auto;
+  }
+
+  #clustering-tree {
+    width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+  }
+
+  #clustering-tree path.branch {
+    fill: none;
+  }
+
+  #clustering-tree g.internal-node circle {
+    display: none;
+  }
+
+  #clustering-tree .classification-pill {
+    cursor: pointer;
+  }
+
+  #clustering-tree .classification-pill.is-active rect {
+    stroke: #0f5f98;
+    stroke-width: 4px;
+  }
+
+  @media (max-width: 1199px) {
+    .tree-shell {
+      grid-template-columns: 1fr;
+    }
+
+    .sftree-side,
+    .sftree-plot-wrap {
+      min-height: 0;
+    }
+  }
+
+  @media (max-width: 991px) {
+    #tree-container {
+      width: 100%;
+      max-width: none;
+      min-width: 0;
+      min-height: 420px;
+    }
+  }
+</style>
+{% endblock %}
