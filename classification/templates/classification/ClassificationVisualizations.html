@@ -187,50 +187,6 @@
   background: var(--cv-color-chemotype);
 }
 
-.cv-landing.cv-scheme-test .cv-node-btn[data-role="superfamily"],
-.cv-landing.cv-scheme-test .cv-node-btn[data-role="class"] {
-  background: #5C78B0;
-}
-
-.cv-landing.cv-scheme-test .cv-node-btn[data-role="modality"][data-branch-theme="orphan-receptors"] {
-  background: #5B6067;
-}
-
-.cv-landing.cv-scheme-test .cv-node-btn[data-role="chemotype"][data-branch-theme="orphan-receptors"] {
-  background: #A9B0B8;
-}
-
-.cv-landing.cv-scheme-test .cv-node-btn[data-role="family"][data-branch-theme="orphan-receptors"] {
-  background: #C8CFD6;
-  color: #31404b;
-}
-
-.cv-landing.cv-scheme-test .cv-node-btn[data-role="modality"][data-branch-theme="polypeptide-receptors"] {
-  background: #3F7A49;
-}
-
-.cv-landing.cv-scheme-test .cv-node-btn[data-role="chemotype"][data-branch-theme="polypeptide-receptors"] {
-  background: #66A96A;
-}
-
-.cv-landing.cv-scheme-test .cv-node-btn[data-role="family"][data-branch-theme="polypeptide-receptors"] {
-  background: #93C893;
-  color: #23462c;
-}
-
-.cv-landing.cv-scheme-test .cv-node-btn[data-role="modality"][data-branch-theme="small-molecule-receptors"] {
-  background: #5A4A8A;
-}
-
-.cv-landing.cv-scheme-test .cv-node-btn[data-role="chemotype"][data-branch-theme="small-molecule-receptors"] {
-  background: #876FBE;
-}
-
-.cv-landing.cv-scheme-test .cv-node-btn[data-role="family"][data-branch-theme="small-molecule-receptors"] {
-  background: #B29BDD;
-  color: #342a4f;
-}
-
 .cv-family-tree-shell {
   position: relative;
 }
@@ -656,7 +612,7 @@
   position: absolute;
   left: 0;
   top: 0;
-  height: var(--cv-family-class-spine-height, calc(100% - 16px));
+  height: calc(100% - 16px);
   border-left: 2px solid #c9d7e6;
 }
 
@@ -921,7 +877,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="container cv-landing cv-scheme-default" data-cv-scheme="default" data-cv-browser-mode="test">
+<div class="container cv-landing">
   <div class="cv-landing-layout">
     <div class="cv-panel">
       <div class="cv-panel-header">
@@ -982,11 +938,8 @@
   let familyTreeContent = null;
   let modalityTreeShell = null;
   let modalityTreeContent = null;
-  let connectorDrawFrame = null;
-  let connectorDrawFollowupFrame = null;
   let staticConnectorDrawFrame = null;
   let staticConnectorFollowupFrame = null;
-  let activeBrowserMode = "test";
   let syncAlignmentFrame = null;
   let syncAlignmentFollowupFrame = null;
   let layoutObserver = null;
@@ -1073,7 +1026,6 @@
             chemotypeRow.open = false;
           });
         }
-        queueConnectorDraw();
       });
     });
   }
@@ -1651,10 +1603,6 @@
     });
   }
 
-  function drawFamilyConnectors() {
-    return;
-  }
-
   function drawStaticConnectors() {
     drawClassConnectors();
     drawModalityConnectors();
@@ -1673,10 +1621,6 @@
         drawStaticConnectors();
       });
     });
-  }
-
-  function queueConnectorDraw() {
-    return;
   }
 
   function syncColumnBoxHeights() {
@@ -1718,11 +1662,9 @@
     syncAlignmentFrame = window.requestAnimationFrame(function() {
       syncColumnBoxHeights();
       queueStaticConnectorDraw();
-      queueConnectorDraw();
       syncAlignmentFollowupFrame = window.requestAnimationFrame(function() {
         syncColumnBoxHeights();
         queueStaticConnectorDraw();
-        queueConnectorDraw();
       });
     });
   }

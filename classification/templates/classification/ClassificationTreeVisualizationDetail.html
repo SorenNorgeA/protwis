@@ -1,7 +1,10 @@
 {% extends "home/base.html" %}
+{% load static %}
 
 {% block addon_css %}
-{% include "classification/_tree_assets_css.html" %}
+<link rel="stylesheet" href="{% static 'home/css/nv.d3.min.css' %}" type="text/css" />
+<link rel="stylesheet" href="{% static 'home/css/nvd3-update.css' %}" type="text/css" />
+<link rel="stylesheet" href="{% static 'home/css/classification/tree.css' %}" type="text/css" />
 <style>
 .cv-detail {
   width: 100%;
@@ -389,7 +392,94 @@
 
     <div class="tab-content cv-detail-body">
       <div role="tabpanel" class="tab-pane active" id="cv-tree-tab">
-        {% include "classification/_tree_content.html" %}
+        <div class="col-md-12">
+          {% if error %}
+            <div class="alert alert-danger">
+              <strong>Error:</strong> {{ error }}
+            </div>
+          {% else %}
+            <!-- Controls -->
+            <div class="row" style="margin-top: 20px; margin-bottom: 16px;">
+              <div class="col-md-12">
+                <div class="tree-toolbar">
+                  <div>
+                    <div class="tree-controls-label">&nbsp;</div>
+                    <div id="tree_layout_group" class="dropdown">
+                      <button id="treeLayoutDropdownBtn" class="btn btn-primary btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+                        Layout: Circular <span class="caret"></span>
+                      </button>
+                      <div class="dropdown-menu">
+                        <button type="button" class="btn btn-primary btn-block active" data-layout="Tree - Circular" data-layout-label="Circular">Circular</button>
+                        <button type="button" class="btn btn-outline-primary btn-block" data-layout="Tree - Organic" data-layout-label="Curved ladder">Curved ladder</button>
+                        <button type="button" class="btn btn-outline-primary btn-block" data-layout="Tree - Straight" data-layout-label="Ladder">Ladder</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div class="tree-controls-label">&nbsp;</div>
+                    <button id="treeLeafColorToggle" type="button" class="btn btn-danger btn-sm" aria-pressed="false">
+                      Leaf color
+                    </button>
+                  </div>
+
+                  <div>
+                    <div class="tree-controls-label">&nbsp;</div>
+                    <div id="tree_leaf_label_group" class="dropdown">
+                      <button id="treeLeafLabelDropdownBtn" class="btn btn-primary btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+                        Receptor names: Protein <span class="caret"></span>
+                      </button>
+                      <div class="dropdown-menu">
+                        <button type="button" class="btn btn-primary btn-block active" data-label-type="Protein">Protein</button>
+                        <button type="button" class="btn btn-outline-primary btn-block" data-label-type="Gene">Gene</button>
+                        <button type="button" class="btn btn-outline-primary btn-block" data-label-type="UniProt">UniProt</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {% if tree_locked %}
+                    <select id="tree_selection" class="form-control input-sm" style="display:none;"></select>
+                  {% else %}
+                    <div>
+                      <div class="tree-controls-label">Type</div>
+                      <div id="tree_type_group" class="btn-group" role="group" aria-label="Type">
+                        <button type="button" class="btn btn-primary btn-sm active" data-type="Class">Class</button>
+                        <button type="button" class="btn btn-default btn-sm" data-type="Modality">Modality</button>
+                        <button type="button" class="btn btn-default btn-sm" data-type="Chemotype">Chemotype</button>
+                      </div>
+                    </div>
+
+                    <div style="min-width: 260px; flex: 1;">
+                      <div class="tree-controls-label">Selection</div>
+                      <select id="tree_selection" class="form-control input-sm"></select>
+                    </div>
+                  {% endif %}
+
+                  <div>
+                    <div class="tree-controls-label">&nbsp;</div>
+                    <div class="dropdown">
+                      <button id="treeDownloadDropdownBtn" class="btn btn-primary btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+                        <span class="glyphicon glyphicon-download"></span> Download <span class="caret"></span>
+                      </button>
+                      <div class="dropdown-menu">
+                        <button id="download_svg_main" type="button" class="btn btn-primary btn-block">SVG</button>
+                        <button id="download_png_main" type="button" class="btn btn-primary btn-block">PNG</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Single plot -->
+            <div class="plot-container">
+              <div id="tree_plot_title" class="plot-title"></div>
+              <div class="col-md-12 tree-plot-scroll">
+                <div id="tree_plot_main" class="tree_plot text-center"></div>
+              </div>
+            </div>
+          {% endif %}
+        </div>
       </div>
 
       {% if has_cluster %}
@@ -439,8 +529,24 @@
 {% endblock %}
 
 {% block addon_js %}
-{% include "classification/_tree_assets_js.html" %}
-{% include "classification/_tree_script.html" %}
+<script src="{% static 'home/js/d3.min.js' %}"></script>
+<script src="{% static 'home/js/nv.d3.min.js' %}"></script>
+<script src="{% static 'home/js/d3.v4.min.js' %}"></script>
+
+<script>
+  window.CLASSIFICATION_TREE_DATA = {
+    treeSets: JSON.parse('{{ tree_sets|default:"{}"|escapejs }}'),
+    leafLabelLookup: JSON.parse('{{ tree_leaf_label_lookup|default:"{}"|escapejs }}'),
+    initialType: "{{ tree_initial_type|default:'Class'|escapejs }}",
+    initialSelection: "{{ tree_initial_selection|default:''|escapejs }}",
+    lockedType: "{{ tree_locked_type|default:''|escapejs }}",
+    lockedSelection: "{{ tree_locked_selection|default:''|escapejs }}"
+  };
+</script>
+
+<script src="{% static 'home/js/classification/core.js' %}"></script>
+<script src="{% static 'home/js/classification/tree.js' %}"></script>
+
 <script>
   var matrixPayload = JSON.parse('{{ matrix_payload_json|escapejs }}');
 </script>

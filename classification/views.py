@@ -8,11 +8,6 @@ from django.utils.text import slugify
 from django.views import View
 from django.views.generic import TemplateView
 
-from classification.family_tree import (
-    SUPERFAMILY_TREE_GROUP_KEY,
-    SUPERFAMILY_TREE_VARIANT,
-    build_superfamily_tree_payload,
-)
 from classification.models import ClusterCoord, ReceptorSimilarity, StructureSimilarity, TreeNetwork
 from common.models import WebLink
 from mapper.views import DataMapperHome
@@ -27,8 +22,6 @@ from urllib.parse import urlencode
 
 import numpy as np
 import pandas as pd
-import scipy.cluster.hierarchy as sch
-import scipy.spatial.distance as ssd
 from sklearn.manifold import TSNE
 
 
@@ -873,7 +866,6 @@ class ClassificationVisualizationDetail(ClassificationVisualizationMixin, Templa
                     requested_type="Class",
                     requested_selection=class_key,
                     locked=True,
-                    embed_mode=True,
                 ))
             ctx.update(tree_ctx)
         else:
@@ -930,7 +922,6 @@ class ClassificationTreeVisualizationDetail(ClassificationVisualizationMixin, Te
                 requested_type=selection_info["type"],
                 requested_selection=selection_info["selection"],
                 locked=True,
-                embed_mode=True,
             ))
         ctx.update(tree_ctx)
 
@@ -944,37 +935,6 @@ class ClassificationTreeVisualizationDetail(ClassificationVisualizationMixin, Te
         return ctx
 
 
-class SuperfamilyCircularTree(TemplateView):
-    template_name = "classification/ClassificationSuperfamilyTree.html"
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        variant = str(self.request.GET.get("variant") or "").strip().lower() or "max"
-        if variant not in ClassSimilarityDataMixin.SUMMARY_VARIANTS:
-            variant = "max"
-        persisted_row = None
-        if variant == SUPERFAMILY_TREE_VARIANT:
-            persisted_row = (
-                TreeNetwork.objects
-                .filter(group_key=SUPERFAMILY_TREE_GROUP_KEY)
-                .only("payload")
-                .first()
-            )
-        if persisted_row and persisted_row.payload:
-            tree_payload = persisted_row.payload
-        else:
-            payload = ClassSimilarityDataMixin()._build_class_cluster_tree_payload()
-            tree_payload = build_superfamily_tree_payload(payload, variant_key=variant)
-        ctx["data_json"] = json.dumps(tree_payload)
-        ctx["tree_variant"] = variant
-        ctx["tree_embed_mode"] = str(self.request.GET.get("embed") or "").strip().lower() in {"1", "true", "yes"}
-        ctx["tree_page_title"] = str(self.request.GET.get("title") or "").strip() or "GPCR superfamily tree"
-        ctx["tree_intro"] = (
-            str(self.request.GET.get("intro") or "").strip()
-            or "Phylogenetic-tree renderer applied to the GPCR superfamily using classification sequence-similarity distances."
-        )
-        return ctx
-
 
 class GPCRSuperfamilyVisualizationDetail(TemplateView):
     template_name = "classification/ClassificationSuperfamilyDetail.html"
@@ -982,23 +942,9 @@ class GPCRSuperfamilyVisualizationDetail(TemplateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["page_title"] = "GPCR superfamily"
-        ctx.update(ClassificationWheel.build_wheel_context(selected_wheel=""))
-        ctx.update(NewClassClusterTree.build_cluster_tree_context(
-            self.request,
-            cluster_only=True,
-            layout="superfamily",
-            variant="max",
-            title="GPCR superfamily cluster",
-            intro=(
-                "This page summarizes GPCR superfamily relationships using the maximum "
-                "sequence similarity observed between each class pair."
-            ),
-        ))
-        matrix_view = CrossClassSimilarity()
-        matrix_view.request = self.request
-        matrix_ctx = matrix_view.get_context_data()
-        matrix_ctx.pop("view", None)
-        ctx.update(matrix_ctx)
+        ctx.update(ClassificationWheel.build_wheel_context())
+        ctx.update(NewClassClusterTree.build_cluster_tree_context(self.request))
+        ctx.update(CrossClassSimilarity().get_context_data())
         return ctx
 
 class Classification(TemplateView):
@@ -1328,8 +1274,11 @@ class Classification(TemplateView):
         return ctx
 
 
-class Classification_tree(TemplateView):
-    template_name = "classification/Classification_tree.html"
+class Classification_tree:
+    """
+    Plain helper class (not a Django view) — provides Excel-derived tree
+    datasets to whichever Detail page inlines the Classification-tree content.
+    """
 
     # Reuse classification Excel path constants from Classification class
     CLASSIFICATION_FOLDER = 'protein_data'
@@ -1634,7 +1583,7 @@ class Classification_tree(TemplateView):
         Returns (ctx, tree_sets) where tree_sets is the raw dict (not JSON-serialized)
         needed by build_selection_context to validate/resolve a selection.
         """
-        ctx = super().get_context_data(**kwargs)
+        ctx = dict(kwargs)
 
         try:
             df = self._load_df()
@@ -1889,22 +1838,9 @@ class Classification_tree(TemplateView):
         ctx["tree_leaf_label_lookup"] = json.dumps(leaf_label_lookup)
         return ctx, tree_sets
 
-    def get_context_data(self, **kwargs):
-        ctx, tree_sets = self._build_tree_datasets(**kwargs)
-        if "error" in ctx:
-            return ctx
-        ctx.update(self.build_selection_context(
-            tree_sets,
-            requested_type=str(self.request.GET.get("type") or "Class").strip(),
-            requested_selection=str(self.request.GET.get("selection") or "").strip(),
-            locked=str(self.request.GET.get("locked") or "").strip().lower() in {"1", "true", "yes"},
-            embed_mode=str(self.request.GET.get("embed") or "").strip().lower() in {"1", "true", "yes"},
-        ))
-        return ctx
-
     @staticmethod
     def build_selection_context(tree_sets, requested_type="Class", requested_selection="",
-                                 locked=False, embed_mode=False):
+                                 locked=False):
         if requested_type not in tree_sets:
             requested_type = "Class"
         available_options = tree_sets.get(requested_type, {}).get("options", [])
@@ -1919,7 +1855,6 @@ class Classification_tree(TemplateView):
             "tree_initial_type": requested_type,
             "tree_initial_selection": requested_selection,
             "tree_locked": tree_locked,
-            "tree_embed_mode": embed_mode,
             "tree_locked_type": requested_type if tree_locked else "",
             "tree_locked_selection": requested_selection if tree_locked else "",
         }
@@ -2121,8 +2056,11 @@ class GPCRBrowser(TemplateView):
 
 
 
-class ClassificationWheel(TemplateView):
-    template_name = 'classification/ClassificationWheel.html'
+class ClassificationWheel:
+    """
+    Plain helper class (not a Django view) — provides the GPCRome wheel data
+    to whichever Detail page inlines the wheel content.
+    """
 
     # classification Excel (same file as Classification/GPCRBrowser use)
     CLASSIFICATION_FOLDER = 'protein_data'
@@ -2201,22 +2139,13 @@ class ClassificationWheel(TemplateView):
 
         return df_normalized
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["embed_mode"] = str(self.request.GET.get("embed") or "").strip().lower() in {"1", "true", "yes"}
-        requested_wheel = str(self.request.GET.get("wheel") or "").strip().lower()
-        selected_wheel = requested_wheel if requested_wheel in {"classic", "odorant"} else ""
-        context.update(self.build_wheel_context(selected_wheel=selected_wheel))
-        return context
-
     @staticmethod
-    def build_wheel_context(selected_wheel=""):
+    def build_wheel_context():
         """
-        Build the wheel-data context independent of any request, so it can be
-        reused both by this view (standalone access) and by pages that inline
-        the wheel content directly (e.g. GPCRSuperfamilyVisualizationDetail).
+        Build the wheel-data context, used by GPCRSuperfamilyVisualizationDetail
+        to inline the wheel content directly.
         """
-        context = {"selected_wheel": selected_wheel}
+        context = {}
         loader = ClassificationWheel()
 
         # --- Step 1: Load Excel metadata (Classification.xlsx) ---
@@ -2392,13 +2321,7 @@ class ClassSimilarityDataMixin:
         "U": "#9e9e9e",
     }
 
-    SUMMARY_VARIANTS = OrderedDict([
-        ("max", "Max similarity"),
-        ("top3_mean", "Top-3 mean similarity"),
-        ("top5_mean", "Top-5 mean similarity"),
-        ("top10_mean", "Top-10 mean similarity"),
-    ])
-    CLASS_CLUSTER_PAYLOAD_CACHE_KEY = "classclustertree:payload:v7"
+    CLASS_CLUSTER_PAYLOAD_CACHE_KEY = "classclustertree:payload:v9"
     CLASS_CLUSTER_PAYLOAD_CACHE_TIMEOUT = 60 * 60 * 24
     CLASS_CLUSTER_PAYLOAD_VERSION = 3
     CLASS_CLUSTER_DATASET_KEY = "superfamily"
@@ -2409,26 +2332,28 @@ class ClassSimilarityDataMixin:
         return {f.slug: f.id for f in qs}
 
     @staticmethod
-    def _pair_summary_similarity(similarities, summary_key):
+    def _resolve_classless_family_ids():
+        """
+        build_receptor_similarity excludes the single top-level "Unclassified" (slug '010')
+        family and instead builds ReceptorSimilarity rows against many individual bottom-level
+        classless families. Resolve that full descendant set here (rather than the top-level
+        id alone) so "Unclassified" can be matched against the rows that actually exist.
+        """
+        return list(
+            ProteinFamily.objects.filter(slug__startswith='010')
+            .exclude(slug='010')
+            .values_list('id', flat=True)
+        )
+
+    @staticmethod
+    def _max_pair_similarity(similarities):
         values = []
         for score in similarities or []:
             try:
                 values.append(float(score))
             except Exception:
                 continue
-        if not values:
-            return None
-        values = sorted(values, reverse=True)
-        if summary_key == "top3_mean":
-            subset = values[:min(3, len(values))]
-            return float(sum(subset) / len(subset))
-        if summary_key == "top5_mean":
-            subset = values[:min(5, len(values))]
-            return float(sum(subset) / len(subset))
-        if summary_key == "top10_mean":
-            subset = values[:min(10, len(values))]
-            return float(sum(subset) / len(subset))
-        return float(values[0])
+        return max(values) if values else None
 
     @staticmethod
     def _format_similarity_display(similarity):
@@ -2446,97 +2371,102 @@ class ClassSimilarityDataMixin:
 
     def _build_class_only_similarity_data(self):
         code_to_famid = self._resolve_family_ids(list(self.CLASS_CODE_BY_NAME.values()))
+        classless_family_ids = self._resolve_classless_family_ids()
         classes = []
         for display_name in self.CLASS_ORDER:
             slug_code = self.CLASS_CODE_BY_NAME.get(display_name)
-            family_id = code_to_famid.get(slug_code)
-            if not family_id:
-                continue
             symbol = self.CLASS_SYMBOL_BY_NAME.get(display_name, display_name)
+            if slug_code == "010":
+                # "Unclassified" has no ReceptorSimilarity rows against its own top-level
+                # family id — aggregate across the classless leaf families instead.
+                if not classless_family_ids:
+                    continue
+                family_ids = list(classless_family_ids)
+                family_id = code_to_famid.get(slug_code) or 0
+            else:
+                family_id = code_to_famid.get(slug_code)
+                if not family_id:
+                    continue
+                family_ids = [family_id]
             classes.append({
                 "name": display_name,
                 "symbol": symbol,
                 "slug": slug_code,
                 "family_id": family_id,
+                "family_ids": family_ids,
                 "color": self.CLASS_COLOR_BY_SYMBOL.get(symbol, "#808080"),
             })
 
-        allowed_class_ids = [row["family_id"] for row in classes]
+        family_id_to_class_index = {}
+        for idx, class_row in enumerate(classes):
+            for fam_id in class_row["family_ids"]:
+                family_id_to_class_index[fam_id] = idx
+
+        allowed_class_ids = list(family_id_to_class_index.keys())
         pair_scores = defaultdict(list)
         pair_qs = (
             ReceptorSimilarity.objects
             .filter(ref_class_id__in=allowed_class_ids, target_class_id__in=allowed_class_ids)
-            .annotate(
-                pair_a=Least('ref_class_id', 'target_class_id'),
-                pair_b=Greatest('ref_class_id', 'target_class_id'),
-            )
-            .values_list('pair_a', 'pair_b', 'similarity')
+            .values_list('ref_class_id', 'target_class_id', 'similarity')
         )
-        for pair_a, pair_b, similarity in pair_qs.iterator():
-            if not pair_a or not pair_b or pair_a == pair_b:
+        for ref_class_id, target_class_id, similarity in pair_qs.iterator():
+            idx_a = family_id_to_class_index.get(ref_class_id)
+            idx_b = family_id_to_class_index.get(target_class_id)
+            if idx_a is None or idx_b is None or idx_a == idx_b:
                 continue
-            pair_scores[(pair_a, pair_b)].append(similarity)
+            pair_key = (min(idx_a, idx_b), max(idx_a, idx_b))
+            pair_scores[pair_key].append(similarity)
 
         n_classes = len(classes)
-        variants = OrderedDict()
-        for summary_key, summary_label in self.SUMMARY_VARIANTS.items():
-            similarity_matrix = [[100.0 if i == j else None for j in range(n_classes)] for i in range(n_classes)]
-            distance_matrix = np.full((n_classes, n_classes), np.nan, dtype=float)
-            np.fill_diagonal(distance_matrix, 0.0)
+        similarity_matrix = [[100.0 if i == j else None for j in range(n_classes)] for i in range(n_classes)]
+        distance_matrix = np.full((n_classes, n_classes), np.nan, dtype=float)
+        np.fill_diagonal(distance_matrix, 0.0)
 
-            seen_distances = []
-            for i in range(n_classes):
-                for j in range(i + 1, n_classes):
-                    pair_key = (min(classes[i]["family_id"], classes[j]["family_id"]), max(classes[i]["family_id"], classes[j]["family_id"]))
-                    similarity = self._pair_summary_similarity(pair_scores.get(pair_key), summary_key)
-                    if similarity is None:
-                        continue
+        seen_distances = []
+        for i in range(n_classes):
+            for j in range(i + 1, n_classes):
+                similarity = self._max_pair_similarity(pair_scores.get((i, j)))
+                if similarity is None:
+                    continue
 
-                    distance = max(0.0, 100.0 - similarity)
-                    similarity_matrix[i][j] = similarity
-                    similarity_matrix[j][i] = similarity
-                    distance_matrix[i, j] = distance
-                    distance_matrix[j, i] = distance
-                    seen_distances.append(distance)
+                distance = max(0.0, 100.0 - similarity)
+                similarity_matrix[i][j] = similarity
+                similarity_matrix[j][i] = similarity
+                distance_matrix[i, j] = distance
+                distance_matrix[j, i] = distance
+                seen_distances.append(distance)
 
-            fill_distance = float(max(seen_distances)) if seen_distances else 100.0
+        fill_distance = float(max(seen_distances)) if seen_distances else 100.0
 
-            missing_pairs = 0
-            for i in range(n_classes):
-                for j in range(i + 1, n_classes):
-                    if np.isnan(distance_matrix[i, j]):
-                        distance_matrix[i, j] = fill_distance
-                        distance_matrix[j, i] = fill_distance
-                        missing_pairs += 1
+        missing_pairs = 0
+        for i in range(n_classes):
+            for j in range(i + 1, n_classes):
+                if np.isnan(distance_matrix[i, j]):
+                    distance_matrix[i, j] = fill_distance
+                    distance_matrix[j, i] = fill_distance
+                    missing_pairs += 1
 
-            matrix_rows = []
-            for i, class_row in enumerate(classes):
-                row_values = []
-                for j, other_row in enumerate(classes):
-                    similarity = similarity_matrix[i][j]
-                    distance = float(distance_matrix[i, j])
-                    row_values.append({
-                        "source": class_row["symbol"],
-                        "target": other_row["symbol"],
-                        "similarity": float(similarity) if similarity is not None else None,
-                        "similarity_display": self._format_similarity_display(similarity),
-                        "distance": distance,
-                    })
-                matrix_rows.append(row_values)
-
-            variants[summary_key] = {
-                "key": summary_key,
-                "label": summary_label,
-                "matrix": matrix_rows,
-                "distance_matrix": distance_matrix,
-                "missing_pairs": missing_pairs,
-                "fill_distance": fill_distance,
-            }
+        matrix_rows = []
+        for i, class_row in enumerate(classes):
+            row_values = []
+            for j, other_row in enumerate(classes):
+                similarity = similarity_matrix[i][j]
+                distance = float(distance_matrix[i, j])
+                row_values.append({
+                    "source": class_row["symbol"],
+                    "target": other_row["symbol"],
+                    "similarity": float(similarity) if similarity is not None else None,
+                    "similarity_display": self._format_similarity_display(similarity),
+                    "distance": distance,
+                })
+            matrix_rows.append(row_values)
 
         return {
             "classes": classes,
-            "variants": variants,
-            "default_variant": "max",
+            "matrix": matrix_rows,
+            "distance_matrix": distance_matrix,
+            "missing_pairs": missing_pairs,
+            "fill_distance": fill_distance,
         }
 
     @staticmethod
@@ -2551,7 +2481,13 @@ class ClassSimilarityDataMixin:
 
     def _compute_tsne_coords(self, distance_matrix):
         try:
-            perplexity = max(1.0, min(3.0, float(distance_matrix.shape[0] - 1) - 1e-3))
+            n = int(distance_matrix.shape[0])
+            if n < 2:
+                perplexity = 1.0
+            else:
+                perplexity = min(40.0, max(1.0, (n - 1) / 3.0))
+                if perplexity >= (n - 1):
+                    perplexity = float(max(1, n - 2))
             tsne = TSNE(
                 n_components=2,
                 metric="precomputed",
@@ -2559,7 +2495,6 @@ class ClassSimilarityDataMixin:
                 random_state=42,
                 init="random",
                 learning_rate="auto",
-                square_distances=True,
             )
             return tsne.fit_transform(distance_matrix)
         except Exception:
@@ -2608,341 +2543,7 @@ class ClassSimilarityDataMixin:
             "selection_key": self.CLASS_CLUSTER_SELECTION_KEY,
             "entity_type": "gpcr_class",
             "source_model": ReceptorSimilarity._meta.db_table,
-            "tree_method": "neighbor_joining_midpoint",
-            "rooting_method": "midpoint",
             "distance_metric": "100_minus_similarity",
-        }
-
-    def _build_class_tree_render_payload(self, variant_key, variant_label, matrix_rows, tip_annotations,
-                                         rooted_tree=None, rooted_newick="", unrooted_tree=None,
-                                         unrooted_newick="", meta=None):
-        rooted_tree = rooted_tree or {"name": "", "length": 0.0, "children": []}
-        unrooted_tree = unrooted_tree or {"name": "", "length": 0.0, "children": []}
-        render_meta = dict(self._build_class_tree_storage_meta())
-        render_meta.update({
-            "variant_key": str(variant_key or ""),
-            "variant_label": str(variant_label or ""),
-        })
-        if meta:
-            render_meta.update(meta)
-        return {
-            "renderer": "classification_superfamily_phylo",
-            "default_view_mode": "rooted",
-            "trees": {
-                "rooted": str(rooted_newick or ""),
-                "unrooted": str(unrooted_newick or ""),
-            },
-            "tree_objects": {
-                "rooted": rooted_tree,
-                "unrooted": unrooted_tree,
-            },
-            "annotations": tip_annotations,
-            "matrix": matrix_rows,
-            "meta": render_meta,
-        }
-
-    def _build_class_tree_variant_payload(self, variant_key, variant_label, scatter_methods, matrix_rows,
-                                          variant_meta, tip_annotations, tree_payload, render_payload):
-        return {
-            "key": variant_key,
-            "label": variant_label,
-            "matrix": matrix_rows,
-            "scatter": {
-                "default_method": "tsne",
-                "methods": scatter_methods,
-            },
-            "tree": tree_payload,
-            "render_payload": render_payload,
-            "meta": variant_meta,
-        }
-
-    def _linkage_to_newick(self, node, newick, parentdist, leaf_names):
-        """Convert scipy linkage tree to Newick format (like contactnetwork getNewick)."""
-        if node.is_leaf():
-            return "%s:%.4f%s" % (leaf_names[node.id], parentdist - node.dist, newick)
-        else:
-            branch_len = parentdist - node.dist
-            if len(newick) > 0:
-                newick = ")0:%.4f%s" % (branch_len, newick)
-            else:
-                newick = ");"
-            newick = self._linkage_to_newick(node.get_left(), newick, node.dist, leaf_names)
-            newick = self._linkage_to_newick(node.get_right(), ",%s" % (newick), node.dist, leaf_names)
-            newick = "(%s" % (newick)
-            return newick
-
-    @staticmethod
-    def _tree_dict_to_newick(node, include_length=True):
-        name = str((node or {}).get("name") or "")
-        children = list((node or {}).get("children") or [])
-        if children:
-            body = "({})".format(",".join(
-                ClassSimilarityDataMixin._tree_dict_to_newick(child, include_length=include_length)
-                for child in children
-            ))
-        else:
-            body = name
-        if include_length:
-            body = "{}:{:.4f}".format(body, float((node or {}).get("length") or 0.0))
-        return body
-
-    @staticmethod
-    def _clone_tree_dict(node):
-        if not node:
-            return {"name": "", "length": 0.0, "children": []}
-        return {
-            "name": str(node.get("name") or ""),
-            "length": float(node.get("length") or 0.0),
-            "children": [
-                ClassSimilarityDataMixin._clone_tree_dict(child)
-                for child in list(node.get("children") or [])
-            ],
-        }
-
-    @staticmethod
-    def _tree_leaf_sort_key(node):
-        children = list((node or {}).get("children") or [])
-        if not children:
-            return str((node or {}).get("name") or "")
-        return min(
-            ClassSimilarityDataMixin._tree_leaf_sort_key(child)
-            for child in children
-        )
-
-    def _midpoint_root_tree(self, tree):
-        tree_copy = self._clone_tree_dict(tree)
-        adjacency = defaultdict(list)
-        node_meta = {}
-        next_id_box = [0]
-
-        def walk(node):
-            node_id = next_id_box[0]
-            next_id_box[0] += 1
-            children = list(node.get("children") or [])
-            node_meta[node_id] = {
-                "name": str(node.get("name") or ""),
-            }
-            for child in children:
-                child_id = walk(child)
-                edge_length = max(0.0, float(child.get("length") or 0.0))
-                adjacency[node_id].append((child_id, edge_length))
-                adjacency[child_id].append((node_id, edge_length))
-            return node_id
-
-        root_id = walk(tree_copy)
-        leaf_ids = [
-            node_id for node_id, meta in node_meta.items()
-            if meta["name"] and len(adjacency.get(node_id, [])) <= 1
-        ]
-        if len(leaf_ids) < 2:
-            return tree_copy
-
-        def farthest_from(start_id):
-            stack = [(start_id, None, 0.0)]
-            parent_map = {start_id: None}
-            distance_map = {start_id: 0.0}
-            while stack:
-                node_id, parent_id, cur_distance = stack.pop()
-                for neighbor_id, edge_length in adjacency.get(node_id, []):
-                    if neighbor_id == parent_id:
-                        continue
-                    next_distance = cur_distance + float(edge_length)
-                    parent_map[neighbor_id] = node_id
-                    distance_map[neighbor_id] = next_distance
-                    stack.append((neighbor_id, node_id, next_distance))
-            farthest_id = max(distance_map, key=lambda key: distance_map[key])
-            return farthest_id, distance_map, parent_map
-
-        start_leaf = leaf_ids[0]
-        far_leaf, _, _ = farthest_from(start_leaf)
-        other_leaf, dist_from_far, parent_from_far = farthest_from(far_leaf)
-        diameter = float(dist_from_far.get(other_leaf, 0.0))
-        if diameter <= 0.0:
-            return tree_copy
-
-        path = []
-        cursor = other_leaf
-        while cursor is not None:
-            path.append(cursor)
-            cursor = parent_from_far.get(cursor)
-        path = list(reversed(path))
-        midpoint = diameter / 2.0
-        traversed = 0.0
-        midpoint_node = path[0]
-        split_edge = None
-
-        def edge_between(a_id, b_id):
-            for neighbor_id, edge_length in adjacency.get(a_id, []):
-                if neighbor_id == b_id:
-                    return float(edge_length)
-            return 0.0
-
-        for idx in range(len(path) - 1):
-            left_id = path[idx]
-            right_id = path[idx + 1]
-            edge_length = edge_between(left_id, right_id)
-            if traversed + edge_length < midpoint - 1e-9:
-                traversed += edge_length
-                midpoint_node = right_id
-                continue
-            if abs(midpoint - traversed) <= 1e-9:
-                midpoint_node = left_id
-                break
-            if abs(traversed + edge_length - midpoint) <= 1e-9:
-                midpoint_node = right_id
-                break
-            left_part = midpoint - traversed
-            right_part = edge_length - left_part
-            split_edge = (left_id, right_id, left_part, right_part)
-            midpoint_node = None
-            break
-
-        rooted_adjacency = {
-            node_id: list(neighbors)
-            for node_id, neighbors in adjacency.items()
-        }
-        rooted_meta = dict(node_meta)
-        if split_edge:
-            left_id, right_id, left_part, right_part = split_edge
-            rooted_root_id = next_id_box[0]
-            rooted_meta[rooted_root_id] = {"name": ""}
-            rooted_adjacency[rooted_root_id] = [(left_id, left_part), (right_id, right_part)]
-            rooted_adjacency[left_id] = [
-                (nid, dist) for nid, dist in rooted_adjacency[left_id]
-                if nid != right_id
-            ] + [(rooted_root_id, left_part)]
-            rooted_adjacency[right_id] = [
-                (nid, dist) for nid, dist in rooted_adjacency[right_id]
-                if nid != left_id
-            ] + [(rooted_root_id, right_part)]
-        else:
-            rooted_root_id = midpoint_node
-
-        def build_oriented(node_id, parent_id=None, incoming_length=0.0):
-            child_nodes = []
-            for neighbor_id, edge_length in rooted_adjacency.get(node_id, []):
-                if neighbor_id == parent_id:
-                    continue
-                child_nodes.append(build_oriented(neighbor_id, node_id, edge_length))
-            child_nodes.sort(key=self._tree_leaf_sort_key)
-            return {
-                "name": "" if child_nodes else str(rooted_meta[node_id]["name"] or ""),
-                "length": max(0.0, float(incoming_length)),
-                "children": child_nodes,
-            }
-
-        rooted_children = []
-        for neighbor_id, edge_length in rooted_adjacency.get(rooted_root_id, []):
-            rooted_children.append(build_oriented(neighbor_id, rooted_root_id, edge_length))
-        rooted_children.sort(key=self._tree_leaf_sort_key)
-        return {
-            "name": "",
-            "length": 0.0,
-            "children": rooted_children,
-        }
-
-    def _build_neighbor_joining_tree(self, labels, distance_matrix):
-        labels = [str(label or "") for label in labels]
-        n_items = len(labels)
-        if n_items == 0:
-            return {"name": "", "length": 0.0, "children": []}
-        if n_items == 1:
-            return {"name": labels[0], "length": 0.0, "children": []}
-
-        active = list(range(n_items))
-        nodes = {
-            idx: {"name": labels[idx], "length": 0.0, "children": []}
-            for idx in active
-        }
-        distances = {
-            idx: {
-                other_idx: float(distance_matrix[idx, other_idx])
-                for other_idx in active
-                if other_idx != idx
-            }
-            for idx in active
-        }
-        next_id = n_items
-
-        while len(active) > 2:
-            n_active = len(active)
-            row_sums = {
-                idx: sum(float(distances[idx][other_idx]) for other_idx in active if other_idx != idx)
-                for idx in active
-            }
-
-            best_pair = None
-            best_score = None
-            for pos, idx in enumerate(active):
-                for other_idx in active[pos + 1:]:
-                    q_score = ((n_active - 2) * float(distances[idx][other_idx])) - row_sums[idx] - row_sums[other_idx]
-                    if best_score is None or q_score < best_score:
-                        best_score = q_score
-                        best_pair = (idx, other_idx)
-
-            if not best_pair:
-                break
-
-            left_id, right_id = best_pair
-            pair_distance = float(distances[left_id][right_id])
-            if n_active > 2:
-                delta = (row_sums[left_id] - row_sums[right_id]) / float(n_active - 2)
-            else:
-                delta = 0.0
-
-            left_length = max(0.0, 0.5 * (pair_distance + delta))
-            right_length = max(0.0, pair_distance - left_length)
-            nodes[left_id]["length"] = left_length
-            nodes[right_id]["length"] = right_length
-
-            merged_id = next_id
-            next_id += 1
-            nodes[merged_id] = {
-                "name": "",
-                "length": 0.0,
-                "children": [nodes[left_id], nodes[right_id]],
-            }
-
-            distances[merged_id] = {}
-            for other_idx in active:
-                if other_idx in (left_id, right_id):
-                    continue
-                merged_distance = max(
-                    0.0,
-                    0.5 * (
-                        float(distances[left_id][other_idx])
-                        + float(distances[right_id][other_idx])
-                        - pair_distance
-                    ),
-                )
-                distances[merged_id][other_idx] = merged_distance
-
-            for other_idx in active:
-                if other_idx in (left_id, right_id):
-                    continue
-                distances[other_idx][merged_id] = distances[merged_id][other_idx]
-
-            active = [idx for idx in active if idx not in (left_id, right_id)]
-
-            distances.pop(left_id, None)
-            distances.pop(right_id, None)
-            for other_idx in list(distances.keys()):
-                distances[other_idx].pop(left_id, None)
-                distances[other_idx].pop(right_id, None)
-
-            active.append(merged_id)
-
-        if len(active) == 1:
-            return nodes[active[0]]
-
-        left_id, right_id = active
-        root_distance = max(0.0, float(distances[left_id][right_id]) / 2.0)
-        nodes[left_id]["length"] = root_distance
-        nodes[right_id]["length"] = root_distance
-        return {
-            "name": "",
-            "length": 0.0,
-            "children": [nodes[left_id], nodes[right_id]],
         }
 
     def _build_class_cluster_tree_payload(self):
@@ -2952,162 +2553,24 @@ class ClassSimilarityDataMixin:
 
         class_data = self._build_class_only_similarity_data()
         classes = class_data["classes"]
-        n_classes = len(classes)
         tip_annotations = self._build_class_tip_annotations(classes)
-        variants = OrderedDict()
-
-        if n_classes < 2:
-            points = []
-            for idx, class_row in enumerate(classes):
-                points.append({
-                    "id": idx,
-                    "symbol": class_row["symbol"],
-                    "label": class_row["name"],
-                    "color": class_row["color"],
-                    "x": 0.0,
-                    "y": 0.0,
-                })
-            base_scatter = OrderedDict([
-                ("tsne", {"label": "t-SNE", "points": points}),
-            ])
-            for variant_key, variant_data in class_data["variants"].items():
-                variant_meta = {
-                    "n_classes": n_classes,
-                    "missing_pairs": variant_data["missing_pairs"],
-                    "fill_distance": variant_data["fill_distance"],
-                    "summary_label": variant_data["label"],
-                }
-                empty_tree = {
-                    "segments": [],
-                    "leaf_positions": [],
-                    "newick": "",
-                    "phylogram": {"name": "", "length": 0.0, "children": []},
-                    "phylogram_newick": "",
-                    "phylogram_rooted": {"name": "", "length": 0.0, "children": []},
-                    "phylogram_rooted_newick": "",
-                    "phylogram_unrooted": {"name": "", "length": 0.0, "children": []},
-                    "phylogram_unrooted_newick": "",
-                    "max_distance": 0.0,
-                    "linkage_method": "average",
-                    "tree_method": "neighbor_joining_midpoint",
-                    "rooting_method": "midpoint",
-                }
-                render_payload = self._build_class_tree_render_payload(
-                    variant_key,
-                    variant_data["label"],
-                    variant_data["matrix"],
-                    tip_annotations,
-                    meta=variant_meta,
-                )
-                variants[variant_key] = self._build_class_tree_variant_payload(
-                    variant_key,
-                    variant_data["label"],
-                    base_scatter,
-                    variant_data["matrix"],
-                    variant_meta,
-                    tip_annotations,
-                    empty_tree,
-                    render_payload,
-                )
-            payload = {
-                "dataset": self._build_class_tree_storage_meta(),
-                "classes": classes,
-                "tip_annotations": tip_annotations,
-                "default_variant": class_data["default_variant"],
-                "variants": variants,
-            }
-            cache_alignment.set(
-                self.CLASS_CLUSTER_PAYLOAD_CACHE_KEY,
-                payload,
-                self.CLASS_CLUSTER_PAYLOAD_CACHE_TIMEOUT,
-            )
-            return payload
-
-        for variant_key, variant_data in class_data["variants"].items():
-            distance_matrix = np.array(variant_data["distance_matrix"], dtype=float)
-            scatter_methods = self._build_scatter_methods(classes, distance_matrix)
-
-            condensed = ssd.squareform(distance_matrix, checks=False)
-            linkage = sch.linkage(condensed, method='average')
-            dendro = sch.dendrogram(
-                linkage,
-                labels=[row["symbol"] for row in classes],
-                no_plot=True,
-            )
-
-            segments = []
-            for xs, ys in zip(dendro.get("dcoord", []), dendro.get("icoord", [])):
-                segments.append({
-                    "x": [float(x) for x in xs],
-                    "y": [float(y) for y in ys],
-                })
-
-            leaf_positions = []
-            for idx, symbol in enumerate(dendro.get("ivl", [])):
-                leaf_positions.append({
-                    "symbol": symbol,
-                    "y": float(5 + 10 * idx),
-                })
-
-            tree_obj = sch.to_tree(linkage, False)
-            tree_newick = self._linkage_to_newick(tree_obj, "", tree_obj.dist, [row["symbol"] for row in classes])
-            raw_phylogram_tree = self._build_neighbor_joining_tree(
-                [row["symbol"] for row in classes],
-                distance_matrix,
-            )
-            phylogram_tree = self._midpoint_root_tree(raw_phylogram_tree)
-            phylogram_newick = "{};".format(self._tree_dict_to_newick(phylogram_tree, include_length=True))
-            raw_phylogram_newick = "{};".format(self._tree_dict_to_newick(raw_phylogram_tree, include_length=True))
-            variant_meta = {
-                "n_classes": n_classes,
-                "missing_pairs": variant_data["missing_pairs"],
-                "fill_distance": variant_data["fill_distance"],
-                "summary_label": variant_data["label"],
-                "max_distance": float(np.max(dendro.get("dcoord", [0.0])) if dendro.get("dcoord") else 0.0),
-            }
-            tree_payload = {
-                "segments": segments,
-                "leaf_positions": leaf_positions,
-                "newick": tree_newick,
-                "phylogram": phylogram_tree,
-                "phylogram_newick": phylogram_newick,
-                "phylogram_rooted": phylogram_tree,
-                "phylogram_rooted_newick": phylogram_newick,
-                "phylogram_unrooted": raw_phylogram_tree,
-                "phylogram_unrooted_newick": raw_phylogram_newick,
-                "max_distance": variant_meta["max_distance"],
-                "linkage_method": "average",
-                "tree_method": "neighbor_joining_midpoint",
-                "rooting_method": "midpoint",
-            }
-            render_payload = self._build_class_tree_render_payload(
-                variant_key,
-                variant_data["label"],
-                variant_data["matrix"],
-                tip_annotations,
-                rooted_tree=phylogram_tree,
-                rooted_newick=phylogram_newick,
-                unrooted_tree=raw_phylogram_tree,
-                unrooted_newick=raw_phylogram_newick,
-                meta=variant_meta,
-            )
-            variants[variant_key] = self._build_class_tree_variant_payload(
-                variant_key,
-                variant_data["label"],
-                scatter_methods,
-                variant_data["matrix"],
-                variant_meta,
-                tip_annotations,
-                tree_payload,
-                render_payload,
-            )
+        distance_matrix = np.array(class_data["distance_matrix"], dtype=float)
+        scatter_methods = self._build_scatter_methods(classes, distance_matrix)
 
         payload = {
             "dataset": self._build_class_tree_storage_meta(),
             "classes": classes,
             "tip_annotations": tip_annotations,
-            "default_variant": class_data["default_variant"],
-            "variants": variants,
+            "matrix": class_data["matrix"],
+            "scatter": {
+                "default_method": "tsne",
+                "methods": scatter_methods,
+            },
+            "meta": {
+                "n_classes": len(classes),
+                "missing_pairs": class_data["missing_pairs"],
+                "fill_distance": class_data["fill_distance"],
+            },
         }
         cache_alignment.set(
             self.CLASS_CLUSTER_PAYLOAD_CACHE_KEY,
@@ -3117,8 +2580,11 @@ class ClassSimilarityDataMixin:
         return payload
 
 
-class CrossClassSimilarity(ClassSimilarityDataMixin, TemplateView):
-    template_name = 'classification/CrossClassSimilarity.html'
+class CrossClassSimilarity(ClassSimilarityDataMixin):
+    """
+    Plain helper class (not a Django view) — provides the cross-class similarity
+    matrix data to whichever Detail page inlines the matrix content.
+    """
 
     # Five single-protein “Classless” items as separate groups (display order)
     SINGLE_PROTEIN_LABELS = ["GPR107", "GPR137", "TPRA1", "GPR143", "GPR157"]
@@ -3214,8 +2680,7 @@ class CrossClassSimilarity(ClassSimilarityDataMixin, TemplateView):
 
     # ---- main
     def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["embed_mode"] = str(self.request.GET.get("embed") or "").strip().lower() in {"1", "true", "yes"}
+        context = dict(kwargs)
 
         # 1) Build display list (no extra/non-human groups).
         # The matrix keeps classless receptors as toggleable single-protein rows,
@@ -3558,59 +3023,28 @@ class CrossClassSimilarity(ClassSimilarityDataMixin, TemplateView):
         return context
 
 
-class NewClassClusterTree(ClassSimilarityDataMixin, TemplateView):
-    template_name = 'classification/NewClassClusterTree.html'
+class NewClassClusterTree(ClassSimilarityDataMixin, View):
+    """
+    JSON API only — serves the class-cluster scatter+matrix payload consumed by
+    the Cluster tab inlined into GPCRSuperfamilyVisualizationDetail's template.
+    """
 
     def get(self, request, *args, **kwargs):
-        want_json = (
-            request.GET.get('format') == 'json'
-            or request.GET.get('data') == '1'
-            or 'application/json' in request.headers.get('Accept', '')
-        )
-        if want_json:
-            try:
-                payload = self._build_class_cluster_tree_payload()
-            except Exception as e:
-                return JsonResponse({"error": str(e)}, status=400)
-            return JsonResponse(payload, safe=True)
-        return super(NewClassClusterTree, self).get(request, *args, **kwargs)
-
-    def get_context_data(self, **kwargs):
-        ctx = super(NewClassClusterTree, self).get_context_data(**kwargs)
-        requested_variant = str(self.request.GET.get("variant") or "").strip()
-        ctx.update(self.build_cluster_tree_context(
-            self.request,
-            embed_mode=str(self.request.GET.get("embed") or "").strip().lower() in {"1", "true", "yes"},
-            cluster_only=str(self.request.GET.get("cluster_only") or "").strip().lower() in {"1", "true", "yes"},
-            layout=str(self.request.GET.get("layout") or "").strip().lower() or "default",
-            variant=requested_variant,
-            title=str(self.request.GET.get("title") or "").strip(),
-            intro=str(self.request.GET.get("intro") or "").strip(),
-        ))
-        return ctx
+        try:
+            payload = self._build_class_cluster_tree_payload()
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+        return JsonResponse(payload, safe=True)
 
     @classmethod
-    def build_cluster_tree_context(cls, request, *, embed_mode=False, cluster_only=False,
-                                    layout="default", variant="max", title="", intro=""):
+    def build_cluster_tree_context(cls, request):
         """
-        Build the class-cluster-tree context independent of the current view's
-        own query string, so a parent page (e.g. GPCRSuperfamilyVisualizationDetail)
-        can inline this content with its own fixed parameters.
+        Build the small bit of context a Detail page needs to inline the Cluster
+        tab: the JSON API URL its own JS fetches on load.
         """
-        if variant not in cls.SUMMARY_VARIANTS:
-            variant = "max"
         base = request.build_absolute_uri(reverse("classification-newclassclustertree"))
         return {
-            "embed_url": "{}?{}".format(base, urlencode({"format": "json"})),
-            "ncct_embed_mode": embed_mode,
-            "ncct_cluster_only": cluster_only,
-            "ncct_layout_mode": layout or "default",
-            "ncct_initial_variant": variant,
-            "ncct_page_title": title or "Class clusters",
-            "ncct_intro": (
-                intro
-                or "This page summarizes the highest sequence similarity between GPCR classes as a compact 2D class-cluster plot and a distance-driven hierarchical dendrogram."
-            ),
+            "cluster_embed_url": "{}?{}".format(base, urlencode({"format": "json"})),
         }
 
 
@@ -3885,13 +3319,8 @@ class ReceptorFamilyVisualizationDetail(ClassificationVisualizationMixin, ClassS
         tree_payload = self._build_family_tree_ui_payload(payload, similarity_data)
         cluster_payload = self._build_family_cluster_payload(similarity_data)
         ctx["page_title"] = self.family_entry["label"]
-        ctx["page_description"] = (
-            "Persisted receptor-family phylogenetic tree paired with a sequence-similarity cluster view."
-        )
-        ctx["family_entry_json"] = json.dumps(self.family_entry)
         ctx["family_tree_payload_json"] = json.dumps(tree_payload)
         ctx["family_cluster_payload_json"] = json.dumps(cluster_payload)
-        ctx["family_receptor_count"] = tree_row.protein_count if tree_row else self.family_entry.get("receptor_count", 0)
         ctx["family_tree_has_payload"] = bool(tree_payload.get("tree"))
         return ctx
 

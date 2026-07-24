@@ -1,5 +1,4 @@
 import hashlib
-import json
 from collections import OrderedDict
 from types import SimpleNamespace
 
@@ -15,10 +14,6 @@ TREE_SETTINGS = ["0", "0", "0", "0"]
 TREE_METHOD = "neighbor_joining"
 SEGMENT_SOURCE = "generic_conserved"
 BRANCH_MODE = "regular"
-SUPERFAMILY_TREE_GROUP_KEY = "superfamily-tree"
-SUPERFAMILY_TREE_DISPLAY_NAME = "GPCR superfamily tree"
-SUPERFAMILY_TREE_VARIANT = "max"
-SUPERFAMILY_TREE_SEGMENT_SOURCE = "class_similarity_summary"
 
 
 def _clean_annotation_text(value):
@@ -64,76 +59,6 @@ def family_source_hash(proteins):
     for protein_id in sorted(int(protein.id) for protein in proteins):
         digest.update(str(protein_id).encode("ascii"))
         digest.update(b":")
-    return digest.hexdigest()
-
-
-def _superfamily_annotation_row(symbol, annotation, variant_label):
-    label = _clean_annotation_text((annotation or {}).get("label") or symbol)
-    return [
-        label,
-        "GPCR superfamily",
-        str(variant_label or "Sequence similarity"),
-        label,
-        str((annotation or {}).get("slug") or symbol or ""),
-    ]
-
-
-def build_superfamily_tree_payload(class_cluster_payload, *, variant_key=SUPERFAMILY_TREE_VARIANT, build_version="v1"):
-    payload = class_cluster_payload or {}
-    dataset_meta = dict(payload.get("dataset") or {})
-    variants = payload.get("variants") or {}
-    resolved_variant_key = str(variant_key or SUPERFAMILY_TREE_VARIANT).strip().lower() or SUPERFAMILY_TREE_VARIANT
-    variant_payload = variants.get(resolved_variant_key) or variants.get(SUPERFAMILY_TREE_VARIANT) or {}
-    render_payload = dict(variant_payload.get("render_payload") or {})
-    render_meta = dict(render_payload.get("meta") or {})
-    variant_label = str(render_meta.get("variant_label") or variant_payload.get("label") or "Sequence similarity")
-
-    annotations = OrderedDict()
-    for symbol, annotation in (render_payload.get("annotations") or {}).items():
-        annotations[str(symbol)] = _superfamily_annotation_row(symbol, annotation, variant_label)
-
-    classes = [
-        {
-            "name": str(class_row.get("name") or ""),
-            "symbol": str(class_row.get("symbol") or ""),
-            "slug": str(class_row.get("slug") or ""),
-            "color": str(class_row.get("color") or "#808080"),
-        }
-        for class_row in (payload.get("classes") or [])
-    ]
-    resolved_variant_key = str(render_meta.get("variant_key") or variant_payload.get("key") or resolved_variant_key)
-
-    return {
-        "tree": str((render_payload.get("trees") or {}).get("rooted") or ""),
-        "annotations": annotations,
-        "classes": classes,
-        "matrix": variant_payload.get("matrix") or render_payload.get("matrix") or [],
-        "variant_label": variant_label,
-        "Gprot_coupling": {},
-        "meta": {
-            "family": SUPERFAMILY_TREE_DISPLAY_NAME,
-            "group_key": SUPERFAMILY_TREE_GROUP_KEY,
-            "n_points": len(classes),
-            "entity_type": "gpcr_class",
-            "tree_method": str(render_meta.get("tree_method") or "neighbor_joining_midpoint"),
-            "segment_source": SUPERFAMILY_TREE_SEGMENT_SOURCE,
-            "bootstrap": 0,
-            "branch_mode": BRANCH_MODE,
-            "build_version": str(build_version),
-            "variant_key": resolved_variant_key,
-            "variant_label": variant_label,
-            "dataset_key": str(dataset_meta.get("dataset_key") or ""),
-            "selection_key": str(dataset_meta.get("selection_key") or ""),
-            "note": "Persisted GPCR superfamily phylogram built from class-level receptor-similarity summaries.",
-        },
-    }
-
-
-def superfamily_source_hash(payload):
-    digest = hashlib.sha1()
-    digest.update(
-        json.dumps(payload or {}, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    )
     return digest.hexdigest()
 
 

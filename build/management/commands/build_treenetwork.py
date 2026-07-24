@@ -43,19 +43,13 @@ class Command(BaseBuild):
             from classification.family_tree import (
                 BRANCH_MODE,
                 SEGMENT_SOURCE,
-                SUPERFAMILY_TREE_DISPLAY_NAME,
-                SUPERFAMILY_TREE_GROUP_KEY,
-                SUPERFAMILY_TREE_SEGMENT_SOURCE,
-                SUPERFAMILY_TREE_VARIANT,
                 TREE_METHOD,
                 build_family_tree_payload,
-                build_superfamily_tree_payload,
                 family_source_hash,
                 resolve_family_network_nodes,
-                superfamily_source_hash,
             )
             from classification.models import TreeNetwork
-            from classification.views import ClassSimilarityDataMixin, ClassificationVisualizationMixin
+            from classification.views import ClassificationVisualizationMixin
         except ImportError as e:
             raise CommandError("Classification family tree helpers are not available.") from e
 
@@ -118,40 +112,6 @@ class Command(BaseBuild):
                         row.protein_count,
                     )
                 )
-
-        try:
-            class_cluster_payload = ClassSimilarityDataMixin()._build_class_cluster_tree_payload()
-            superfamily_payload = build_superfamily_tree_payload(
-                class_cluster_payload,
-                variant_key=SUPERFAMILY_TREE_VARIANT,
-                build_version=self.BUILD_VERSION,
-            )
-        except Exception as exc:
-            raise CommandError("Failed to build persisted superfamily tree payload.") from exc
-
-        superfamily_row = TreeNetwork(
-            group_key=SUPERFAMILY_TREE_GROUP_KEY,
-            family=None,
-            class_family=None,
-            display_name=SUPERFAMILY_TREE_DISPLAY_NAME,
-            protein_count=len(superfamily_payload.get("classes") or []),
-            tree_method=str((superfamily_payload.get("meta") or {}).get("tree_method") or "neighbor_joining_midpoint"),
-            segment_source=SUPERFAMILY_TREE_SEGMENT_SOURCE,
-            bootstrap=0,
-            branch_mode=str((superfamily_payload.get("meta") or {}).get("branch_mode") or BRANCH_MODE),
-            tree_newick=str(superfamily_payload.get("tree") or ""),
-            payload=superfamily_payload,
-            build_version=self.BUILD_VERSION,
-            source_hash=superfamily_source_hash(superfamily_payload),
-        )
-        rows.append(superfamily_row)
-        if verbose:
-            print(
-                "[treenetwork] superfamily {} -> {} classes".format(
-                    superfamily_row.group_key,
-                    superfamily_row.protein_count,
-                )
-            )
 
         if not dry_run and rows:
             TreeNetwork.objects.bulk_create(rows, batch_size=100)

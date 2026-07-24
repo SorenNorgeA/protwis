@@ -18,7 +18,6 @@ urlpatterns = [
     # Canonical URLs
     url(r'^GPCRBrowser[/]?$', views.GPCRBrowser.as_view(), name='classification-gpcrbrowser'),
     url(r'^Classification[/]?$', views.Classification.as_view(), name='classification-classification'),
-    url(r'^ClassificationWheel[/]?$', views.ClassificationWheel.as_view(), name='classification-wheel'),
     url(r'^visualizations[/]?$', views.ClassificationVisualizationsLanding.as_view(), name='classification-visualizations'),
     url(
         r'^visualizations/class/(?P<class_key>[A-Za-z0-9]+)[/]?$',
@@ -36,18 +35,12 @@ urlpatterns = [
         name='classification-visualizations-superfamily',
     ),
     url(
-        r'^visualizations/superfamily/tree[/]?$',
-        views.SuperfamilyCircularTree.as_view(),
-        name='classification-superfamily-tree',
-    ),
-    url(
         r'^visualizations/family/(?P<family_key>[-a-z0-9]+)[/]?$',
         views.ReceptorFamilyVisualizationDetail.as_view(),
         name='classification-visualizations-family',
     ),
     url(r'^StructureSim[/]?$', views.StructureSim.as_view(), name='classification-structuresim'),
-    url(r'^Classification_tree[/]?$', views.Classification_tree.as_view(), name='classification-tree'),
-    url(r'^CrossClassSimilarity[/]?$', views.CrossClassSimilarity.as_view(), name='classification-crossclass'),
+    # JSON-only API — consumed by the Cluster tab inlined into GPCRSuperfamilyVisualizationDetail.
     url(r'^NewClassClusterTree[/]?$', views.NewClassClusterTree.as_view(), name='classification-newclassclustertree'),
 ]
 
