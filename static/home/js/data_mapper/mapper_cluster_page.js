@@ -680,14 +680,16 @@ function mapperClusterGetLabelColor(lbl) {
           return;
         }
         var inputData = mapperClusterBuildData();
+        var posMap = getClusterPosMap();
         var newData = [];
         seq.forEach(function (pt) {
           var key = pt.label + '_human';
           var row = inputData[key] || inputData[pt.label];
+          var meta = posMap[String(pt.label || '').toLowerCase()] || {};
           var newPt = {
             x: pt.x, y: pt.y, label: pt.label, original_label: pt.label,
-            'Class': pt['Class'] || '', 'Ligand type': pt['Ligand type'] || '',
-            'Receptor family': pt['Receptor family'] || '',
+            'Class': meta['Class'] || '', 'Ligand type': meta['Ligand type'] || '',
+            'Receptor family': meta['Receptor family'] || '',
             fill: row ? (row.Value1 != null ? row.Value1 : 0) : 0,
             cluster: 0
           };

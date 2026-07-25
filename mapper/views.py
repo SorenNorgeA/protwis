@@ -1,10 +1,9 @@
-from django.shortcuts import render
 from django.http import HttpResponse, JsonResponse
-from django.conf import settings
 from django.db.models import Q
 from django.views.generic import TemplateView, View
 from protein.models import Protein, ProteinFamily
 from common.phylogenetic_tree import PhylogeneticTreeGenerator
+from classification.models import ClusterCoord
 
 import json
 from copy import deepcopy
@@ -22,8 +21,6 @@ import numpy as np
 from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
 import re
-
-import os
 
 class DataMapperHome(TemplateView):
 
@@ -918,178 +915,80 @@ class DataMapperHome(TemplateView):
         return master_dict, general_options, circles, whole_rec_dict, entrez_label_dict
 
     @staticmethod
-    def clustering_test(method, data, data_type):
-        # Convert the nested dictionary to a DataFrame
-        data = {key.replace('_human', ''): value for key, value in data.items()}
-        data_df = pd.DataFrame(data).T
+    def recompute_position_layout(data):
+        """
+        Re-run t-SNE from user-submitted receptor "Position" values — the live
+        recompute POSTed by ClusterRender.post whenever every row in the Position
+        column is filled in. Class/Ligand type/Receptor family aren't returned —
+        the client already holds that metadata (window.MAPPER_CLUSTER_ALL_POSITIONS)
+        and merges it back in via getClusterPosMap() (mapper_cluster_page.js).
+        """
+        labels = [entry_name.replace('_human', '') for entry_name in data.keys()]
+        positions = pd.Series(
+            [row.get('Value2') for row in data.values()],
+            index=labels,
+            dtype=float,
+        )
+        positions = positions.fillna(positions.mean())
 
-        # Ensure Value1 is always filled with 0 if missing
-        if 'Value1' in data_df.columns:
-            data_df['Value1'] = data_df['Value1'].fillna(0)
+        distance_matrix = np.abs(positions.values.reshape(-1, 1) - positions.values.reshape(1, -1))
 
-        if 'Value2' in data_df.columns:
-            if data_df['Value2'].isnull().sum() > 0:
-                data_df['Value2'].fillna(data_df['Value2'].mean(), inplace=True)
+        n_points = distance_matrix.shape[0]
+        perplexity = max(2, min(n_points / 5, 50))
+        tsne = TSNE(n_components=2, metric='precomputed', init='random', random_state=42, perplexity=perplexity)
+        coords = tsne.fit_transform(distance_matrix)
+        clusters = KMeans(n_clusters=5, random_state=42).fit_predict(coords)
 
-            # --- Compute distance matrix from Value2 ---
-            values = data_df[['Value2']].values  # shape: (n, 1)
-            distance_matrix = np.abs(values - values.T)  # shape: (n, n)
-            distance_df = pd.DataFrame(distance_matrix, index=data_df.index, columns=data_df.index)
+        result = pd.DataFrame(coords, columns=['x', 'y'])
+        result['cluster'] = clusters
+        result['label'] = positions.index
+        return result.to_json(orient='records')
 
-            # --- Run reduction ---
-            reduced_df = DataMapperHome.reduce_and_cluster(distance_df, method=method, is_distance_matrix=True)
-
-            # --- Merge metadata ---
-            if 'Value1' in data_df.columns:
-                df_merged = pd.merge(reduced_df, data_df['Value1'], left_on='label', right_index=True, how='left')
-                df_merged.rename(columns={'Value1': 'fill'}, inplace=True)
-            else:
-                df_merged = reduced_df.copy()
-                df_merged['fill'] = 0
-
-            ## add class/ligand_type/receptor_family clusters ##
-
-            # Step 1: Fetch data
-            proteins = Protein.objects.filter(
-                parent_id__isnull=True, species_id=1
-            ).values_list(
-                'entry_name',
-                "family__parent__parent__parent__name",  # To be renamed as 'Class'
-                'family__parent__parent__name',  # To be renamed as 'Ligand type'
-                'family__parent__name'  # To be renamed as 'Receptor family'
+    # Global sequence-similarity t-SNE layout for all human GPCRs, sourced from
+    # classification.ClusterCoord (built offline by build_clustercoord from ReceptorSimilarity)
+    @staticmethod
+    def generate_full_matrix():
+        rows = (
+            ClusterCoord.objects
+            .filter(
+                dataset_type=ClusterCoord.DATASET_SEQUENCE,
+                plot_type=ClusterCoord.PLOT_TSNE,
+                group_key='global',
+                protein__species_id=1,
             )
+            .select_related('protein')
+            .order_by('protein__entry_name')
+        )
+        reduced_df = pd.DataFrame([
+            {'label': r.protein.entry_name.replace('_human', ''), 'x': r.x, 'y': r.y}
+            for r in rows.iterator()
+        ])
 
-            # Step 2: Convert to a DataFrame
-            proteins_df = pd.DataFrame(list(proteins), columns=['entry_name', 'Class', 'Ligand type', 'Receptor family'])
+        # add class/ligand_type/receptor_family clusters
 
-            # Step 3: Remove '_human' suffix from 'entry_name'
-            proteins_df['entry_name'] = proteins_df['entry_name'].str.replace('_human', '')
+        # Step 1: Fetch data
+        proteins = Protein.objects.filter(
+            parent_id__isnull=True, species_id=1
+        ).values_list(
+            'entry_name',
+            "family__parent__parent__parent__name",  # To be renamed as 'Class'
+            'family__parent__parent__name',  # To be renamed as 'Ligand type'
+            'family__parent__name'  # To be renamed as 'Receptor family'
+        )
 
-            # Step 4: Rename 'entry_name' to 'label'
-            proteins_df = proteins_df.rename(columns={'entry_name': 'label'})
+        # Step 2: Convert to a DataFrame
+        proteins_df = pd.DataFrame(list(proteins), columns=['entry_name', 'Class', 'Ligand type', 'Receptor family'])
 
-            # Step 5: Merge with reduced_df on 'label'
-            merged_df = pd.merge(df_merged, proteins_df, on='label', how='left')
-            # Prepare the data for visualization
-            data_json = merged_df.to_json(orient='records')
-        else:
-            if data_type == 'seq':
-                # Get the info of the plot
-                full_matrix = DataMapperHome.generate_full_matrix(method)
-                # full_matrix_structure = DataMapperHome.generate_full_matrix_structure(method)
+        # Step 3: Remove '_human' suffix from 'entry_name'
+        proteins_df['entry_name'] = proteins_df['entry_name'].str.replace('_human', '')
 
-                # Filter the original fill matrix based on what we use provided
-                reduced_input = full_matrix[full_matrix['label'].isin(list(data.keys()))]
-                data_df = pd.DataFrame(data).T
-                # Merge the dataframes
-                df_merged = pd.merge(reduced_input, data_df['Value1'], left_on='label', right_index=True, how='left')
-                df_merged.rename(columns={'Value1': 'fill'}, inplace=True)
-                # Prepare the data for visualization
-                data_json = df_merged.to_json(orient='records')
-            elif data_type == 'structure':
-                # Get the info of the plot
-                full_matrix_structure = DataMapperHome.generate_full_matrix_structure(method)
+        # Step 4: Rename 'entry_name' to 'label'
+        proteins_df = proteins_df.rename(columns={'entry_name': 'label'})
 
-                # Filter the original fill matrix based on what we use provided
-                reduced_input = full_matrix_structure[full_matrix_structure['label'].isin(list(data.keys()))]
-                data_df = pd.DataFrame(data).T
-                # Merge the dataframes
-                df_merged = pd.merge(reduced_input, data_df['Value1'], left_on='label', right_index=True, how='left')
-                df_merged.rename(columns={'Value1': 'fill'}, inplace=True)
-                # Prepare the data for visualization
-                data_json = df_merged.to_json(orient='records')
-
-        return data_json
-
-    # Generate full similarity matrix for cluster or load existing #
-    def generate_full_matrix(method):
-        Data_dir = settings.DATA_DIR
-        output_file = os.sep.join([Data_dir, 'structure_data', 'HumanGPCRSimilarityAllData_{}.csv'.format(method)])
-        # Check if the file exists
-        if os.path.exists(output_file):
-            # Load the data from the existing file
-            merged_df = pd.read_csv(output_file, index_col=0)
-        else:
-            # Original processing steps
-            similarity_matrix_file = os.sep.join([Data_dir, 'structure_data', 'human_gpcr_similarity_data_all_segments.csv'])
-            data = pd.read_csv(similarity_matrix_file)
-            data = data[['receptor1_entry_name', 'receptor2_entry_name', 'similarity']]
-            matrix = data.pivot(index='receptor1_entry_name', columns='receptor2_entry_name', values='similarity')
-            matrix.index = matrix.index.str.replace('_human', '', regex=False)
-            matrix.columns = matrix.columns.str.replace('_human', '', regex=False)
-            matrix = matrix.fillna(100)
-
-            # ---------------------------------------------
-            # Step 2: Normalize Similarity Values to [0, 1]
-            # ---------------------------------------------
-
-            normalized_matrix = matrix / 100.0
-
-            distance_matrix_df = 1.0 - normalized_matrix
-
-            # Perform reduction and clustering
-            reduced_df = DataMapperHome.reduce_and_cluster(distance_matrix_df, method='tsne')
-
-            reduced_df['label'] = reduced_df['label'].apply(lambda x: x.split('[Human] ')[1] if '[Human] ' in x else x)
-            reduced_df['label'] = reduced_df['label'].apply(lambda x: x.split('_human')[0] if '_human' in x else x)
-
-            # add class/ligand_type/receptor_family clusters
-
-            # Step 1: Fetch data
-            proteins = Protein.objects.filter(
-                parent_id__isnull=True,species_id=1
-            ).values_list(
-                'entry_name',
-                "family__parent__parent__parent__name",  # To be renamed as 'Class'
-                'family__parent__parent__name',  # To be renamed as 'Ligand type'
-                'family__parent__name'  # To be renamed as 'Receptor family'
-            )
-
-            # Step 2: Convert to a DataFrame
-            proteins_df = pd.DataFrame(list(proteins), columns=['entry_name', 'Class', 'Ligand type', 'Receptor family'])
-            proteins_df.to_excel(os.sep.join([settings.DATA_DIR, 'structure_data', 'All_GPCRs_ligandType_Families.xlsx']),index=False)
-
-            # Step 3: Remove '_human' suffix from 'entry_name'
-            proteins_df['entry_name'] = proteins_df['entry_name'].str.replace('_human', '')
-
-            # Step 4: Rename 'entry_name' to 'label'
-            proteins_df = proteins_df.rename(columns={'entry_name': 'label'})
-
-            # Step 5: Merge with reduced_df on 'label'
-            merged_df = pd.merge(reduced_df, proteins_df, on='label', how='left')
-
-            # Save the reduced DataFrame to a CSV file
-            merged_df.to_csv(output_file)
+        # Step 5: Merge with reduced_df on 'label'
+        merged_df = pd.merge(reduced_df, proteins_df, on='label', how='left')
 
         return merged_df
-
-    @staticmethod
-    def reduce_and_cluster(data, method='tsne', n_components=2, n_clusters=5, is_distance_matrix=False):
-
-        # Figure out how many points we have
-        n_points = data.shape[0]
-
-        # Simple heuristic: scale perplexity and clamp it between 2 and 50
-        suggested_perplexity = max(2, min(n_points / 5, 50))
-
-        if method == 'tsne':
-            if is_distance_matrix:
-                reducer = TSNE(n_components=n_components, metric='precomputed', init='random', random_state=42, perplexity=suggested_perplexity)
-            else:
-                reducer = TSNE(n_components=n_components, random_state=42,perplexity=suggested_perplexity)
-        else:
-            raise ValueError("Method should be 'tsne' for now (or add other methods)")
-
-        reduced_data = reducer.fit_transform(data)
-
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-        clusters = kmeans.fit_predict(reduced_data)
-
-        df = pd.DataFrame(reduced_data, columns=['x', 'y'])
-        df['cluster'] = clusters
-        df['label'] = data.index if hasattr(data, 'index') else range(len(data))
-
-        return df
 
     @staticmethod
     def Label_conversion_info(data):
@@ -1134,7 +1033,7 @@ class ClusterRender(View):
             # Get data
             Data = json.loads(Data_json)
             # Calculate the plot
-            output_seq = DataMapperHome.clustering_test('tsne', Data,'seq')
+            output_seq = DataMapperHome.recompute_position_layout(Data)
             label_converter = DataMapperHome.Label_conversion_info(Data)
 
             return JsonResponse({
@@ -1283,7 +1182,7 @@ class MapperClusterView(TemplateView):
         context['gpcrome_picker_rows_json'] = json.dumps(
             DataMapperHome.gpcrome_receptor_picker_table_rows(maps=maps)
         )
-        full_matrix = DataMapperHome.generate_full_matrix('tsne')
+        full_matrix = DataMapperHome.generate_full_matrix()
         context['cluster_all_positions_json'] = full_matrix.to_json(orient='records')
         return context
 
