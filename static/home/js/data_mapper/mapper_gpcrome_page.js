@@ -2256,7 +2256,7 @@ function mapperWheelWheelClassDisplayShortLabel(code) {
   if (!k) {
     return '';
   }
-  if (k === 'Classless') {
+  if (k === 'Unclassified') {
     return 'U';
   }
   if (/^(A|B1|B2|C|F|T2)$/i.test(k)) {
@@ -2280,7 +2280,7 @@ function mapperWheelAddClassBadgePillsAfterDraw(locationId) {
   if (!svgSel || svgSel.empty()) {
     return;
   }
-  var CLASSLESS_BADGE_DX = -15;
+  var UNCLASSIFIED_BADGE_DX = -15;
 
   svgSel.selectAll('text')
     .filter(function() {
@@ -2329,10 +2329,10 @@ function mapperWheelAddClassBadgePillsAfterDraw(locationId) {
         rectNode.setAttribute('stroke-width', '0.75px');
         g.insertBefore(rectNode, node);
 
-        if (classKey === 'Classless') {
+        if (classKey === 'Unclassified') {
           var tPrev = txt.attr('transform') || '';
-          txt.attr('transform', (tPrev ? (tPrev + ' ') : '') + 'translate(' + CLASSLESS_BADGE_DX + ',0)');
-          rectNode.setAttribute('transform', 'translate(' + CLASSLESS_BADGE_DX + ',0)');
+          txt.attr('transform', (tPrev ? (tPrev + ' ') : '') + 'translate(' + UNCLASSIFIED_BADGE_DX + ',0)');
+          rectNode.setAttribute('transform', 'translate(' + UNCLASSIFIED_BADGE_DX + ',0)');
         }
       } catch (e) {
         /* ignore pill layout errors */
@@ -2340,25 +2340,9 @@ function mapperWheelAddClassBadgePillsAfterDraw(locationId) {
     });
 }
 
-function mapperWheelMapClasslessTitlesToUnclassified(locationId) {
-  var svgEl = document.getElementById(locationId + '_svg');
-  if (!svgEl || !svgEl.getElementsByTagName) {
-    return;
-  }
-  var titles = svgEl.getElementsByTagName('title');
-  for (var i = 0; i < titles.length; i++) {
-    var t = titles[i];
-    var txt = t.textContent != null ? t.textContent : '';
-    if (/\bClassless\b/.test(txt)) {
-      t.textContent = txt.replace(/\bClassless\b/g, 'Unclassified');
-    }
-  }
-}
-
 function mapperWheelDrawGPCRomeWithClassBadges(data, locationId, styling) {
   DrawGPCRomeWheel(data, locationId, styling);
   mapperWheelAddClassBadgePillsAfterDraw(locationId);
-  mapperWheelMapClasslessTitlesToUnclassified(locationId);
 }
 
 mapperWheelPreprocessClassicWheelData(GPCRome_WheelDict);

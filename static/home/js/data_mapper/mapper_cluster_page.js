@@ -115,7 +115,7 @@ function mapperClusterGetLabelColor(lbl) {
     } else {
       var prop = scheme; // 'Class','Ligand type','Receptor family','userCategory'
       labels = Array.from(new Set(currentClusterData.map(function(d){
-        return d[prop] === 'Other GPCRs' ? 'Classless' : d[prop];
+        return d[prop];
       }))).filter(Boolean);
       labels.sort();
     }

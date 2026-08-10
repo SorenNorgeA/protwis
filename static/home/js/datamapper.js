@@ -1067,7 +1067,7 @@ function createTraces(colorOption, showLabels, colorMapping, textColorEnabled) {
         const uniqueEntries = new Set();
 
         currentClusterData.forEach(point => {
-            const entry = point[colorOption] === 'Other GPCRs' ? 'Classless' : point[colorOption];
+            const entry = point[colorOption];
             if (!uniqueEntries.has(entry)) {
                 uniqueEntries.add(entry);
 
@@ -1142,7 +1142,7 @@ function createAnnotations(filteredData, colorOption, textColorEnabled, colorMap
             } else if (colorOption === 'gradient') {
                 textColor = gradColorScale(d.fill);
             } else if (['Class', 'Ligand type', 'Receptor family', 'userCategory'].includes(colorOption)) {
-                const entry = d[colorOption] === 'Other GPCRs' ? 'Classless' : d[colorOption];
+                const entry = d[colorOption];
                 textColor = colorMapping[entry];
             } else {
                 textColor = 'black';
@@ -1232,7 +1232,6 @@ function updatePlotWithAnnotations() {
     let colorMapping = {};
     if (['Class', 'Ligand type', 'Receptor family', 'userCategory'].includes(colorOption)) {
         let uniqueValues = Array.from(new Set(currentClusterData.map(d => d[colorOption])));
-        uniqueValues = uniqueValues.map(value => value === 'Other GPCRs' ? 'Classless' : value);
         uniqueValues.sort(naturalSort);
         uniqueValues.forEach((value, index) => {
             if (CLUSTER_LABEL_COLORS && !CLUSTER_LABEL_COLORS[value]) {
@@ -1463,24 +1462,6 @@ function initializeDataStyling(list_data_wow, data_types_list) {
 
 // Function to modify the data
 function Initialize_Data(data) {
-    // 1. Change "Other GPCRs" to "Classless" (Layer1)
-    if (data["Other GPCRs"]) {
-      data["Classless"] = data["Other GPCRs"];
-      delete data["Other GPCRs"];
-    }
-
-    // 2. Change "Other GPCR orphans" to "Classless orphans" (Layer3)
-    Object.keys(data).forEach(layer1Key => {
-      const layer2Data = data[layer1Key];
-      Object.keys(layer2Data).forEach(layer2Key => {
-        const layer3Data = layer2Data[layer2Key];
-        if (layer3Data["Other GPCR orphans"]) {
-          layer3Data["Classless orphans"] = layer3Data["Other GPCR orphans"];
-          delete layer3Data["Other GPCR orphans"];
-        }
-      });
-    });
-
     // // 3. Remove "Olfactory receptors" from Layer2
     // Object.keys(data).forEach(layer1Key => {
     //   const layer2Data = data[layer1Key];
@@ -3341,7 +3322,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                 let receptorFamilies = Object.keys(circleData[classKey]);
 
                 // Only add receptor families if there are more than one
-                if (!["T2", "Classless"].some(f => CircleHeaders.includes(f))) {
+                if (!["T2", "Unclassified"].some(f => CircleHeaders.includes(f))) {
                     CircleSubHeaders.push(...receptorFamilies);
                 }
             });
@@ -3439,7 +3420,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
             const text_value = values[index];
 
             // Check if the text value is in the Header_list
-            const isInHeaderList = CircleHeaders.includes(text_value)  && text_value !== "Classless";
+            const isInHeaderList = CircleHeaders.includes(text_value)  && text_value !== "Unclassified";
             const FirstHeader = CircleHeaders[0];
 
             // Check if the text value is in the Family_list
@@ -3449,7 +3430,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
             const angle = -((index / total) * 2 * Math.PI) + (Math.PI / 2);
 
             // If isSplit is true, treat it as a Family_list item (or handle it in a special way)
-            const adjustedRadius = isSplit ? (GPCRome_radius - 8) : text_value === "Classless" ? (GPCRome_radius - 10) : (isInFamilyList ? (GPCRome_radius - 20) : (isInHeaderList ? (GPCRome_radius + 18) : (GPCRome_radius + label_offset)));
+            const adjustedRadius = isSplit ? (GPCRome_radius - 8) : text_value === "Unclassified" ? (GPCRome_radius - 10) : (isInFamilyList ? (GPCRome_radius - 20) : (isInHeaderList ? (GPCRome_radius + 18) : (GPCRome_radius + label_offset)));
 
             // Position on the GPCRome's border with or without label offset
             let x,y;
@@ -3466,7 +3447,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
             let rotation;
             if (isInHeaderList) {
                 rotation = 0;
-            } else if (text_value === "Classless") {
+            } else if (text_value === "Unclassified") {
                 rotation = 0;
             } else {
                 rotation = -(angle * 180 / Math.PI);
@@ -3610,7 +3591,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
            })
            .attr("text-anchor", (d, i) => {
                // Center the text for headers, and handle normal text alignment for others
-               if (CircleHeaders.includes(d) && d !== "Classless") {
+               if (CircleHeaders.includes(d) && d !== "Unclassified") {
                    return "middle";  // Horizontally center the headers
                }
                const angle = (i / Circle_array.length) * 360 - 90;

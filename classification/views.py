@@ -61,7 +61,7 @@ class ClassificationVisualizationMixin:
         ("T2", {"label": "Class T2", "title": "Class T2 (Taste 2)", "slug": "009"}),
         ("O1", {"label": "Class O1", "title": "Class O1 (Fish-like olfactory receptors)", "slug": "007"}),
         ("O2", {"label": "Class O2", "title": "Class O2 (Tetrapod-specific olfactory receptors)", "slug": "008"}),
-        ("U", {"label": "Unclassified", "title": "Unclassified", "slug": "010"}),
+        ("U", {"label": "Unclassified", "title": "Unclassified", "slug": "011"}),
     ])
     TREE_DISABLED_CLASS_KEYS = {"O1", "O2", "U"}
 
@@ -964,7 +964,7 @@ class Classification(TemplateView):
         "Class T2 (Taste 2)":                       ("T2", "Taste 2"),
         "Class O1 (fish-like odorant)":             ("O1", "Olfactory-polyfunctional 1"),
         "Class O2 (tetrapod specific odorant)":     ("O2", "Olfactory-polyfunctional 2"),
-        "Other GPCRs":                              ("Cl", "Classless"),
+        "Other GPCRs":                              ("Cl", "Unclassified"),
         # non-human:
         "Class D (Fungal pheromone)":               ("D1", "Fungal pheromone 1"),
         "Class E (Yeast cAMP)":                     ("E",  "Slime mold cAMP"),
@@ -987,7 +987,7 @@ class Classification(TemplateView):
         {"code": "T2", "name": "Taste 2", "species": "Yes", "non_sensory_share": "-", "sensory_function": "Taste (bitter)"},
         {"code": "V1", "name": "Vomeronasal 1", "species": "Amphibia, reptiles & non-primate mammals", "non_sensory_share": "-", "sensory_function": "Pheromone-sensing"},
         {"code": "V2", "name": "Vomeronasal 2", "species": "Amphibia, reptiles & non-primate mammals", "non_sensory_share": "-", "sensory_function": "Pheromone-sensing"},
-        {"code": "Cl", "name": "Classless", "species": "Yes", "non_sensory_share": "Unknown", "sensory_function": "Unknown"},
+        {"code": "Cl", "name": "Unclassified", "species": "Yes", "non_sensory_share": "Unknown", "sensory_function": "Unknown"},
     ]
 
 
@@ -1250,7 +1250,7 @@ class Classification(TemplateView):
                 num_part = match.group(2)
                 # Handle special cases
                 if letter_part.upper() == "CL":
-                    return (999, 0)  # Classless goes last
+                    return (999, 0)  # Unclassified goes last
                 # Convert letter part to sortable value
                 letter_order = {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 6,
                                "OP": 7, "O": 7, "T": 8, "V": 9}
@@ -2294,7 +2294,7 @@ class ClassSimilarityDataMixin:
         "Class O1 (fish-like)": "007",
         "Class O2 (tetrapod specific)": "008",
         "Class T2 (Taste 2)": "009",
-        "Unclassified": "010",
+        "Unclassified": "011",
     }
 
     CLASS_SYMBOL_BY_NAME = {
@@ -2332,16 +2332,16 @@ class ClassSimilarityDataMixin:
         return {f.slug: f.id for f in qs}
 
     @staticmethod
-    def _resolve_classless_family_ids():
+    def _resolve_unclassified_family_ids():
         """
-        build_receptor_similarity excludes the single top-level "Unclassified" (slug '010')
+        build_receptor_similarity excludes the single top-level "Unclassified" (slug '011')
         family and instead builds ReceptorSimilarity rows against many individual bottom-level
-        classless families. Resolve that full descendant set here (rather than the top-level
+        unclassified families. Resolve that full descendant set here (rather than the top-level
         id alone) so "Unclassified" can be matched against the rows that actually exist.
         """
         return list(
-            ProteinFamily.objects.filter(slug__startswith='010')
-            .exclude(slug='010')
+            ProteinFamily.objects.filter(slug__startswith='011')
+            .exclude(slug='011')
             .values_list('id', flat=True)
         )
 
@@ -2371,17 +2371,17 @@ class ClassSimilarityDataMixin:
 
     def _build_class_only_similarity_data(self):
         code_to_famid = self._resolve_family_ids(list(self.CLASS_CODE_BY_NAME.values()))
-        classless_family_ids = self._resolve_classless_family_ids()
+        unclassified_family_ids = self._resolve_unclassified_family_ids()
         classes = []
         for display_name in self.CLASS_ORDER:
             slug_code = self.CLASS_CODE_BY_NAME.get(display_name)
             symbol = self.CLASS_SYMBOL_BY_NAME.get(display_name, display_name)
-            if slug_code == "010":
+            if slug_code == "011":
                 # "Unclassified" has no ReceptorSimilarity rows against its own top-level
-                # family id — aggregate across the classless leaf families instead.
-                if not classless_family_ids:
+                # family id — aggregate across the unclassified leaf families instead.
+                if not unclassified_family_ids:
                     continue
-                family_ids = list(classless_family_ids)
+                family_ids = list(unclassified_family_ids)
                 family_id = code_to_famid.get(slug_code) or 0
             else:
                 family_id = code_to_famid.get(slug_code)
@@ -2586,7 +2586,7 @@ class CrossClassSimilarity(ClassSimilarityDataMixin):
     matrix data to whichever Detail page inlines the matrix content.
     """
 
-    # Five single-protein “Classless” items as separate groups (display order)
+    # Five single-protein “Unclassified” items as separate groups (display order)
     SINGLE_PROTEIN_LABELS = ["GPR107", "GPR137", "TPRA1", "GPR143", "GPR157"]
 
     # Exact entry_name per label (case-insensitive)
@@ -2683,10 +2683,10 @@ class CrossClassSimilarity(ClassSimilarityDataMixin):
         context = dict(kwargs)
 
         # 1) Build display list (no extra/non-human groups).
-        # The matrix keeps classless receptors as toggleable single-protein rows,
+        # The matrix keeps unclassified receptors as toggleable single-protein rows,
         # but does not show "Unclassified" as a standalone class.
         base_names = [name for name in self.CLASS_ORDER if name != "Unclassified"]
-        single_names = [f"{lab} (Classless)" for lab in self.SINGLE_PROTEIN_LABELS]
+        single_names = [f"{lab} (Unclassified)" for lab in self.SINGLE_PROTEIN_LABELS]
         display_names = base_names + single_names
 
         # 2) Resolve base class families for fast class↔class aggregation
@@ -2698,22 +2698,22 @@ class CrossClassSimilarity(ClassSimilarityDataMixin):
         }
         allowed_class_ids = list(name_to_famid.values())
 
-        # 3) Resolve the 5 classless singles
+        # 3) Resolve the 5 unclassified singles
         resolved_singles = self._resolve_single_proteins()
-        classless_name_to_protein = {}
+        unclassified_name_to_protein = {}
         for lab in self.SINGLE_PROTEIN_LABELS:
-            key = f"{lab} (Classless)"
+            key = f"{lab} (Unclassified)"
             p = resolved_singles.get(lab)
             if p:
-                classless_name_to_protein[key] = p
+                unclassified_name_to_protein[key] = p
 
         # 4) Final groups (skip unresolved safely)
         groups = []
         for name in display_names:
             if name in name_to_famid:
                 groups.append({"display": name, "kind": "class", "id": name_to_famid[name]})
-            elif name in classless_name_to_protein:
-                groups.append({"display": name, "kind": "protein", "id": classless_name_to_protein[name].id})
+            elif name in unclassified_name_to_protein:
+                groups.append({"display": name, "kind": "protein", "id": unclassified_name_to_protein[name].id})
         n = len(groups)
 
         # ------------------------------ OPTIMIZED AGGREGATION ------------------------------
@@ -3376,7 +3376,7 @@ class OrphanSelect2Mixin:
 
             # normalize directly in Python
             if raw_class.lower().startswith("other gpcr"):
-                raw_class = "Classless"
+                raw_class = "Unclassified"
             elif raw_class.lower().startswith("class "):
                 # keep only the letter, e.g. "Class A orphans" → "Class A"
                 m = re.search(r"class\s*([a-z])", raw_class, re.I)
@@ -3416,10 +3416,10 @@ def _get_ref_class_info(ref_id):
     if class_id:
         try:
             cls = ProteinFamily.objects.only('id', 'name').get(id=class_id)
-            # Normalize like your Select2 (Classless / "Class X")
+            # Normalize like your Select2 (Unclassified / "Class X")
             name = (cls.name or '').strip()
             if name.lower().startswith('other gpcr'):
-                name = 'Classless'
+                name = 'Unclassified'
             else:
                 m = re.search(r'class\s*([a-z])', name, re.I)
                 if m:
@@ -3574,7 +3574,7 @@ def _build_embedding_payload(ref_id, *, top_n=50, metric='identity', exclude_orp
     """
     Embedding selection logic (per your new rules), then the same t-SNE pipeline.
     Rules:
-      - Classless  -> top N across all classes
+      - Unclassified  -> top N across all classes
       - Class C    -> ALL Class C
       - Other      -> top N within the same class as ref
     """
@@ -3597,7 +3597,7 @@ def _build_embedding_payload(ref_id, *, top_n=50, metric='identity', exclude_orp
             Q(protein_target_id=ref_id, ref_class_id=ref_class_id)
         )
 
-        if ref_class_name == 'Classless':
+        if ref_class_name == 'Unclassified':
             # Top N across all classes
             base_qs = (
                 ReceptorSimilarity.objects
@@ -3754,7 +3754,7 @@ def _build_embedding_payload(ref_id, *, top_n=50, metric='identity', exclude_orp
 
         # Normalize class label like before
         if clazz.lower().startswith('other gpcr'):
-            clazz = 'Classless'
+            clazz = 'Unclassified'
         else:
             m = re.search(r'class\s*([a-z])', clazz, re.I)
             if m:

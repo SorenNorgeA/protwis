@@ -205,7 +205,6 @@ class DataMapperHome(TemplateView):
             "Class O1 (fish-like odorant)": "O1",
             "Class O2 (tetrapod specific odorant)": "O2",
             "Class T2 (Taste 2)": "T2",
-            "Other GPCRs": "Classless"
         }
 
         if data_type == "Classic" and GPCRomeStructureDict:
@@ -841,7 +840,7 @@ class DataMapperHome(TemplateView):
                                   ('value', 0),
                                   ('color', 'Orange'),
                                   ('children',data_t2['children'])])
-        class_cl_dict = OrderedDict([('name', 'Classless'),
+        class_cl_dict = OrderedDict([('name', 'Unclassified'),
                                   ('value', 0),
                                   ('color', 'Gold'),
                                   ('children',data_cl['children'])])

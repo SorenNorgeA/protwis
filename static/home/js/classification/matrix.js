@@ -38,7 +38,7 @@
     var cg=table.querySelector('colgroup'); if(cg) cg.remove();
   }
   function displayClassLabel(raw){
-    return String(raw || '').replace(/Classless/gi, 'Unclassified');
+    return String(raw || '');
   }
   function symbolClassLabel(raw){
     var s = displayClassLabel(raw).replace(/^\s*class\s+/i, '').trim();
@@ -48,7 +48,7 @@
   function twoLineLabel(raw){
     return symbolClassLabel(raw);
   }
-  function isUnclassified(name){ return /\(Classless\)\s*$/i.test(name); }
+  function isUnclassified(name){ return /\(Unclassified\)\s*$/i.test(name); }
   function flatClassLabel(raw){ return symbolClassLabel(raw); }
 
   var baseOrder = Array.from({length: classes.length}, (_, i) => i);

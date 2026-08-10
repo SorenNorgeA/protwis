@@ -97,7 +97,7 @@ class Command(BaseBuild):
         qs = qs.filter(protein_conformation__protein__parent__parent_id__isnull=True)
         qs = qs.filter(protein_conformation__protein__parent__accession__isnull=False)
 
-        # GPCR families only (exclude classless/artificial buckets)
+        # GPCR families only (exclude unclassified/artificial buckets)
         qs = qs.filter(protein_conformation__protein__parent__family__slug__startswith='0')
 
         if limit:

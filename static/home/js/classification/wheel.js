@@ -174,7 +174,7 @@ const coloringSchemes = {
     "C": CLASS_COLORS_TREE["C"],
     "F": CLASS_COLORS_TREE["F"],
     "T2": CLASS_COLORS_TREE["T2"],
-    "Classless": CLASS_COLORS_TREE["Classless"],
+    "Unclassified": CLASS_COLORS_TREE["Unclassified"],
   },
   "Chemotype": buildSchemeFromCategories(CLASSIC_CHEMOTYPES, getChemotypeColor),
   "Modality": buildSchemeFromCategories(CLASSIC_MODALITIES, (m) => MODALITY_COLORS_FIXED[m] || stableColorForKey(m, CHEMOTYPE_FALLBACK_PALETTE)),
@@ -207,7 +207,7 @@ const coloringSchemesOdorant = {
 // ----------------------------
 function getLastLegendLabelForColorBy(colorBy) {
   const cb = normKey(colorBy);
-  if (cb === "Class") return "Classless";
+  if (cb === "Class") return "Unclassified";
   if (cb === "Modality" || cb === "Chemotype") return "Orphan receptors";
   if (cb === "Sense") return "Unknown";
   return null;
@@ -231,7 +231,6 @@ function sortLegendLabels(labels, colorBy) {
 function displayLegendLabel(label, colorBy) {
   const raw = normKey(label);
   if (!raw) return raw;
-  if (normKey(colorBy) === "Class" && raw === "Classless") return "Unclassified";
   return raw;
 }
 
@@ -466,7 +465,7 @@ function rebuildWheelLegend(locationId, wheelType) {
 function classDisplayLabel(code) {
   const k = normKey(code);
   if (!k) return "";
-  if (k === "Classless") return "U";
+  if (k === "Unclassified") return "U";
   if (/^(A|B1|B2|C|F|T2|O1|O2)$/i.test(k)) return k.toUpperCase();
   return k;
 }
@@ -493,10 +492,10 @@ function addClassPills(locationId, wheelType) {
   const svg = d3v4.select("#" + locationId + "_svg");
   if (svg.empty()) return;
 
-  // Nudge for the Classless/Unclassified label pill (px, +x = right).
+  // Nudge for the Unclassified label pill (px, +x = right).
   // The single-letter "U" badge looks best when pushed farther out,
   // matching the radial feel of the other one-letter class badges.
-  const CLASSLESS_PILL_DX = -15;
+  const UNCLASSIFIED_PILL_DX = -15;
 
   // Class headers are tagged with the highlight class in datamapper's wheel renderer.
   svg.selectAll("text")
@@ -510,7 +509,7 @@ function addClassPills(locationId, wheelType) {
     .each(function(d) {
       try {
         const txt = d3v4.select(this);
-        // Replace header text (and special-case Classless).
+        // Replace header text (and special-case Unclassified).
         txt.text(classDisplayLabel(d));
 
         const fill = classPillFillColor(wheelType, d);
@@ -538,11 +537,11 @@ function addClassPills(locationId, wheelType) {
           .style("stroke", "#000")
           .style("stroke-width", "0.75px");
 
-        // Classless: nudge pill + text slightly to the right.
-        if (normKey(d) === "Classless") {
+        // Unclassified: nudge pill + text slightly to the right.
+        if (normKey(d) === "Unclassified") {
           const tTr = txt.attr("transform") || "";
-          txt.attr("transform", (tTr ? (tTr + " ") : "") + `translate(${CLASSLESS_PILL_DX},0)`);
-          rect.attr("transform", `translate(${CLASSLESS_PILL_DX},0)`);
+          txt.attr("transform", (tTr ? (tTr + " ") : "") + `translate(${UNCLASSIFIED_PILL_DX},0)`);
+          rect.attr("transform", `translate(${UNCLASSIFIED_PILL_DX},0)`);
         }
       } catch (e) {
         // ignore

@@ -37,10 +37,8 @@ class Command(BaseBuild):
         "O1": "007",
         "O2": "008",
         "T2": "009",
-        "U": "010",
-    }
-    CLASS_NAME_ALIASES_BY_KEY = {
-        "U": ("Unclassified", "Classless", "Other GPCRs", "Unclassified / Other GPCRs"),
+        "V": "010",
+        "U": "011",
     }
 
     @staticmethod
@@ -58,12 +56,9 @@ class Command(BaseBuild):
     @classmethod
     def _class_family_q(cls, class_key, prefix=""):
         slug = cls.CLASS_SLUG_BY_KEY.get(class_key)
-        q_obj = Q()
-        if slug:
-            q_obj |= Q(**{prefix + "slug": slug})
-        for name in cls.CLASS_NAME_ALIASES_BY_KEY.get(class_key, ()):
-            q_obj |= Q(**{prefix + "name__iexact": name})
-        return q_obj
+        if not slug:
+            return Q()
+        return Q(**{prefix + "slug": slug})
 
     def add_arguments(self, parser):
         super(Command, self).add_arguments(parser=parser)
@@ -435,6 +430,17 @@ class Command(BaseBuild):
 
         struct_counts = {}
         for state_slug in targets:
+            if not ProteinState.objects.filter(slug=state_slug).exists():
+                message = (
+                    f"[{state_slug}] ProteinState '{state_slug}' not found — skipping structure "
+                    "build for this state (structure data likely not built yet)."
+                )
+                if verbose:
+                    print(message)
+                self.logger.warning(message)
+                struct_counts[state_slug] = {}
+                continue
+
             state_counts = {}
             state_counts[self.GLOBAL_GROUP_KEY] = self._build_structure_state(
                 state_slug,

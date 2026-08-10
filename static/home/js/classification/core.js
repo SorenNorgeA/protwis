@@ -38,7 +38,7 @@
       .replace(/'/g, "&#39;");
   }
 
-  // Class-symbol -> color. Both "Classless" (wheel's Excel data) and "Cl" (tree's
+  // Class-symbol -> color. Both "Unclassified" (wheel data) and "Cl" (tree's
   // classification-annotation data) refer to the same class, so both keys are kept.
   const CLASS_COLORS = {
     A: "#1f78b4",
@@ -47,7 +47,7 @@
     C: "#d62728",
     F: "#FF7F0E",
     T2: "#F7B6D2",
-    Classless: "#9e9e9e",
+    Unclassified: "#9e9e9e",
     Cl: "#9e9e9e",
   };
 

@@ -5,7 +5,7 @@ from django.db import connection, transaction
 from django.db.models import F
 
 from protein.models import Protein, ProteinSegment, ProteinFamily, Species
-from protein.models import CLASSLESS_PARENT_GPCR_SLUGS
+from protein.models import UNCLASSIFIED_PARENT_GPCR_SLUGS
 from residue.models import Residue, ResidueGenericNumberEquivalent, ResidueNumberingScheme
 
 from common.alignment import Alignment
@@ -102,16 +102,16 @@ class Command(BaseBuild):
 
         return selected_segments
 
-    def get_parent_gpcr_families(self,exclude_classless_artificial_class=True,include_classless_natural_classes=True):
+    def get_parent_gpcr_families(self,exclude_unclassified_artificial_class=True,include_unclassified_natural_classes=True):
         parent_family = ProteinFamily.objects.get(slug='000')
         parent_gpcr_families = ProteinFamily.objects.filter(parent_id=parent_family.pk, slug__startswith='0').exclude(pk=parent_family.pk)
-        if exclude_classless_artificial_class:
-            for slug in CLASSLESS_PARENT_GPCR_SLUGS:
+        if exclude_unclassified_artificial_class:
+            for slug in UNCLASSIFIED_PARENT_GPCR_SLUGS:
                 parent_gpcr_families = parent_gpcr_families.exclude(slug__startswith=slug)
-        classless_protein_families = []
-        if include_classless_natural_classes:
-            classless_protein_families = self.get_classless_bottom_protein_families()
-        parent_gpcr_families = list(parent_gpcr_families)+classless_protein_families
+        unclassified_protein_families = []
+        if include_unclassified_natural_classes:
+            unclassified_protein_families = self.get_unclassified_bottom_protein_families()
+        parent_gpcr_families = list(parent_gpcr_families)+unclassified_protein_families
         return sorted(parent_gpcr_families,key=lambda f: (int(f.slug.split('_')[0])))
 
     def get_human_species(self):
@@ -150,11 +150,11 @@ class Command(BaseBuild):
                 slug_list_list.append(slug_list.copy())
             slug_list.pop()
 
-    def get_classless_bottom_protein_families(self):
-        classless_parent_gpcrs_slugs_list = sorted(sorted(CLASSLESS_PARENT_GPCR_SLUGS,key = lambda x: int(x[1:])),key = lambda x: x[0])
-        parent_gpcr_families = ProteinFamily.objects.filter(slug__startswith=classless_parent_gpcrs_slugs_list[0])
+    def get_unclassified_bottom_protein_families(self):
+        unclassified_parent_gpcrs_slugs_list = sorted(sorted(UNCLASSIFIED_PARENT_GPCR_SLUGS,key = lambda x: int(x[1:])),key = lambda x: x[0])
+        parent_gpcr_families = ProteinFamily.objects.filter(slug__startswith=unclassified_parent_gpcrs_slugs_list[0])
 
-        for slug in classless_parent_gpcrs_slugs_list[1:]:
+        for slug in unclassified_parent_gpcrs_slugs_list[1:]:
             parent_gpcr_families = parent_gpcr_families.filter(slug__startswith=slug)
 
         slug_2_family_dict = {}
@@ -168,8 +168,8 @@ class Command(BaseBuild):
         slug_list_list = []
         slug_list = []
         self.__parse_slug_tree_(family_slug_tree_ordered_dict,slug_list_list,slug_list)
-        classless_bottom_slugs_list = ['_'.join(slug_list) for slug_list in slug_list_list]
-        return [slug_2_family_dict[slug] for slug in classless_bottom_slugs_list]
+        unclassified_bottom_slugs_list = ['_'.join(slug_list) for slug_list in slug_list_list]
+        return [slug_2_family_dict[slug] for slug in unclassified_bottom_slugs_list]
 
     def filter_out_non_species_parent_gpcr_families(self,parent_gpcr_families,species):
         """ Filters out parent GPCR families as a list of ProteinFamily objects that belong to a species.
@@ -221,8 +221,8 @@ class Command(BaseBuild):
         initial_step2 = 380  # If alignment fails, please, set this to a lower value
 
         parent_families = self.get_parent_gpcr_families(
-            exclude_classless_artificial_class=True,
-            include_classless_natural_classes=True,
+            exclude_unclassified_artificial_class=True,
+            include_unclassified_natural_classes=True,
         )
         human_parent_gpcr_families = self.filter_out_non_human_parent_gpcr_families(parent_families)
         human_species = self.get_human_species()
