@@ -3351,6 +3351,11 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                     Circle_array.push(""); // Empty string before first class
                     Circle_array.push(classKey);
                     // Circle_array.push(""); // Empty string before first class
+                } else if (classKey === "T2" && level === 4) {
+                    Circle_array.push(""); // Empty string before first class
+                    Circle_array.push(""); // Empty string before first class
+                    Circle_array.push(classKey);
+                    Circle_array.push(""); // Empty string before first class
                 } else {
                     Circle_array.push(""); // Empty string before first class
                     Circle_array.push(classKey);
@@ -3405,6 +3410,12 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                     }
                 }
                 if (classKey == "T2") {
+                    Circle_array.push("")
+                }
+                if (classKey == "V") {
+                    Circle_array.push("")
+                }
+                if (classKey == "Unclassified") {
                     Circle_array.push("")
                 }
             }

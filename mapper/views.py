@@ -205,6 +205,7 @@ class DataMapperHome(TemplateView):
             "Class O1 (fish-like odorant)": "O1",
             "Class O2 (tetrapod specific odorant)": "O2",
             "Class T2 (Taste 2)": "T2",
+            "Class V (Vomeronasal)": "V",
         }
 
         if data_type == "Classic" and GPCRomeStructureDict:
@@ -255,7 +256,7 @@ class DataMapperHome(TemplateView):
                 elif Class in ["Class C (Glutamate)", "Class F (Frizzled)"]:
                     GPCRome_dict["Circle_4"].setdefault(renamed_class, {}).update(ligand_types)
 
-                elif Class in ["Class T2 (Taste 2)", "Other GPCRs"]:
+                elif Class in ["Class T2 (Taste 2)", "Class V (Vomeronasal)", "Unclassified"]:
                     GPCRome_dict["Circle_5"].setdefault(renamed_class, {}).update(ligand_types)
 
             # Remove the ligand type layer

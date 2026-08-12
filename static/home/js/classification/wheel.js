@@ -174,6 +174,7 @@ const coloringSchemes = {
     "C": CLASS_COLORS_TREE["C"],
     "F": CLASS_COLORS_TREE["F"],
     "T2": CLASS_COLORS_TREE["T2"],
+    "V": CLASS_COLORS_TREE["V"],
     "Unclassified": CLASS_COLORS_TREE["Unclassified"],
   },
   "Chemotype": buildSchemeFromCategories(CLASSIC_CHEMOTYPES, getChemotypeColor),
@@ -540,8 +541,8 @@ function addClassPills(locationId, wheelType) {
         // Unclassified: nudge pill + text slightly to the right.
         if (normKey(d) === "Unclassified") {
           const tTr = txt.attr("transform") || "";
-          txt.attr("transform", (tTr ? (tTr + " ") : "") + `translate(${UNCLASSIFIED_PILL_DX},0)`);
-          rect.attr("transform", `translate(${UNCLASSIFIED_PILL_DX},0)`);
+          txt.attr("transform", (tTr ? (tTr + " ") : "") + `translate(${UNCLASSIFIED_PILL_DX},-10)`);
+          rect.attr("transform", `translate(${UNCLASSIFIED_PILL_DX},-10)`);
         }
       } catch (e) {
         // ignore

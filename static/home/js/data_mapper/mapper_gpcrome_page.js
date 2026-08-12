@@ -2259,7 +2259,7 @@ function mapperWheelWheelClassDisplayShortLabel(code) {
   if (k === 'Unclassified') {
     return 'U';
   }
-  if (/^(A|B1|B2|C|F|T2)$/i.test(k)) {
+  if (/^(A|B1|B2|C|F|T2|V)$/i.test(k)) {
     return k.toUpperCase();
   }
   return k;

@@ -8,11 +8,7 @@ from residue.models import (Residue, ResidueDataPoint, ResidueDataType,
                             ResidueGenericNumberEquivalent,
                             ResidueNumberingScheme)
 
-# Uncomment in the future
-# from common.definitions import UNCLASSIFIED_PARENT_GPCR_SLUGS
-
-# Remove in the future
-from common.definitions import _BEFORE_NAR2025_UNCLASSIFIED_PARENT_GPCR_SLUGS_DICT, _AFTER_NAR2025_UNCLASSIFIED_PARENT_GPCR_SLUGS
+from common.definitions import UNCLASSIFIED_PARENT_GPCR_SLUGS
 
 class_prefix_re = re.compile(r'^(Class)\s+', flags=re.I)
 
@@ -417,16 +413,6 @@ class ProteinFamilyClassification(models.Model):
             ),
         ]
 
-
-# Remove in the future
-# The next two lines must be after class ProteinFamily
-try:
-  # This usually fails if ProteinFamily table does not exist in DB or "from protein.models import ProteinFamily" fails
-  from protein.model_func import get_current_unclassified_parent_gpcr_slugs
-  UNCLASSIFIED_PARENT_GPCR_SLUGS = get_current_unclassified_parent_gpcr_slugs(_BEFORE_NAR2025_UNCLASSIFIED_PARENT_GPCR_SLUGS_DICT,
-                                                                        _AFTER_NAR2025_UNCLASSIFIED_PARENT_GPCR_SLUGS)
-except:
-  UNCLASSIFIED_PARENT_GPCR_SLUGS = _AFTER_NAR2025_UNCLASSIFIED_PARENT_GPCR_SLUGS
 
 class ProteinSequenceType(models.Model):
     slug = models.SlugField(max_length=20, unique=True)

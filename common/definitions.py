@@ -2290,11 +2290,4 @@ ARRESTIN_DISPLAY_NAME = {'arrc_human': 'Arrestin-C',
                          'arrc':'Arrestin-C'}
 
 
-# Remove this constants in the future
-_BEFORE_NAR2025_UNCLASSIFIED_PARENT_GPCR_SLUGS_DICT = {'008':'Other GPCRs'} # {slug:name}
-_AFTER_NAR2025_UNCLASSIFIED_PARENT_GPCR_SLUGS = {'011'}
-
-# DO NOT IMPORT 'UNCLASSIFIED_PARENT_GPCR_SLUGS' DIRECTLY FROM HERE. Do it from protein.models instead.
-# protein.models fixes 'UNCLASSIFIED_PARENT_GPCR_SLUGS' in case of changes in its definition
-# Uncomment next line in the future
-# UNCLASSIFIED_PARENT_GPCR_SLUGS = {'011'}
+UNCLASSIFIED_PARENT_GPCR_SLUGS = {'011'}

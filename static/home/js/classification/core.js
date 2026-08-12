@@ -47,6 +47,7 @@
     C: "#d62728",
     F: "#FF7F0E",
     T2: "#F7B6D2",
+    V: "#B8860B",
     Unclassified: "#9e9e9e",
     Cl: "#9e9e9e",
   };
