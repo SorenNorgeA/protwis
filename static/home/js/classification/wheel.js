@@ -450,13 +450,19 @@ function rebuildWheelLegend(locationId, wheelType) {
     const centerOffsetX = (baseWidth - legendBBox.width) / 2 - legendBBox.x;
     legendGroup.attr("transform", `translate(${centerOffsetX}, 0)`);
 
-    // Expand SVG height/viewBox so the legend sits below the plot (same idea as datamapper).
+    // Expand SVG width/height/viewBox so the legend sits below the plot (same idea as
+    // datamapper). width/height attributes must equal the viewBox's own dimensions — a
+    // viewer that scales off the attributes rather than the viewBox would otherwise crop
+    // content the viewBox's negative origin shifts into the padding border.
     const addBottomHeight = (legendBBox.y + legendBBox.height) - baseHeight + legendBottomGap;
     const newHeight = baseHeight + Math.max(0, addBottomHeight);
     const vbPad = 10;
+    const vbOuterW = baseWidth + 2 * vbPad;
+    const vbOuterH = newHeight + 2 * vbPad;
     svg
-      .attr("height", newHeight)
-      .attr("viewBox", `-${vbPad} -${vbPad} ${baseWidth + 2 * vbPad} ${newHeight + 2 * vbPad}`);
+      .attr("width", vbOuterW)
+      .attr("height", vbOuterH)
+      .attr("viewBox", `-${vbPad} -${vbPad} ${vbOuterW} ${vbOuterH}`);
   }
 }
 

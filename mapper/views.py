@@ -1,5 +1,6 @@
 from django.http import HttpResponse, JsonResponse
 from django.db.models import Q
+from django.core.cache import cache
 from django.views.generic import TemplateView, View
 from protein.models import Protein, ProteinFamily
 from common.phylogenetic_tree import PhylogeneticTreeGenerator
@@ -55,296 +56,315 @@ class DataMapperHome(TemplateView):
             return data_copy
         return data_copy
 
+    # Query filters for GenerateGPCRomeDataStructure's two data_type variants. Pulled out so the
+    # (previously near-duplicated) query setup can be shared by one helper -- the circle-bucketing
+    # logic that follows is genuinely different between Classic and Odorant and stays separate.
+    _GPCROME_QUERY_FILTERS = {
+        "Classic": {
+            "protein_q": Q(family_id__slug__startswith='0'),
+            "protein_exclude_q": Q(family_id__slug__startswith='007') | Q(family_id__slug__startswith='008'),
+            "family_q": Q(slug__startswith='0'),
+            "family_exclude_q": Q(slug='000') | Q(slug__startswith='007') | Q(slug__startswith='008'),
+        },
+        "Odorant": {
+            "protein_q": Q(family_id__slug__startswith='007') | Q(family_id__slug__startswith='008'),
+            "protein_exclude_q": None,
+            "family_q": Q(slug__startswith='007') | Q(slug__startswith='008'),
+            "family_exclude_q": None,
+        },
+    }
+
+    # Class A receptor families are split across two circles purely to keep the wheel visually
+    # balanced (~half the families per circle) -- not derived from any biological or slug-based
+    # grouping. Re-check by eye against the rendered wheel any time Class A's family list changes
+    # (e.g. after a slug/family reclassification).
+    _CLASS_A_FAMILIES_IN_CIRCLE_1 = 43
+
+    # Class O2 odorant family numbers (parsed out of "Odorant family N" display names) are
+    # bucketed into 3 circles purely for wheel layout balance. Assumes family numbers currently
+    # run 1-14 with no gaps -- a family number outside these ranges is silently dropped from the
+    # wheel rather than erroring (see _bucket_odorant_circles).
+    _ODORANT_O2_CIRCLE_RANGES = (
+        ("Circle_1", range(1, 5)),
+        ("Circle_2", range(5, 10)),
+        ("Circle_3", range(10, 15)),
+    )
+
+    _GPCROME_CLASS_RENAME_MAP = {
+        "Class A (Rhodopsin)": "A",
+        "Class B1 (Secretin)": "B1",
+        "Class B2 (Adhesion)": "B2",
+        "Class C (Glutamate)": "C",
+        "Class F (Frizzled)": "F",
+        "Class O1 (fish-like odorant)": "O1",
+        "Class O2 (tetrapod specific odorant)": "O2",
+        "Class T2 (Taste 2)": "T2",
+        "Class V (Vomeronasal)": "V",
+    }
+
     @staticmethod
-    def GenerateGPCRomeDataStructure(data_type: str = "Classic"):
+    def _load_gpcrome_query_data(filters):
+        proteins_qs = Protein.objects.filter(
+            species_id=1,
+            parent_id__isnull=True,
+            accession__isnull=False,
+        ).filter(filters["protein_q"])
+        if filters["protein_exclude_q"] is not None:
+            proteins_qs = proteins_qs.exclude(filters["protein_exclude_q"])
+        proteins_qs = proteins_qs.prefetch_related('genes').order_by('entry_name')
 
-        # Determine which proteins and families to use based on type
-        if data_type == "Classic":
-            all_proteins = Protein.objects.filter(
-                species_id=1,
-                parent_id__isnull=True,
-                accession__isnull=False,
-                family_id__slug__startswith='0'
-            ).exclude(
-                Q(family_id__slug__startswith='007') |
-                Q(family_id__slug__startswith='008')
+        families = ProteinFamily.objects.filter(filters["family_q"])
+        if filters["family_exclude_q"] is not None:
+            families = families.exclude(filters["family_exclude_q"])
+
+        # Single pass over the protein queryset (plus its genes prefetch) builds everything the
+        # tree-building step needs -- no second round-trip re-fetching rows already in hand.
+        valid_names = set()
+        name_to_entry = {}
+        entry_to_gene = {}
+        for protein in proteins_qs:
+            valid_names.add(protein.name)
+            name_to_entry[protein.name] = protein.entry_name
+            entry_to_gene[protein.entry_name] = next(
+                (g.name for g in protein.genes.all() if g.position == 0), None
             )
 
-            families = ProteinFamily.objects.exclude(slug='000')
+        return families, valid_names, name_to_entry, entry_to_gene
 
-            # Get valid names (for pruning) from all_proteins
-            valid_names = set(all_proteins.values_list('name', flat=True))
+    @staticmethod
+    def _build_gpcrome_family_tree(families, name_to_entry, entry_to_gene):
+        datatree = {}
+        slug_to_name = {fam.slug: fam.name for fam in families}
 
-            # Build name-to-entry_name mapping
-            proteins = Protein.objects.filter(
-                species_id=1,
-                name__in=valid_names
-            ).values(
-                'entry_name', 'name'
-            ).order_by('entry_name')
+        for item in families:
+            slug_parts = item.slug.split('_')
+            current_level = datatree
 
-            name_to_entry = {item['name']: item['entry_name'] for item in proteins}
+            for i in range(len(slug_parts)):
+                full_slug = '_'.join(slug_parts[:i + 1])
+                name = item.name if full_slug == item.slug else None
 
-            # Create flat list of entry names
-            entry_names = [item['entry_name'] for item in proteins]
-
-            # Fetch proteins with prefetch on genes
-            protein_genes = Protein.objects.prefetch_related('genes').filter(entry_name__in=entry_names)
-
-            # Create mapping from entry_name to gene name (position == 0 only)
-            entry_to_gene = {
-                protein.entry_name: next((g.name for g in protein.genes.all() if g.position == 0), None)
-                for protein in protein_genes
-            }
-
-        elif data_type == "Odorant":
-            all_proteins = Protein.objects.filter(
-                species_id=1,
-                parent_id__isnull=True,
-                accession__isnull=False
-            ).filter(
-                Q(family_id__slug__startswith='007') | Q(family_id__slug__startswith='008')
-            )
-
-            families = ProteinFamily.objects.filter(
-                Q(slug__startswith='007') | Q(slug__startswith='008')
-            )
-
-            valid_names = set(all_proteins.values_list('name', flat=True))
-
-            proteins = Protein.objects.filter(
-                species_id=1,
-                name__in=valid_names
-            ).values(
-                'entry_name', 'name'
-            ).order_by('entry_name')
-
-            name_to_entry = {item['name']: item['entry_name'] for item in proteins}
-
-            entry_names = [item['entry_name'] for item in proteins]
-
-            # Fetch proteins with prefetch on genes
-            protein_genes = Protein.objects.prefetch_related('genes').filter(entry_name__in=entry_names)
-
-            # Create mapping from entry_name to gene name (position == 0 only)
-            entry_to_gene = {
-                protein.entry_name: next((g.name for g in protein.genes.all() if g.position == 0), None)
-                for protein in protein_genes
-            }
-
-        else:
-            raise ValueError(f"Unsupported data structure type: {type}")
-
-        # Tree building
-        def build_family_tree(families):
-            datatree = {}
-            slug_to_name = {fam.slug: fam.name for fam in families}
-
-            for item in families:
-                slug_parts = item.slug.split('_')
-                current_level = datatree
-
-                for i in range(len(slug_parts)):
-                    full_slug = '_'.join(slug_parts[:i + 1])
-                    name = item.name if full_slug == item.slug else None
-
-                    if i == len(slug_parts) - 1:
-                        if len(slug_parts) == 4:
-                            if item.name in name_to_entry:
-                                entry_name = name_to_entry[item.name]
-                                entry_code = entry_name.split('_')[0].upper()
-                                gene_symbol = entry_to_gene.get(entry_name)  # Entrez name, if available
-                                current_level[item.name] = {
-                                    "Data": "Empty",
-                                    "EntryName": entry_code,
-                                    "Entrez": gene_symbol if gene_symbol else "UNKNOWN",
-                                    "Color": "#FFFFFF"
-                                }
-                        else:
-                            current_level.setdefault(name, {})
+                if i == len(slug_parts) - 1:
+                    if len(slug_parts) == 4:
+                        if item.name in name_to_entry:
+                            entry_name = name_to_entry[item.name]
+                            entry_code = entry_name.split('_')[0].upper()
+                            gene_symbol = entry_to_gene.get(entry_name)  # Entrez name, if available
+                            current_level[item.name] = {
+                                "Data": "Empty",
+                                "EntryName": entry_code,
+                                "Entrez": gene_symbol if gene_symbol else "UNKNOWN",
+                                "Color": "#FFFFFF"
+                            }
                     else:
-                        if name:
-                            current_level = current_level.setdefault(name, {})
-                        else:
-                            current_level = current_level.setdefault(full_slug, {})  # Temp key
+                        current_level.setdefault(name, {})
+                else:
+                    if name:
+                        current_level = current_level.setdefault(name, {})
+                    else:
+                        current_level = current_level.setdefault(full_slug, {})  # Temp key
 
-            def convert_keys(tree):
-                new_tree = {}
-                for key, value in tree.items():
-                    new_key = slug_to_name.get(key, key)
-                    new_tree[new_key] = convert_keys(value) if isinstance(value, dict) else value
-                return new_tree
-
-            return convert_keys(datatree)
-
-        # Prune tree to remove anything not in valid_names
-        def prune_tree(tree, valid_leaves):
-            pruned = {}
+        def convert_keys(tree):
+            new_tree = {}
             for key, value in tree.items():
-                if isinstance(value, dict):
-                    if 'Data' in value:
-                        if key in valid_leaves:
-                            pruned[key] = value
-                    else:
-                        pruned_subtree = prune_tree(value, valid_leaves)
-                        if pruned_subtree:
-                            pruned[key] = pruned_subtree
-            return pruned if pruned else None
+                new_key = slug_to_name.get(key, key)
+                new_tree[new_key] = convert_keys(value) if isinstance(value, dict) else value
+            return new_tree
 
-        # Build and prune the tree
-        datatree = build_family_tree(families)
-        GPCRomeStructureDict = prune_tree(datatree, valid_names)
+        return convert_keys(datatree)
 
-        # Class renaming
-        class_rename_map = {
-            "Class A (Rhodopsin)": "A",
-            "Class B1 (Secretin)": "B1",
-            "Class B2 (Adhesion)": "B2",
-            "Class C (Glutamate)": "C",
-            "Class F (Frizzled)": "F",
-            "Class O1 (fish-like odorant)": "O1",
-            "Class O2 (tetrapod specific odorant)": "O2",
-            "Class T2 (Taste 2)": "T2",
-            "Class V (Vomeronasal)": "V",
+    @staticmethod
+    def _prune_gpcrome_tree(tree, valid_leaves):
+        pruned = {}
+        for key, value in tree.items():
+            if isinstance(value, dict):
+                if 'Data' in value:
+                    if key in valid_leaves:
+                        pruned[key] = value
+                else:
+                    pruned_subtree = DataMapperHome._prune_gpcrome_tree(value, valid_leaves)
+                    if pruned_subtree:
+                        pruned[key] = pruned_subtree
+        return pruned if pruned else None
+
+    @staticmethod
+    def _bucket_classic_circles(GPCRomeStructureDict, class_rename_map):
+        GPCRome_dict = {
+            "Circle_1": {},
+            "Circle_2": {},
+            "Circle_3": {},
+            "Circle_4": {},
+            "Circle_5": {}
         }
 
-        if data_type == "Classic" and GPCRomeStructureDict:
-            GPCRome_dict = {
-                "Circle_1": {},
-                "Circle_2": {},
-                "Circle_3": {},
-                "Circle_4": {},
-                "Circle_5": {}
-            }
+        class_A_receptor_families = 0
 
-            class_A_receptor_families = 0
+        for Class, ligand_types in GPCRomeStructureDict.items():
+            renamed_class = class_rename_map.get(Class, Class)
 
-            for Class, ligand_types in GPCRomeStructureDict.items():
-                renamed_class = class_rename_map.get(Class, Class)
+            if Class == "Class A (Rhodopsin)":
+                sorted_receptor_families = []
 
-                if Class == "Class A (Rhodopsin)":
-                    sorted_receptor_families = []
+                for Ligand_type, receptor_families in ligand_types.items():
+                    if Ligand_type == "Orphan receptors":
+                        continue
 
-                    for Ligand_type, receptor_families in ligand_types.items():
-                        if Ligand_type == "Orphan receptors":
+                    for Receptor_Family in receptor_families:
+                        sorted_receptor_families.append(
+                            (Ligand_type, Receptor_Family, receptor_families[Receptor_Family])
+                        )
+
+                sorted_receptor_families.sort(key=lambda x: x[1])  # sort by receptor family name
+
+                for Ligand_type, Receptor_Family, receptors in sorted_receptor_families:
+                    target_circle = (
+                        "Circle_1"
+                        if class_A_receptor_families < DataMapperHome._CLASS_A_FAMILIES_IN_CIRCLE_1
+                        else "Circle_2"
+                    )
+
+                    GPCRome_dict.setdefault(target_circle, {}).setdefault(renamed_class, {}).setdefault(Ligand_type, {})[Receptor_Family] = receptors
+                    class_A_receptor_families += 1
+
+                # Add Class A orphans to Circle_2 if present. The underlying ProteinFamily tree
+                # nests these under a receptor-family node named "Orphan receptors" (not the
+                # older "Class A orphans" name this lookup used to expect -- that name no longer
+                # exists in the data, which silently dropped all ~80 Class A orphan receptors).
+                # The output key is still relabelled "Class A orphans" since datamapper.js's
+                # buildContentItems looks for that literal string to sort orphans to the end of
+                # Class A's family list.
+                orphans = ligand_types.get("Orphan receptors", {})
+                if "Orphan receptors" in orphans:
+                    GPCRome_dict["Circle_2"].setdefault(renamed_class, {}).setdefault("Orphan receptors", {})["Class A orphans"] = orphans["Orphan receptors"]
+
+            elif Class in ["Class B1 (Secretin)", "Class B2 (Adhesion)"]:
+                GPCRome_dict["Circle_3"].setdefault(renamed_class, {}).update(ligand_types)
+
+            elif Class in ["Class C (Glutamate)", "Class F (Frizzled)"]:
+                GPCRome_dict["Circle_4"].setdefault(renamed_class, {}).update(ligand_types)
+
+            elif Class in ["Class T2 (Taste 2)", "Class V (Vomeronasal)", "Unclassified"]:
+                GPCRome_dict["Circle_5"].setdefault(renamed_class, {}).update(ligand_types)
+
+        # Remove the ligand type layer
+        for circle in GPCRome_dict:
+            for class_name in list(GPCRome_dict[circle].keys()):
+                new_structure = {}
+
+                for ligand_type in list(GPCRome_dict[circle][class_name].keys()):
+                    for receptor_family, receptors in GPCRome_dict[circle][class_name][ligand_type].items():
+                        new_structure[receptor_family] = receptors
+
+                # Replace the old structure with the flattened one
+                GPCRome_dict[circle][class_name] = new_structure
+
+        # Final return (renamed and sorted into circles)
+        return {
+            "Data": GPCRome_dict
+        }
+
+    @staticmethod
+    def _bucket_odorant_circles(GPCRomeStructureDict, class_rename_map):
+        GPCRome_dict = {
+            "Circle_1": {},  # Family 1-4 from Class O2
+            "Circle_2": {},  # Family 5-9 from Class O2
+            "Circle_3": {},  # Family 10-14 from Class O2
+            "Circle_4": {}   # All of Class O1
+        }
+
+        for Class, ligand_types in GPCRomeStructureDict.items():
+            renamed_class = class_rename_map.get(Class, Class)
+
+            if Class == "Class O2 (tetrapod specific odorant)":
+                sorted_families = []
+
+                for Ligand_type, receptor_families in ligand_types.items():
+                    for Receptor_Family, receptors in receptor_families.items():
+                        try:
+                            family_number = int(Receptor_Family.replace("Odorant family", "").strip())
+                        except ValueError:
                             continue
 
-                        for Receptor_Family in receptor_families:
-                            if Receptor_Family == "Class A Orphans":
-                                continue
+                        sorted_families.append(
+                            (family_number, Ligand_type, Receptor_Family, receptors)
+                        )
 
-                            sorted_receptor_families.append(
-                                (Ligand_type, Receptor_Family, receptor_families[Receptor_Family])
-                            )
+                sorted_families.sort(key=lambda x: x[0])  # Sort numerically by family number
 
-                    sorted_receptor_families.sort(key=lambda x: x[1])  # sort by receptor family name
+                for family_number, Ligand_type, Receptor_Family, receptors in sorted_families:
+                    renamed_family = f"Family {family_number}"
+                    circle = next(
+                        (name for name, rng in DataMapperHome._ODORANT_O2_CIRCLE_RANGES if family_number in rng),
+                        None,
+                    )
+                    if circle is None:
+                        continue  # family number outside the known ranges -- see _ODORANT_O2_CIRCLE_RANGES
 
-                    for Ligand_type, Receptor_Family, receptors in sorted_receptor_families:
-                        target_circle = "Circle_1" if class_A_receptor_families < 43 else "Circle_2"
+                    GPCRome_dict.setdefault(circle, {}).setdefault(renamed_class, {}).setdefault(Ligand_type, {})[renamed_family] = receptors
 
-                        GPCRome_dict.setdefault(target_circle, {}).setdefault(renamed_class, {}).setdefault(Ligand_type, {})[Receptor_Family] = receptors
-                        class_A_receptor_families += 1
+            elif Class == "Class O1 (fish-like odorant)":
+                renamed_ligand_types = {}
 
-                    # Add Class A orphans to Circle_2 if present
-                    orphans = ligand_types.get("Orphan receptors", {})
-                    if "Class A orphans" in orphans:
-                        GPCRome_dict["Circle_2"].setdefault(renamed_class, {}).setdefault("Orphan receptors", {})["Class A orphans"] = orphans["Class A orphans"]
+                for Ligand_type, receptor_families in ligand_types.items():
+                    renamed_receptor_families = {}
 
-                elif Class in ["Class B1 (Secretin)", "Class B2 (Adhesion)"]:
-                    GPCRome_dict["Circle_3"].setdefault(renamed_class, {}).update(ligand_types)
+                    for Receptor_Family, receptors in receptor_families.items():
+                        try:
+                            family_number = int(Receptor_Family.replace("Odorant family", "").strip())
+                            renamed_family = f"Family {family_number}"
+                        except ValueError:
+                            renamed_family = Receptor_Family  # fallback to original if parsing fails
 
-                elif Class in ["Class C (Glutamate)", "Class F (Frizzled)"]:
-                    GPCRome_dict["Circle_4"].setdefault(renamed_class, {}).update(ligand_types)
+                        renamed_receptor_families[renamed_family] = receptors
 
-                elif Class in ["Class T2 (Taste 2)", "Class V (Vomeronasal)", "Unclassified"]:
-                    GPCRome_dict["Circle_5"].setdefault(renamed_class, {}).update(ligand_types)
+                    renamed_ligand_types[Ligand_type] = renamed_receptor_families
 
-            # Remove the ligand type layer
-            for circle in GPCRome_dict:
-                for class_name in list(GPCRome_dict[circle].keys()):
-                    new_structure = {}
+                GPCRome_dict["Circle_4"].setdefault(renamed_class, {}).update(renamed_ligand_types)
 
-                    for ligand_type in list(GPCRome_dict[circle][class_name].keys()):
-                        for receptor_family, receptors in GPCRome_dict[circle][class_name][ligand_type].items():
-                            new_structure[receptor_family] = receptors
+        # Flatten ligand_type layer (remove ligand type level)
+        for circle in GPCRome_dict:
+            for class_name in list(GPCRome_dict[circle].keys()):
+                new_structure = {}
+                for ligand_type in GPCRome_dict[circle][class_name]:
+                    for receptor_family, receptors in GPCRome_dict[circle][class_name][ligand_type].items():
+                        new_structure[receptor_family] = receptors
+                GPCRome_dict[circle][class_name] = new_structure
 
-                    # Replace the old structure with the flattened one
-                    GPCRome_dict[circle][class_name] = new_structure
-            # Final return (renamed and sorted into circles)
-            return {
-                "Data": GPCRome_dict
-            }
-        if data_type == "Odorant" and GPCRomeStructureDict:
-            GPCRome_dict = {
-                "Circle_1": {},  # Family 1–4 from Class O2
-                "Circle_2": {},  # Family 5–9 from Class O2
-                "Circle_3": {},  # Family 10–14 from Class O2
-                "Circle_4": {}   # All of Class O1
-            }
+        return {
+            "Data": GPCRome_dict
+        }
 
-            for Class, ligand_types in GPCRomeStructureDict.items():
-                renamed_class = class_rename_map.get(Class, Class)
+    @staticmethod
+    def GenerateGPCRomeDataStructure(data_type: str = "Classic"):
+        # Reference data (Protein/ProteinFamily) only changes on scheduled data releases, and this
+        # skeleton is otherwise rebuilt uncached on every page render (sometimes twice per request,
+        # e.g. Classic + Odorant back-to-back) -- a week-long cache is the same low-ceremony pattern
+        # already used elsewhere in this codebase for slow-changing reference lookups. Bump the
+        # "v1" suffix if the skeleton shape ever changes, as a manual invalidation lever.
+        cache_key = f"gpcrome_data_structure_v1_{data_type}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return deepcopy(cached)  # callers mutate the returned dict in place -- never hand out the cached object itself
 
-                if Class == "Class O2 (tetrapod specific odorant)":
-                    sorted_families = []
+        filters = DataMapperHome._GPCROME_QUERY_FILTERS.get(data_type)
+        if filters is None:
+            raise ValueError(f"Unsupported data structure type: {data_type}")
 
-                    for Ligand_type, receptor_families in ligand_types.items():
-                        for Receptor_Family, receptors in receptor_families.items():
-                            try:
-                                family_number = int(Receptor_Family.replace("Odorant family", "").strip())
-                            except ValueError:
-                                continue
+        families, valid_names, name_to_entry, entry_to_gene = DataMapperHome._load_gpcrome_query_data(filters)
 
-                            sorted_families.append(
-                                (family_number, Ligand_type, Receptor_Family, receptors)
-                            )
+        datatree = DataMapperHome._build_gpcrome_family_tree(families, name_to_entry, entry_to_gene)
+        GPCRomeStructureDict = DataMapperHome._prune_gpcrome_tree(datatree, valid_names)
 
-                    sorted_families.sort(key=lambda x: x[0])  # Sort numerically by family number
+        if not GPCRomeStructureDict:
+            return None
 
-                    for family_number, Ligand_type, Receptor_Family, receptors in sorted_families:
-                        renamed_family = f"Family {family_number}"
-                        if 1 <= family_number <= 4:
-                            circle = "Circle_1"
-                        elif 5 <= family_number <= 9:
-                            circle = "Circle_2"
-                        elif 10 <= family_number <= 14:
-                            circle = "Circle_3"
-                        else:
-                            continue  # Skip any outside defined ranges
+        if data_type == "Classic":
+            result = DataMapperHome._bucket_classic_circles(GPCRomeStructureDict, DataMapperHome._GPCROME_CLASS_RENAME_MAP)
+        else:
+            result = DataMapperHome._bucket_odorant_circles(GPCRomeStructureDict, DataMapperHome._GPCROME_CLASS_RENAME_MAP)
 
-                        GPCRome_dict.setdefault(circle, {}).setdefault(renamed_class, {}).setdefault(Ligand_type, {})[renamed_family] = receptors
-
-                elif Class == "Class O1 (fish-like odorant)":
-                    renamed_ligand_types = {}
-
-                    for Ligand_type, receptor_families in ligand_types.items():
-                        renamed_receptor_families = {}
-
-                        for Receptor_Family, receptors in receptor_families.items():
-                            try:
-                                family_number = int(Receptor_Family.replace("Odorant family", "").strip())
-                                renamed_family = f"Family {family_number}"
-                            except ValueError:
-                                renamed_family = Receptor_Family  # fallback to original if parsing fails
-
-                            renamed_receptor_families[renamed_family] = receptors
-
-                        renamed_ligand_types[Ligand_type] = renamed_receptor_families
-
-                    GPCRome_dict["Circle_4"].setdefault(renamed_class, {}).update(renamed_ligand_types)
-
-            # Flatten ligand_type layer (remove ligand type level)
-            for circle in GPCRome_dict:
-                for class_name in list(GPCRome_dict[circle].keys()):
-                    new_structure = {}
-                    for ligand_type in GPCRome_dict[circle][class_name]:
-                        for receptor_family, receptors in GPCRome_dict[circle][class_name][ligand_type].items():
-                            new_structure[receptor_family] = receptors
-                    GPCRome_dict[circle][class_name] = new_structure
-
-            return {
-                "Data": GPCRome_dict
-            }
+        cache.set(cache_key, result, 60 * 60 * 24 * 7)
+        return deepcopy(result)
 
     @staticmethod
     def update_nested_GPCRome_data(structure_dict, raw_data):

@@ -3290,28 +3290,48 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
         };
     }
     // If there is 5 circles ()
+    // 5th/6th arguments (SeamGapStartDegrees / SeamGapStopDegrees) are the plain-degree widths of
+    // the manually-set gap reserved before/after the 12-o'clock seam, on whichever class badge
+    // sits there for that circle (the only badge, for a single-class circle; the first badge in
+    // CircleHeaders order, for a multi-class one) — e.g. start=4, stop=6 spans -4deg to +6deg.
+    // Independent so the two sides can be tuned separately (a class next to a two-line family
+    // label often wants more room than one next to a plain receptor). Tune each by eye; no
+    // formula derives these from radius anymore. See computeClassLayout for how this is used.
+    // 7th argument (NonSeamBadgeUnits) sizes every *other* class badge on that same circle (e.g.
+    // B2 alongside seam-sitting B1) as that many receptor-tick-widths — unused on single-class
+    // circles (1/2, all 4 Odorant), since there's no "other" badge there.
     if (Object.keys(Data).length === 5) {
-        Draw_a_GPCRome(Data.Circle_1, 0, 440, dimensions)
-        Draw_a_GPCRome(Data.Circle_2, 1, 355, dimensions)
-        Draw_a_GPCRome(Data.Circle_3, 2, 270, dimensions)
-        Draw_a_GPCRome(Data.Circle_4, 3, 185, dimensions)
-        Draw_a_GPCRome(Data.Circle_5, 4, 80, dimensions)
+        Draw_a_GPCRome(Data.Circle_1, 0, 440, dimensions, 4.4, 3.9)
+        Draw_a_GPCRome(Data.Circle_2, 1, 355, dimensions, 5.3, 4)
+        Draw_a_GPCRome(Data.Circle_3, 2, 265, dimensions, 6.2, 3, 3)
+        Draw_a_GPCRome(Data.Circle_4, 3, 185, dimensions, 7.2, 1.7, 3)
+        Draw_a_GPCRome(Data.Circle_5, 4, 90, dimensions, 14, 14, 4)
     } else if (Object.keys(Data).length === 4) {
-        Draw_a_GPCRome(Data.Circle_1, 0, 440, dimensions)
-        Draw_a_GPCRome(Data.Circle_2, 1, 345, dimensions)
-        Draw_a_GPCRome(Data.Circle_3, 2, 250, dimensions)
-        Draw_a_GPCRome(Data.Circle_4, 3, 140, dimensions)
+        Draw_a_GPCRome(Data.Circle_1, 0, 440, dimensions, 4, 4)
+        Draw_a_GPCRome(Data.Circle_2, 1, 345, dimensions, 4, 4)
+        Draw_a_GPCRome(Data.Circle_3, 2, 250, dimensions, 4, 4)
+        Draw_a_GPCRome(Data.Circle_4, 3, 140, dimensions, 4, 4)
     }
 
     // Now call Draw_a_GPCRome for both updated GPCRome_A and GPCRome_AO
 
-    function Draw_a_GPCRome(Data, level, Radius, dimensions) {
+    function Draw_a_GPCRome(Data, level, Radius, dimensions, SeamGapStartDegrees, SeamGapStopDegrees, NonSeamBadgeUnits) {
 
         // Define SVG dimensions
         const width = dimensions.width;
         const height = dimensions.height;
         const label_offset = 7; // Increased offset to push labels outward
         let GPCRome_radius = Radius || Math.min(width, height) / 2 - 60 - ((level === 4) ? (90 * level) : (85 * level));
+        // Width, in radians, of the manually-set gap reserved before/after the 12-o'clock seam
+        // around this circle's seam-sitting class badge — independently sized so, e.g., a side
+        // that lands next to a two-line family label can get more room than one next to a plain
+        // receptor (see the Draw_a_GPCRome call sites for the plain-degrees input and rationale).
+        const seamGapStartRad = (SeamGapStartDegrees != null ? SeamGapStartDegrees : 4) * Math.PI / 180;
+        const seamGapStopRad = (SeamGapStopDegrees != null ? SeamGapStopDegrees : 4) * Math.PI / 180;
+        // How many "arc spaces" (receptor-tick widths) every *other* class badge on this circle
+        // (e.g. B2 alongside seam-sitting B1) gets — unused on single-class circles, so the
+        // default here never matters for those.
+        const nonSeamBadgeUnits = NonSeamBadgeUnits != null ? NonSeamBadgeUnits : 4;
 
         function extractHeaders(circleData) {
             let CircleHeaders = Object.keys(circleData); // Top-level keys (Classes)
@@ -3333,36 +3353,19 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
             return { CircleHeaders, CircleSubHeaders };
         }
 
-        function createCircleArray(circleData, CircleHeaders, CircleSubHeaders) {
-            let Circle_array = [];
+        // Family labels forced onto two lines regardless of the usual length threshold — purely a
+        // visual call (e.g. "Calcium-sensing" reads better split even though it's under 18 chars).
+        const FORCE_TWO_LINE_FAMILIES = new Set(["Calcium-sensing"]);
+
+        // Builds the ordered list of real content (receptor-family headers + receptors) for this
+        // circle, with NO blank filler entries and NO class-header entries — class badges are
+        // drawn separately by drawClassBadges() once each class's reserved gap angle is known.
+        function buildContentItems(circleData, CircleHeaders, CircleSubHeaders) {
+            let contentItems = [];
             let DataFill = {};
             const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
-            // Loop through the main classes (CircleHeaders)
             for (const classKey of CircleHeaders) {
-
-                if (classKey === "A" && level === 0) {
-                    Circle_array.push(""); // Empty string before first class
-                    Circle_array.push(classKey);
-                    Circle_array.push(""); // Empty string before first class
-                    Circle_array.push(""); // Empty string before first class
-                    // Circle_array.push(""); // Empty string before first class
-                } else if (classKey === "C" && level === 3) {
-                    Circle_array.push(""); // Empty string before first class
-                    Circle_array.push(classKey);
-                    // Circle_array.push(""); // Empty string before first class
-                } else if (classKey === "T2" && level === 4) {
-                    Circle_array.push(""); // Empty string before first class
-                    Circle_array.push(""); // Empty string before first class
-                    Circle_array.push(classKey);
-                    Circle_array.push(""); // Empty string before first class
-                } else {
-                    Circle_array.push(""); // Empty string before first class
-                    Circle_array.push(classKey);
-                    Circle_array.push(""); // Empty string after first class
-                }
-
-                FirstFamily = true;
 
                 // Sort receptor families naturally before iterating
                 let receptorFamilies = Object.keys(circleData[classKey]).sort(collator.compare);
@@ -3378,13 +3381,16 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                 // Loop through receptor families
                 for (const receptorFamily of receptorFamilies) {
                     if (CircleSubHeaders.includes(receptorFamily)) {
-                        if (FirstFamily) {
-                            Circle_array.push(receptorFamily);
-                            FirstFamily = false;
-                        } else {
-                            Circle_array.push(""); // Empty string before subheader
-                            Circle_array.push(receptorFamily);
-                        }
+                        // Precomputed with the exact same formatting the family-label rendering
+                        // pass uses, so the two checks can never drift apart.
+                        const formattedFamilyLabel = GPCRome_formatTextWithHTML(receptorFamily, CircleSubHeaders);
+                        contentItems.push({
+                            type: 'family',
+                            label: receptorFamily,
+                            classKey,
+                            familyKey: receptorFamily,
+                            needsSplit: formattedFamilyLabel.length > 18 || FORCE_TWO_LINE_FAMILIES.has(formattedFamilyLabel)
+                        });
                     }
 
                     // Loop through receptors inside each receptor family
@@ -3400,7 +3406,13 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                             label = receptor; // fallback
                         }
 
-                        Circle_array.push(label);
+                        contentItems.push({
+                            type: 'receptor',
+                            label,
+                            classKey,
+                            familyKey: receptorFamily
+                        });
+
                         const receptorObj = circleData[classKey][receptorFamily][receptor];
                         if (DataType === "Text") {
                             DataFill[label] = receptorObj.Color || "White";
@@ -3409,62 +3421,139 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                         }
                     }
                 }
-                if (classKey == "T2") {
-                    Circle_array.push("")
-                }
-                if (classKey == "V") {
-                    Circle_array.push("")
-                }
-                if (classKey == "Unclassified") {
-                    Circle_array.push("")
+            }
+
+            return { contentItems, DataFill };
+        }
+
+        // Walks CircleHeaders in order, reserving one gap per class boundary (since the circle is
+        // a closed loop, that's exactly one gap per class) and laying content out contiguously
+        // through whatever's left. Every item (receptor or family) is centered within its own
+        // weight*anglePerUnit slot — receptors have always worked this way; a family header just
+        // gets a bigger weight (2 for a single-line label, 3 for one that needs splitting into two
+        // lines) than a plain receptor (1), so centering it in that wider slot leaves half a unit
+        // of empty space on both sides "for free" as breathing room, with no separate gap concept
+        // needed for families at all. Mutates each contentItems entry with
+        // startAngle/endAngle/midAngle (all plain "cursor" angles: 0 at 12 o'clock, increasing
+        // clockwise — matching d3's arc() convention directly, so no extra sign/offset juggling is
+        // needed when the same angles are later fed to arcGenerator() for the pie wedges), plus
+        // splitFirstAngle/splitSecondAngle (only meaningful for needsSplit family items) giving two
+        // evenly-spaced positions one unit in from each edge of their 3-unit slot.
+        //
+        // The class (badge) gap is handled differently for exactly one class per circle: whichever
+        // class sits at this circle's own 12-o'clock seam (the only class, on a single-class circle
+        // like 1/2 or any Odorant circle; the first class in CircleHeaders order, on a multi-class
+        // circle like 3/4/5) gets a manually-set gap (seamGapStartRad before the seam, seamGapStopRad
+        // after it, independently — see the Draw_a_GPCRome call sites for the plain-degrees input
+        // this comes from). No formula derives either from radius or content — both are tuned by eye
+        // per circle, independently, since the two sides often want different amounts of room (e.g.
+        // one side landing next to a two-line family label vs. the other next to a plain receptor).
+        //
+        // Every *other* class sharing the same circle (e.g. B2 on circle 3, alongside seam-sitting
+        // B1) is instead inserted as a plain weighted item into the very same pool as
+        // families/receptors, sized as classBadgeUnits "arc spaces" — so it can never dominate the
+        // circle regardless of radius or class count, and needs no separate tuning. Deliberately
+        // giving only the seam class hand-picked numbers, while every other class on that circle
+        // stays formula-driven: giving *all* of them independent hand-picked numbers would reopen
+        // the old "B1 gets special seam treatment, B2 doesn't" inconsistency.
+        //
+        // The cursor starts at -seamGapStartRad so the seam class's gap straddles the 12-o'clock
+        // seam (not necessarily symmetrically, if start and stop differ) instead of sitting entirely
+        // after it — every other class's gap already sits between two flanking content stretches and
+        // is unaffected by this offset (the loop is a closed cycle, so shifting the start is a pure
+        // whole-wheel rotation).
+        //
+        // Mutates each contentItems entry with startAngle/endAngle/midAngle (all plain "cursor"
+        // angles: 0 at 12 o'clock, increasing clockwise — matching d3's arc() convention directly),
+        // plus splitFirstAngle/splitSecondAngle (only meaningful for needsSplit family items) giving
+        // two evenly-spaced positions one unit in from each edge of their 3-unit slot. Every item
+        // (receptor or family) is centered within its own weight*anglePerUnit slot — receptors have
+        // always worked this way; a family header just gets a bigger weight (2 for a single-line
+        // label, 3 for one that needs splitting) than a plain receptor (1), so centering it in that
+        // wider slot leaves half a unit of empty space on both sides "for free" as breathing room.
+        function computeClassLayout(CircleHeaders, contentItems, seamGapStartRad, seamGapStopRad, classBadgeUnits) {
+            let contentWeightSum = 0;
+            for (const item of contentItems) {
+                item.weight = (item.type === 'family') ? (item.needsSplit ? 3 : 2) : 1;
+                contentWeightSum += item.weight;
+            }
+
+            // Every class except the seam one consumes classBadgeUnits from this same pool — there
+            // are (CircleHeaders.length - 1) of those (0 for a single-class circle, so this term
+            // vanishes and the only gap is the manual seam one).
+            const totalUnits = contentWeightSum + classBadgeUnits * (CircleHeaders.length - 1);
+            const seamGapRad = seamGapStartRad + seamGapStopRad;
+            const anglePerUnit = totalUnits > 0 ? (2 * Math.PI - seamGapRad) / totalUnits : 0;
+
+            const classGapMidAngle = {};
+            const classContentStartAngle = {};
+
+            let cursor = -seamGapStartRad;
+            let itemIndex = 0;
+            let isSeamClass = true;
+
+            for (const classKey of CircleHeaders) {
+                const gapAngleRad = isSeamClass ? seamGapRad : (classBadgeUnits * anglePerUnit);
+                const gapEnd = cursor + gapAngleRad;
+                // The seam badge always sits at the standard 12-o'clock position (angle 0),
+                // regardless of how asymmetric seamGapStart/StopRad are — start/stop only control
+                // how much breathing room content gets on each side, not where the badge itself
+                // is drawn. Every other badge keeps the usual "centered in its own gap" position.
+                classGapMidAngle[classKey] = isSeamClass ? 0 : (cursor + gapEnd) / 2;
+                classContentStartAngle[classKey] = gapEnd;
+                cursor = gapEnd;
+                isSeamClass = false;
+
+                while (itemIndex < contentItems.length && contentItems[itemIndex].classKey === classKey) {
+                    const item = contentItems[itemIndex];
+
+                    item.startAngle = cursor;
+                    item.endAngle = cursor + item.weight * anglePerUnit;
+                    item.midAngle = (item.startAngle + item.endAngle) / 2;
+                    item.splitFirstAngle = item.startAngle + anglePerUnit;
+                    item.splitSecondAngle = item.endAngle - anglePerUnit;
+
+                    cursor = item.endAngle;
+                    itemIndex++;
                 }
             }
-            // Circle_array.push("");
-            return { Circle_array, DataFill };
+
+            return { classGapMidAngle, classContentStartAngle };
         }
 
         let { CircleHeaders, CircleSubHeaders } = extractHeaders(Data);
-        let { Circle_array, DataFill } = createCircleArray(Data, CircleHeaders, CircleSubHeaders);
+        let { contentItems, DataFill } = buildContentItems(Data, CircleHeaders, CircleSubHeaders);
+        let { classGapMidAngle } = computeClassLayout(
+            CircleHeaders, contentItems, seamGapStartRad, seamGapStopRad, nonSeamBadgeUnits
+        );
 
-        function calculatePositionAndAngle(index, total, values, CircleHeaders, CircleSubHeaders, isSplit) {
-            // Get the text value at the current index
-            const text_value = values[index];
+        // Converts a cursor angle (0 = 12 o'clock, increasing clockwise) into an (x, y, rotation)
+        // for a text label or split-label anchor point. Headers/badges are positioned separately
+        // by drawClassBadges() and no longer flow through this function.
+        function positionFromAngle(cursorAngle, kind, isSplit) {
+            const theta = (Math.PI / 2) - cursorAngle;
+            const adjustedRadius = isSplit
+                ? (GPCRome_radius - 8)
+                : (kind === 'family' ? (GPCRome_radius - 20) : (GPCRome_radius + label_offset));
 
-            // Check if the text value is in the Header_list
-            const isInHeaderList = CircleHeaders.includes(text_value)  && text_value !== "Unclassified";
-            const FirstHeader = CircleHeaders[0];
-
-            // Check if the text value is in the Family_list
-            const isInFamilyList = CircleSubHeaders.includes(text_value);
-
-            // Offset the angle calculation by -90 degrees (or -π/2 radians) to start at 12 o'clock
-            const angle = -((index / total) * 2 * Math.PI) + (Math.PI / 2);
-
-            // If isSplit is true, treat it as a Family_list item (or handle it in a special way)
-            const adjustedRadius = isSplit ? (GPCRome_radius - 8) : text_value === "Unclassified" ? (GPCRome_radius - 10) : (isInFamilyList ? (GPCRome_radius - 20) : (isInHeaderList ? (GPCRome_radius + 18) : (GPCRome_radius + label_offset)));
-
-            // Position on the GPCRome's border with or without label offset
-            let x,y;
-
-            if (FirstHeader === text_value) {
-                x = width / 2 + 13
-                y = height / 2 - Math.sin(angle) * adjustedRadius;
-            } else {
-                x = width / 2 + Math.cos(angle) * adjustedRadius;
-                y = height / 2 - Math.sin(angle) * adjustedRadius;
-            }
-
-            // If it's a header, set the rotation to 0, otherwise calculate the outward-facing rotation
-            let rotation;
-            if (isInHeaderList) {
-                rotation = 0;
-            } else if (text_value === "Unclassified") {
-                rotation = 0;
-            } else {
-                rotation = -(angle * 180 / Math.PI);
-            }
+            const x = width / 2 + Math.cos(theta) * adjustedRadius;
+            const y = height / 2 - Math.sin(theta) * adjustedRadius;
+            const rotation = -(theta * 180 / Math.PI);
 
             return { x, y, rotation };
+        }
+
+        // Which angle a label should be anchored at for pass-1 rendering. Split family labels
+        // are re-rendered and removed entirely by pass 2, so their pass-1 position never shows.
+        // Non-split family labels use the same "inset by one anglePerUnit from the near edge"
+        // convention as the split lines' splitFirstAngle/splitSecondAngle — but a non-split
+        // item's slot is only 2 units wide (vs. 3 for a split one), so inset-by-1-unit from
+        // either edge lands on the exact same point: the midpoint. That's why plain d.midAngle
+        // is already the correct, double-line-consistent anchor here (an earlier attempt to
+        // anchor at the raw, un-inset edge instead was the actual bug — it touched the boundary
+        // of whatever content precedes/follows the label rather than staying within its own slot).
+        function labelAnchorAngle(d) {
+            return d.midAngle;
         }
 
         function getLabelText(d) {
@@ -3567,7 +3656,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                     .replace(/(-concentrating)/g, '-conc.') // Abbreviate specific substrings
                     .replace(/( and )/g, ' & ') // Replace "and" with "&"
                     .replace(/(GPR18, GPR55 & GPR119)/g, 'GPR18, 55 & 119') // Special case formatting
-                    .replace(/(Class C Orphans)/g, 'Orphans') // Replace "Class C Orphans"
+                    .replace(/(Orphan receptors)/g, 'Orphans') // Replace "Class C Orphans"
                     .split("</tspan>")[0] // Keep only part before the first closing tspan tag
                     .split(" (")[0]; // Keep only the part before the first " (" parenthesis
             }
@@ -3575,221 +3664,156 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
             return formattedText;
         }
 
-       // Bind data and append text elements for the specific GPCRome
+       // Bind data and append text elements for the receptor-family headers and receptors of
+       // this circle. Class badges are NOT part of this join anymore — see drawClassBadges().
        svg.selectAll(`.GPCRome-text-${level}`)
-           .data(Circle_array)
+           .data(contentItems)
            .enter()
            .append("text")
            .attr("class", (d) => {
                let baseClass = `GPCRome-text GPCRome-text-${level}`;  // Add 'GPCRome-text' as a common class
-               // Add highlight class if the label is in the Header_list
-               if (CircleHeaders.includes(d)) {
-                   baseClass += ` GPCRome-text-${level}-highlight`;
-               }
-               // Add a family-specific class if the label is in the Family_list
-               if (CircleSubHeaders.includes(d)) {
+               // Add a family-specific class if this is a receptor-family header
+               if (d.type === 'family') {
                    baseClass += " GPCRome-family-label";  // Add this class for family labels
                }
                return baseClass;
            })
-           .attr("x", (d, i) => {
-               const pos = calculatePositionAndAngle(i, Circle_array.length, Circle_array, CircleHeaders, CircleSubHeaders, false);
-               return pos.x;
-           })
-           .attr("y", (d, i) => {
-               const pos = calculatePositionAndAngle(i, Circle_array.length, Circle_array, CircleHeaders, CircleSubHeaders, false);
-               return pos.y;
-           })
-           .attr("text-anchor", (d, i) => {
-               // Center the text for headers, and handle normal text alignment for others
-               if (CircleHeaders.includes(d) && d !== "Unclassified") {
-                   return "middle";  // Horizontally center the headers
-               }
-               const angle = (i / Circle_array.length) * 360 - 90;
+           // positionFromAngle's radius depends on isSplit, not on how many lines a label
+           // actually renders as: passing isSplit=true for every family label (matching what the
+           // split-label lines below use) keeps short, unsplit labels at the exact same radius as
+           // split ones — flush with the arc/tick marks — instead of the much-further-inward
+           // radius (`kind==='family' && !isSplit`) that used to make short labels look detached
+           // from their own receptors. Receptor ticks are unaffected (isSplit doesn't change
+           // their radius at all).
+           .attr("x", (d) => positionFromAngle(labelAnchorAngle(d), d.type, d.type === 'family').x)
+           .attr("y", (d) => positionFromAngle(labelAnchorAngle(d), d.type, d.type === 'family').y)
+           .attr("text-anchor", (d) => {
+               const angle = (d.midAngle * 180 / Math.PI) - 90;
                return (angle >= -90 && angle < 90) ? "start" : "end";
            })
            .attr("dominant-baseline", "middle")
-           .attr("dy", (d) => CircleHeaders.includes(d) ? "0.1em" : "0.05em")  // Adjust 'dy' as needed
-           .attr("transform", (d, i) => {
-               let pos = calculatePositionAndAngle(i, Circle_array.length, Circle_array, CircleHeaders, CircleSubHeaders, false);
+           .attr("dy", "0.05em")
+           .attr("transform", (d) => {
+               const pos = positionFromAngle(labelAnchorAngle(d), d.type, d.type === 'family');
 
                // Calculate the angle and determine the text's side (right or left)
-               const angle = (i / Circle_array.length) * 360 - 90;
+               const angle = (d.midAngle * 180 / Math.PI) - 90;
 
-               // Rotation logic
-               let rotation;
-               if (CircleHeaders.includes(d)) {
-                   // Headers have no rotation (0 degrees)
-                   rotation = 0;
-               } else {
-                   // For non-headers, flip the text on the left-hand side by 180 degrees
-                   rotation = angle >= -90 && angle < 90 ? 0 : 180;
-               }
+               // For non-headers, flip the text on the left-hand side by 180 degrees
+               const rotation = angle >= -90 && angle < 90 ? 0 : 180;
+
                // Apply the rotation and positioning
                return `rotate(${pos.rotation + rotation}, ${pos.x}, ${pos.y})`;
            })
            .html(d => {
                const labelText = getLabelText(d);
-               return GPCRome_formatTextWithHTML(labelText,CircleSubHeaders);
+               return GPCRome_formatTextWithHTML(labelText, CircleSubHeaders);
            })
-            // .on("click", (event, d) => { // Function for clicking the receptors (NAR2027)
-            //     const labelText = Circle_array[d]; // make sure it's the actual receptor name
-            //     if (!CircleHeaders.includes(labelText) && !CircleSubHeaders.includes(labelText)) {
-            //         handleReceptorClick(labelText);
-            //     }
-            // })
-            // .style("cursor", d => (!CircleHeaders.includes(d) && !CircleSubHeaders.includes(d)) ? "pointer" : "default") // Function for clicking the receptors (NAR2027)
-           .style("font-size", d => CircleHeaders.includes(d) ? FontsizeClass : FontsizeGlobal)
+           .style("font-size", FontsizeGlobal)
            .style("font-family", FontStyle)
-           .style("font-weight", d => CircleHeaders.includes(d) || CircleSubHeaders.includes(d) ? "950" : "normal")
-           .style("fill", d => CircleHeaders.includes(d) ? "Black" : "black")
+           .style("fill", "black")
 
-        // After drawing all the elements, adjust the y-position for all family labels
-        // Adjust the y-position for all family labels based on the midpoint between current and previous positions
+        // Only split (two-line) family labels need a second pass: pass 1 above already rendered
+        // every item — family and receptor alike — centered at its own midAngle, which is exactly
+        // the desired final position for a short (single-line) family label now that its slot's
+        // extra weight (2 units, vs. a receptor's 1) provides breathing room on both sides just by
+        // being centered in a wider-than-needed span. So short labels are left untouched here.
         svg.selectAll(".GPCRome-family-label")
             .each(function(d) {
+                // svg.selectAll here is unscoped across the whole SVG, so on every subsequent
+                // circle's draw this also re-matches already-finalized labels re-appended (via a
+                // plain svg.append, with no bound datum) by a *previous* circle's own pass here —
+                // skip those rather than reprocessing/removing already-placed labels.
+                if (!d || !d.needsSplit) {
+                    return;
+                }
+
                 const textElement = d3v4.select(this);
 
-                // Find the index of the family label within the full values array
-                const index = Circle_array.indexOf(d);  // This gets the actual index of the current family label in the `values` array
+                // Determine if the text anchor should be "start" or "end"
+                const angle = (d.midAngle * 180 / Math.PI) - 90;  // Calculate the angle based on the item's position
+                const additionalRotation = angle >= -90 && angle < 90 ? 0 : 180;  // Conditional rotation adjustment
 
-                if (index !== -1 && index > 0) {  // Ensure the index is valid and not the first item (since we need index - 1)
+                // Format the text before checking the length
+                const formattedText = GPCRome_formatTextWithHTML(d.label, CircleSubHeaders);
 
-                    const totalItems = Circle_array.length; // Total number of items in the current GPCRome
+                // Remove the existing (single-line) text element before appending the split elements
+                textElement.remove();
 
-                    // Determine if the text anchor should be "start" or "end"
-                    const angle = (index / totalItems) * 360 - 90;  // Calculate the angle based on the index
-                    const additionalRotation = angle >= -90 && angle < 90 ? 0 : 180;  // Conditional rotation adjustment
+                // fontsize
+                let family_fontsize = FontsizeGlobal;
 
-                    // Format the text before checking the length
-                    const formattedText = GPCRome_formatTextWithHTML(d, CircleSubHeaders);
+                let splitIndex;
+                if (formattedText.includes("-")) {
+                    // If the text contains a "-", split after the "-"
+                    splitIndex = formattedText.indexOf("-",3) + 1;
+                } else {
+                    // Otherwise, split at the nearest space
+                    splitIndex = formattedText.lastIndexOf(" ", formattedText.length-1);
+                }
+                const firstPart = formattedText.substring(0, splitIndex);  // First part
+                const secondPart = formattedText.substring(splitIndex);  // Second part
 
-                    // Remove the existing text element before appending the split elements
-                    textElement.remove();
+                // Two evenly-spaced points, one anglePerUnit in from each edge of this item's
+                // 3-unit slot (computeClassLayout) — splitFirstAngle is always < splitSecondAngle.
+                const firstPos = positionFromAngle(d.splitFirstAngle, 'family', true);
+                const secondPos = positionFromAngle(d.splitSecondAngle, 'family', true);
 
-                    // fontsize
-                    let family_fontsize = FontsizeGlobal;
+                const off_set = level+1
 
+                if (angle >= -90 && angle < 90) {
+                    // Right-hand side: firstPos gets the first part, secondPos gets the second part
 
-                      // Check if the formatted text is longer than 10 characters (or any desired length)
-                      if (formattedText.length > 18) {
-                          let splitIndex;
-                          if (formattedText.includes("-")) {
-                              // If the text contains a "-", split after the "-"
-                              splitIndex = formattedText.indexOf("-",3) + 1;
-                          } else {
-                              // Otherwise, split at the nearest space
-                              splitIndex = formattedText.lastIndexOf(" ", formattedText.length-1);
-                          }
-                          const firstPart = formattedText.substring(0, splitIndex);  // First part
-                          const secondPart = formattedText.substring(splitIndex);  // Second part
+                    svg.append("text")
+                        .attr("x", firstPos.x)
+                        .attr("y", firstPos.y+off_set)
+                        .attr("text-anchor", "start")
+                        .attr("dominant-baseline", "middle")
+                        .attr("transform", `rotate(${firstPos.rotation + additionalRotation}, ${firstPos.x}, ${firstPos.y})`)
+                        .attr("class", "GPCRome-family-label-split")
+                        .text(firstPart)
+                        // .style("font-weight", "bold")
+                        .style("font-family", FontStyle)
+                        .style("font-size",family_fontsize);
 
-                          // Get the current and previous positions using calculatePositionAndAngle with the isSplit flag
-                          const currentPos = calculatePositionAndAngle(index, totalItems, Circle_array, CircleHeaders, CircleSubHeaders, true);
-                          const prevPos = calculatePositionAndAngle(index - 1, totalItems, Circle_array, CircleHeaders, CircleSubHeaders, true);
+                    svg.append("text")
+                        .attr("x", secondPos.x)
+                        .attr("y", secondPos.y-off_set)
+                        .attr("text-anchor", "start")
+                        .attr("dominant-baseline", "middle")
+                        .attr("transform", `rotate(${secondPos.rotation + additionalRotation}, ${secondPos.x}, ${secondPos.y})`)
+                        .attr("class", "GPCRome-family-label-split")
+                        .text(secondPart)
+                        // .style("font-weight", "bold")
+                        .style("font-family", FontStyle)
+                        .style("font-size", family_fontsize);
 
-                          off_set = level+1
+                } else {
+                    // Left-hand side: secondPos gets the first part, firstPos gets the second part
 
-                          if (angle >= -90 && angle < 90) {
-                              // Right-hand side: use prevPos for the first part and currentPos for the second part
+                    svg.append("text")
+                        .attr("x", secondPos.x)
+                        .attr("y", secondPos.y+off_set)
+                        .attr("text-anchor", "end")
+                        .attr("dominant-baseline", "middle")
+                        .attr("transform", `rotate(${secondPos.rotation + additionalRotation}, ${secondPos.x}, ${secondPos.y})`)
+                        .attr("class", "GPCRome-family-label-split")
+                        .text(firstPart)
+                        // .style("font-weight", "bold")
+                        .style("font-family", FontStyle)
+                        .style("font-size",family_fontsize);
 
-                              // Append the first part of the text (using prevPos)
-                              svg.append("text")
-                                  .attr("x", prevPos.x)
-                                  .attr("y", prevPos.y+off_set)
-                                  .attr("text-anchor", "start")
-                                  .attr("dominant-baseline", "middle")
-                                  .attr("transform", `rotate(${prevPos.rotation + additionalRotation}, ${prevPos.x}, ${prevPos.y})`)
-                                  .attr("class", "GPCRome-family-label-split")
-                                  .text(firstPart)
-                                  // .style("font-weight", "bold")
-                                  .style("font-family", FontStyle)
-                                  .style("font-size",family_fontsize);
-
-
-
-                              // Append the second part of the text (using currentPos)
-                              svg.append("text")
-                                  .attr("x", currentPos.x)
-                                  .attr("y", currentPos.y-off_set)
-                                  .attr("text-anchor", "start")
-                                  .attr("dominant-baseline", "middle")
-                                  .attr("transform", `rotate(${currentPos.rotation + additionalRotation}, ${currentPos.x}, ${currentPos.y})`)
-                                  .attr("class", "GPCRome-family-label-split")
-                                  .text(secondPart)
-                                  // .style("font-weight", "bold")
-                                  .style("font-family", FontStyle)
-                                  .style("font-size", family_fontsize);
-
-                          } else {
-                              // Left-hand side: use currentPos for the first part and prevPos for the second part
-
-                              // Append the first part of the text (using currentPos)
-                              svg.append("text")
-                                  .attr("x", currentPos.x)
-                                  .attr("y", currentPos.y+off_set)
-                                  .attr("text-anchor", "end")
-                                  .attr("dominant-baseline", "middle")
-                                  .attr("transform", `rotate(${currentPos.rotation + additionalRotation}, ${currentPos.x}, ${currentPos.y})`)
-                                  .attr("class", "GPCRome-family-label-split")
-                                  .text(firstPart)
-                                  // .style("font-weight", "bold")
-                                  .style("font-family", FontStyle)
-                                  .style("font-size",family_fontsize);
-
-                              // Append the second part of the text (using prevPos)
-                              svg.append("text")
-                                  .attr("x", prevPos.x)
-                                  .attr("y", prevPos.y-off_set)
-                                  .attr("text-anchor", "end")
-                                  .attr("dominant-baseline", "middle")
-                                  .attr("transform", `rotate(${prevPos.rotation + additionalRotation}, ${prevPos.x}, ${prevPos.y})`)
-                                  .attr("class", "GPCRome-family-label-split")
-                                  .text(secondPart)
-                                  // .style("font-weight", "bold")
-                                  .style("font-family", FontStyle)
-                                  .style("font-size",family_fontsize);
-                          }
-
-                      } else {
-                        // If the formatted text is shorter than 10 characters, handle it normally
-
-                        // Get the current and previous positions without splitting (isSplit = false)
-                        if (Circle_array[index - 1] === '') {
-                            const currentPos = calculatePositionAndAngle(index, totalItems, Circle_array, CircleHeaders, CircleSubHeaders, false);
-                            const prevPos = calculatePositionAndAngle(index - 1, totalItems, Circle_array, CircleHeaders, CircleSubHeaders, false);
-
-                            const midX = (currentPos.x + prevPos.x) / 2;
-                            const midY = (currentPos.y + prevPos.y) / 2;
-                            const midRotation = (currentPos.rotation + prevPos.rotation) / 2;
-
-                            // Append the formatted text in the middle position
-                            svg.append("text")
-                                .attr("x", midX)
-                                .attr("y", midY)
-                                .attr("dominant-baseline", "middle")
-                                .attr("text-anchor", (angle >= -90 && angle < 90) ? "start" : "end")
-                                .attr("transform", `rotate(${midRotation + additionalRotation}, ${midX}, ${midY})`)
-                                .attr("class", "GPCRome-family-label")
-                                .text(formattedText)
-                                // .style("font-weight", "bold")
-                                .style("font-family", FontStyle)
-                                .style("font-size",family_fontsize);
-                        } else {
-                            const currentPos = calculatePositionAndAngle(index, totalItems, Circle_array, CircleHeaders, CircleSubHeaders, true);
-                            svg.append("text")
-                                .attr("x", currentPos.x)
-                                .attr("y", currentPos.y)
-                                .attr("text-anchor", (angle >= -90 && angle < 90) ? "start" : "end")
-                                .attr("dominant-baseline", "middle")
-                                .attr("transform", `rotate(${currentPos.rotation + additionalRotation}, ${currentPos.x}, ${currentPos.y})`)
-                                .attr("class", "GPCRome-family-label")
-                                .text(formattedText)
-                                // .style("font-weight", "bold")
-                                .style("font-family", FontStyle)
-                                .style("font-size",family_fontsize);
-                        }
-                      }
+                    svg.append("text")
+                        .attr("x", firstPos.x)
+                        .attr("y", firstPos.y-off_set)
+                        .attr("text-anchor", "end")
+                        .attr("dominant-baseline", "middle")
+                        .attr("transform", `rotate(${firstPos.rotation + additionalRotation}, ${firstPos.x}, ${firstPos.y})`)
+                        .attr("class", "GPCRome-family-label-split")
+                        .text(secondPart)
+                        // .style("font-weight", "bold")
+                        .style("font-family", FontStyle)
+                        .style("font-size",family_fontsize);
                 }
             });
 
@@ -3820,29 +3844,25 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
             }
         }
 
-        // Add large hollow pie chart for the entire level
+        // Add large hollow pie chart for the entire level. Wedge angles come directly from the
+        // startAngle/endAngle computed for each content item in computeClassLayout() — the same
+        // angles used to position that item's label — so wedges and labels can never drift out
+        // of sync. No wedge is drawn for the reserved class-boundary gaps (previously an
+        // invisible fill:none wedge was drawn there anyway, so no visual change).
         const arcGenerator = d3v4.arc()
             .innerRadius(GPCRome_radius - 7)  // Adjust to control the hollow center size
             .outerRadius(GPCRome_radius)  // Adjust to control the thickness of the pie
             // .padAngle(level === 4 ? 0.3 : 0); // Apply padding only if level is 4
 
-        const pieGenerator = d3v4.pie()
-            .sort(null)
-            .value(1)  // Create equal slices for each value
-            .startAngle(-Math.PI / Circle_array.length)  // Offset to move the slices left by half their size
-            .endAngle(2 * Math.PI - Math.PI / Circle_array.length);  // Correct end angle for full circle
-
-        const pieData = pieGenerator(Circle_array);
-
         svg.selectAll(`.large-hollow-pie-${level}`)
-            .data(pieData)
+            .data(contentItems)
             .enter()
             .append("path")
             .attr("class", `large-hollow-pie-${level}`)
             .attr("d", arcGenerator)
             .attr("transform", `translate(${width / 2}, ${height / 2})`)
             .style("fill", (d) => {
-                const value = DataFill[d.data];
+                const value = DataFill[d.label];
 
                 if (DataType === "Text") {
                     return value || "none";  // Use Color directly
@@ -3855,13 +3875,59 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                 return !isNaN(numericValue) ? colorScale(numericValue) : "none";
             })
             .style("stroke", (d) => {
-                const value = DataFill[d.data];
+                const value = DataFill[d.label];
                 return value != null ? "black" : "none";
             })
             .style("stroke-width", (d) => {
-                const value = DataFill[d.data];
+                const value = DataFill[d.label];
                 return value === "" ? 0.5 : 0.5;  // Set stroke-width to 0 if the value is an empty string
             });
+
+        // Class badges ("A", "B1", "T2", ...) are drawn last, as their own annotation pass,
+        // centered on each class's reserved gap rather than occupying a slot in contentItems.
+        // Emits the same GPCRome-text-{level}-highlight class the header text used to carry, so
+        // the pill-drawing post-processors in classification/wheel.js and
+        // data_mapper/mapper_gpcrome_page.js keep working unmodified against these nodes.
+        function drawClassBadges() {
+            function headerRadius(classKey) {
+                return classKey === "Unclassified" ? (GPCRome_radius - 10) : (GPCRome_radius + 18);
+            }
+
+            function headerX(classKey) {
+                const theta = (Math.PI / 2) - classGapMidAngle[classKey];
+                return width / 2 + Math.cos(theta) * headerRadius(classKey);
+            }
+
+            function headerY(classKey) {
+                const theta = (Math.PI / 2) - classGapMidAngle[classKey];
+                return height / 2 - Math.sin(theta) * headerRadius(classKey);
+            }
+
+            svg.selectAll(null)
+                .data(CircleHeaders)
+                .enter()
+                .append("text")
+                .attr("class", (d) => `GPCRome-text GPCRome-text-${level} GPCRome-text-${level}-highlight`)
+                .attr("x", (d) => headerX(d))
+                .attr("y", (d) => headerY(d))
+                .attr("text-anchor", (d) => {
+                    if (d !== "Unclassified") {
+                        return "middle";
+                    }
+                    const angle = (classGapMidAngle[d] * 180 / Math.PI) - 90;
+                    return (angle >= -90 && angle < 90) ? "start" : "end";
+                })
+                .attr("dominant-baseline", "middle")
+                .attr("dy", "0.1em")
+                .attr("transform", (d) => `rotate(0, ${headerX(d)}, ${headerY(d)})`)
+                .html((d) => GPCRome_formatTextWithHTML(d, CircleSubHeaders))
+                .style("font-size", FontsizeClass)
+                .style("font-family", FontStyle)
+                .style("font-weight", "950")
+                .style("fill", "black");
+        }
+
+        drawClassBadges();
     }
     // === Legends ===
     let AddBottomHeight = 0;
@@ -4218,8 +4284,13 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
         }
     }
 
+    // width/height attributes must equal the viewBox's own dimensions, not the pre-padding
+    // "artboard" size — a viewer that falls back to the width/height attributes for scaling
+    // (rather than the viewBox) would otherwise crop content the viewBox's negative origin
+    // shifts into the padding border.
     svg
         .attr("data-gpcrome-datatype", textWheelRender ? "text" : "numeric")
-        .attr("height", newHeight)
+        .attr("width", vbOuterW)
+        .attr("height", vbOuterH)
         .attr("viewBox", `-${padding} -${padding} ${vbOuterW} ${vbOuterH}`);
 }
