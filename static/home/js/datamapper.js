@@ -3289,17 +3289,15 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                 .attr("class", "toggle-image");  // Add a class to control visibility
         };
     }
-    // If there is 5 circles ()
-    // 5th/6th arguments (SeamGapStartDegrees / SeamGapStopDegrees) are the plain-degree widths of
-    // the manually-set gap reserved before/after the 12-o'clock seam, on whichever class badge
-    // sits there for that circle (the only badge, for a single-class circle; the first badge in
-    // CircleHeaders order, for a multi-class one) — e.g. start=4, stop=6 spans -4deg to +6deg.
-    // Independent so the two sides can be tuned separately (a class next to a two-line family
-    // label often wants more room than one next to a plain receptor). Tune each by eye; no
-    // formula derives these from radius anymore. See computeClassLayout for how this is used.
-    // 7th argument (NonSeamBadgeUnits) sizes every *other* class badge on that same circle (e.g.
-    // B2 alongside seam-sitting B1) as that many receptor-tick-widths — unused on single-class
-    // circles (1/2, all 4 Odorant), since there's no "other" badge there.
+    // Trailing per-circle arguments to Draw_a_GPCRome, tuned by eye (no formula derives any of
+    // these from radius): SeamGapStartDegrees/SeamGapStopDegrees are the plain-degree widths of
+    // the gap reserved before/after the 12-o'clock seam around whichever class badge sits there
+    // (the only badge on a single-class circle; the first badge in CircleHeaders order on a
+    // multi-class one) — independent so, e.g., a side next to a two-line family label can get
+    // more room than one next to a plain receptor (start=4, stop=6 spans -4deg to +6deg).
+    // NonSeamBadgeUnits sizes every *other* class badge on that same circle (e.g. B2 alongside
+    // seam-sitting B1) as that many receptor-tick-widths; unused on single-class circles (1/2,
+    // all 4 Odorant), since there's no "other" badge there. See computeClassLayout.
     if (Object.keys(Data).length === 5) {
         Draw_a_GPCRome(Data.Circle_1, 0, 440, dimensions, 4.4, 3.9)
         Draw_a_GPCRome(Data.Circle_2, 1, 355, dimensions, 5.3, 4)
@@ -3312,8 +3310,6 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
         Draw_a_GPCRome(Data.Circle_3, 2, 250, dimensions, 4, 4)
         Draw_a_GPCRome(Data.Circle_4, 3, 140, dimensions, 4, 4)
     }
-
-    // Now call Draw_a_GPCRome for both updated GPCRome_A and GPCRome_AO
 
     function Draw_a_GPCRome(Data, level, Radius, dimensions, SeamGapStartDegrees, SeamGapStopDegrees, NonSeamBadgeUnits) {
 
@@ -3426,51 +3422,31 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
             return { contentItems, DataFill };
         }
 
-        // Walks CircleHeaders in order, reserving one gap per class boundary (since the circle is
-        // a closed loop, that's exactly one gap per class) and laying content out contiguously
-        // through whatever's left. Every item (receptor or family) is centered within its own
-        // weight*anglePerUnit slot — receptors have always worked this way; a family header just
-        // gets a bigger weight (2 for a single-line label, 3 for one that needs splitting into two
-        // lines) than a plain receptor (1), so centering it in that wider slot leaves half a unit
-        // of empty space on both sides "for free" as breathing room, with no separate gap concept
-        // needed for families at all. Mutates each contentItems entry with
-        // startAngle/endAngle/midAngle (all plain "cursor" angles: 0 at 12 o'clock, increasing
-        // clockwise — matching d3's arc() convention directly, so no extra sign/offset juggling is
-        // needed when the same angles are later fed to arcGenerator() for the pie wedges), plus
-        // splitFirstAngle/splitSecondAngle (only meaningful for needsSplit family items) giving two
-        // evenly-spaced positions one unit in from each edge of their 3-unit slot.
+        // Walks CircleHeaders in order, reserving one gap per class boundary (the circle is a
+        // closed loop, so that's exactly one gap per class) and laying content out contiguously
+        // through whatever's left. Mutates each contentItems entry with startAngle/endAngle/midAngle
+        // (all plain "cursor" angles: 0 at 12 o'clock, increasing clockwise — matching d3's arc()
+        // convention directly, so these feed arcGenerator() for the pie wedges with no extra
+        // sign/offset juggling), plus splitFirstAngle/splitSecondAngle (only meaningful for
+        // needsSplit family items) giving two evenly-spaced positions one unit in from each edge of
+        // their 3-unit slot. Every item is centered within its own weight*anglePerUnit slot — a
+        // family header's bigger weight (2 single-line, 3 needing a split) than a plain receptor's
+        // (1) is what gives it breathing room on both sides "for free", with no separate gap concept
+        // needed for families at all.
         //
-        // The class (badge) gap is handled differently for exactly one class per circle: whichever
-        // class sits at this circle's own 12-o'clock seam (the only class, on a single-class circle
-        // like 1/2 or any Odorant circle; the first class in CircleHeaders order, on a multi-class
-        // circle like 3/4/5) gets a manually-set gap (seamGapStartRad before the seam, seamGapStopRad
-        // after it, independently — see the Draw_a_GPCRome call sites for the plain-degrees input
-        // this comes from). No formula derives either from radius or content — both are tuned by eye
-        // per circle, independently, since the two sides often want different amounts of room (e.g.
-        // one side landing next to a two-line family label vs. the other next to a plain receptor).
+        // The class (badge) gap works differently for exactly one class per circle: whichever class
+        // sits at the 12-o'clock seam (the only class, on a single-class circle; the first class in
+        // CircleHeaders order, on a multi-class one) gets a manually-set gap — seamGapStartRad before
+        // the seam, seamGapStopRad after it, independently, since the two sides often want different
+        // amounts of room (e.g. one landing next to a two-line family label, the other next to a
+        // plain receptor). Every *other* class on the same circle (e.g. B2 alongside seam-sitting B1)
+        // is instead inserted as a plain weighted item into the very same pool as families/receptors,
+        // sized as classBadgeUnits "arc spaces" — deliberately: giving *every* class on a shared
+        // circle its own hand-picked number would reopen the old "B1 gets special seam treatment, B2
+        // doesn't" inconsistency, so only the one seam class gets manual numbers.
         //
-        // Every *other* class sharing the same circle (e.g. B2 on circle 3, alongside seam-sitting
-        // B1) is instead inserted as a plain weighted item into the very same pool as
-        // families/receptors, sized as classBadgeUnits "arc spaces" — so it can never dominate the
-        // circle regardless of radius or class count, and needs no separate tuning. Deliberately
-        // giving only the seam class hand-picked numbers, while every other class on that circle
-        // stays formula-driven: giving *all* of them independent hand-picked numbers would reopen
-        // the old "B1 gets special seam treatment, B2 doesn't" inconsistency.
-        //
-        // The cursor starts at -seamGapStartRad so the seam class's gap straddles the 12-o'clock
-        // seam (not necessarily symmetrically, if start and stop differ) instead of sitting entirely
-        // after it — every other class's gap already sits between two flanking content stretches and
-        // is unaffected by this offset (the loop is a closed cycle, so shifting the start is a pure
-        // whole-wheel rotation).
-        //
-        // Mutates each contentItems entry with startAngle/endAngle/midAngle (all plain "cursor"
-        // angles: 0 at 12 o'clock, increasing clockwise — matching d3's arc() convention directly),
-        // plus splitFirstAngle/splitSecondAngle (only meaningful for needsSplit family items) giving
-        // two evenly-spaced positions one unit in from each edge of their 3-unit slot. Every item
-        // (receptor or family) is centered within its own weight*anglePerUnit slot — receptors have
-        // always worked this way; a family header just gets a bigger weight (2 for a single-line
-        // label, 3 for one that needs splitting) than a plain receptor (1), so centering it in that
-        // wider slot leaves half a unit of empty space on both sides "for free" as breathing room.
+        // The cursor starts at -seamGapStartRad so the seam class's gap straddles 12 o'clock (not
+        // necessarily symmetrically, if start and stop differ) instead of sitting entirely after it.
         function computeClassLayout(CircleHeaders, contentItems, seamGapStartRad, seamGapStopRad, classBadgeUnits) {
             let contentWeightSum = 0;
             for (const item of contentItems) {
@@ -3486,7 +3462,6 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
             const anglePerUnit = totalUnits > 0 ? (2 * Math.PI - seamGapRad) / totalUnits : 0;
 
             const classGapMidAngle = {};
-            const classContentStartAngle = {};
 
             let cursor = -seamGapStartRad;
             let itemIndex = 0;
@@ -3500,7 +3475,6 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                 // how much breathing room content gets on each side, not where the badge itself
                 // is drawn. Every other badge keeps the usual "centered in its own gap" position.
                 classGapMidAngle[classKey] = isSeamClass ? 0 : (cursor + gapEnd) / 2;
-                classContentStartAngle[classKey] = gapEnd;
                 cursor = gapEnd;
                 isSeamClass = false;
 
@@ -3518,7 +3492,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                 }
             }
 
-            return { classGapMidAngle, classContentStartAngle };
+            return { classGapMidAngle };
         }
 
         let { CircleHeaders, CircleSubHeaders } = extractHeaders(Data);
@@ -3543,15 +3517,12 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
             return { x, y, rotation };
         }
 
-        // Which angle a label should be anchored at for pass-1 rendering. Split family labels
-        // are re-rendered and removed entirely by pass 2, so their pass-1 position never shows.
-        // Non-split family labels use the same "inset by one anglePerUnit from the near edge"
-        // convention as the split lines' splitFirstAngle/splitSecondAngle — but a non-split
-        // item's slot is only 2 units wide (vs. 3 for a split one), so inset-by-1-unit from
-        // either edge lands on the exact same point: the midpoint. That's why plain d.midAngle
-        // is already the correct, double-line-consistent anchor here (an earlier attempt to
-        // anchor at the raw, un-inset edge instead was the actual bug — it touched the boundary
-        // of whatever content precedes/follows the label rather than staying within its own slot).
+        // Which angle a label should be anchored at for pass-1 rendering. Split family labels are
+        // re-rendered and removed entirely by pass 2, so their pass-1 position never shows. For a
+        // non-split item, inset-by-one-anglePerUnit from either edge of its 2-unit slot (the same
+        // convention split lines use on their 3-unit slot's splitFirstAngle/splitSecondAngle) lands
+        // on the exact same point both ways — the midpoint — which is why plain d.midAngle is
+        // already the correct anchor here.
         function labelAnchorAngle(d) {
             return d.midAngle;
         }
@@ -3772,7 +3743,6 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                         .attr("transform", `rotate(${firstPos.rotation + additionalRotation}, ${firstPos.x}, ${firstPos.y})`)
                         .attr("class", "GPCRome-family-label-split")
                         .text(firstPart)
-                        // .style("font-weight", "bold")
                         .style("font-family", FontStyle)
                         .style("font-size",family_fontsize);
 
@@ -3784,7 +3754,6 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                         .attr("transform", `rotate(${secondPos.rotation + additionalRotation}, ${secondPos.x}, ${secondPos.y})`)
                         .attr("class", "GPCRome-family-label-split")
                         .text(secondPart)
-                        // .style("font-weight", "bold")
                         .style("font-family", FontStyle)
                         .style("font-size", family_fontsize);
 
@@ -3799,7 +3768,6 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                         .attr("transform", `rotate(${secondPos.rotation + additionalRotation}, ${secondPos.x}, ${secondPos.y})`)
                         .attr("class", "GPCRome-family-label-split")
                         .text(firstPart)
-                        // .style("font-weight", "bold")
                         .style("font-family", FontStyle)
                         .style("font-size",family_fontsize);
 
@@ -3811,7 +3779,6 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                         .attr("transform", `rotate(${firstPos.rotation + additionalRotation}, ${firstPos.x}, ${firstPos.y})`)
                         .attr("class", "GPCRome-family-label-split")
                         .text(secondPart)
-                        // .style("font-weight", "bold")
                         .style("font-family", FontStyle)
                         .style("font-size",family_fontsize);
                 }
@@ -3851,8 +3818,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
         // invisible fill:none wedge was drawn there anyway, so no visual change).
         const arcGenerator = d3v4.arc()
             .innerRadius(GPCRome_radius - 7)  // Adjust to control the hollow center size
-            .outerRadius(GPCRome_radius)  // Adjust to control the thickness of the pie
-            // .padAngle(level === 4 ? 0.3 : 0); // Apply padding only if level is 4
+            .outerRadius(GPCRome_radius);  // Adjust to control the thickness of the pie
 
         svg.selectAll(`.large-hollow-pie-${level}`)
             .data(contentItems)
@@ -3869,9 +3835,6 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                 }
 
                 const numericValue = parseFloat(value);
-                // if (numericValue === 0) {
-                //     return "white";
-                // }
                 return !isNaN(numericValue) ? colorScale(numericValue) : "none";
             })
             .style("stroke", (d) => {
