@@ -110,7 +110,10 @@ function custom_tree_branch_min_gap(depth, maxDepth, options) {
 }
 
 function custom_tree_class_key(label) {
-    var key = String(label || "").split(" (")[0].replace(/^Class\s+/i, '').trim();
+    // "Unclassified" is the class's real DB name (analogous to "Class A (Rhodopsin)"), but its
+    // canonical short symbol is "U" -- not "Cl"/"Classless"/the word "Unclassified" itself.
+    var raw = String(label || "").trim();
+    var key = raw.startsWith("Unclassified") ? "U" : raw.split(" (")[0].replace(/^Class\s+/i, '').trim();
     return CLASS_COLORS[key] ? key : "";
 }
 
@@ -141,9 +144,10 @@ const CLASS_COLORS = {
     'C':  '#d62728',
     'F':  '#FF7F0E',
     'T2': '#F7B6D2',
-    'Cl': '#9e9e9e',
+    'U':  '#9e9e9e',
     'O1': '#66CDAA',
     'O2': '#3CB371',
+    'V':  '#B8860B',
 };
 
 // 14-category chemotype colors (based on the legacy set in common/phylogenetic_tree.py)

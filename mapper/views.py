@@ -3,7 +3,6 @@ from django.db.models import Q
 from django.core.cache import cache
 from django.views.generic import TemplateView, View
 from protein.models import Protein, ProteinFamily
-from common.phylogenetic_tree import PhylogeneticTreeGenerator
 from classification.models import ClusterCoord
 
 import json
@@ -100,6 +99,7 @@ class DataMapperHome(TemplateView):
         "Class O2 (tetrapod specific odorant)": "O2",
         "Class T2 (Taste 2)": "T2",
         "Class V (Vomeronasal)": "V",
+        "Unclassified": "U",
     }
 
     @staticmethod
@@ -792,99 +792,163 @@ class DataMapperHome(TemplateView):
             'entry_to_species': entry_to_species,
         }
 
+    # Classification-tree config. Fully slug-driven: any ProteinFamily that is a direct child of
+    # the root family ('000') is picked up as a top-level GPCR class automatically -- no hardcoded
+    # per-class ProteinFamily.objects.get(name=...) lookups needed, so a new/renamed class needs no
+    # code change here (unlike the old generate_tree_plot, which crashed once "Other GPCRs" was
+    # renamed to "Unclassified").
+    _CLASSIFICATION_ROOT_FAMILY_SLUG = '000'
+    _CLASSIFICATION_TREE_DEPTH = 4  # class / ligand type / receptor family / receptor
+    # Class D1 (slug '005') has exactly one SWISSPROT protein and no classification annotations
+    # yet -- excluded until there's real data behind it.
+    _CLASSIFICATION_EXCLUDED_CLASS_SLUGS = frozenset({'005'})
+    _CLASSIFICATION_TREE_CACHE_KEY = 'mapper_classification_tree_skeleton_v1'
+
     @staticmethod
-    def generate_tree_plot(input_data): #ADD AN INPUT FILTER DICTIONARY
-        ### TREE SECTION
-        tree = PhylogeneticTreeGenerator()
-        class_a_data = tree.get_tree_data(ProteinFamily.objects.get(name='Class A (Rhodopsin)'))
-        class_b1_data = tree.get_tree_data(ProteinFamily.objects.get(name__startswith='Class B1 (Secretin)'))
-        class_b2_data = tree.get_tree_data(ProteinFamily.objects.get(name__startswith='Class B2 (Adhesion)'))
-        class_c_data = tree.get_tree_data(ProteinFamily.objects.get(name__startswith='Class C (Glutamate)'))
-        class_f_data = tree.get_tree_data(ProteinFamily.objects.get(name__startswith='Class F (Frizzled)'))
-        class_t2_data = tree.get_tree_data(ProteinFamily.objects.get(name__startswith='Class T2 (Taste 2)'))
-        class_cl_data = tree.get_tree_data(ProteinFamily.objects.get(name__startswith='Other GPCRs'))
-        class_o1_family = ProteinFamily.objects.filter(name__startswith='Class O1').first()
-        class_o2_family = ProteinFamily.objects.filter(name__startswith='Class O2').first()
-        class_o1_data = tree.get_tree_data(class_o1_family) if class_o1_family else None
-        class_o2_data = tree.get_tree_data(class_o2_family) if class_o2_family else None
-        ### GETTING NODES
-        data_a = class_a_data.get_nodes_dict(None)
-        data_b1 = class_b1_data.get_nodes_dict(None)
-        data_b2 = class_b2_data.get_nodes_dict(None)
-        data_c = class_c_data.get_nodes_dict(None)
-        data_f = class_f_data.get_nodes_dict(None)
-        data_t2 = class_t2_data.get_nodes_dict(None)
-        data_cl = class_cl_data.get_nodes_dict(None)
-        data_o1 = class_o1_data.get_nodes_dict(None) if class_o1_data else None
-        data_o2 = class_o2_data.get_nodes_dict(None) if class_o2_data else None
-        #Collating everything into a single tree
-        general_options = {'depth': 4,
-                           'branch_length': {1: 'Class A (Rhodopsin)',
-                                             2: 'Alicarboxylic acid',
-                                             3: 'Gonadotrophin-releasing hormone',
-                                             4: ''},
-                           'branch_trunc': 0,
-                           'leaf_offset': 30,
-                           'anchor': "tree_plot",
-                           'label_free': [],
-                           'fontSize': {
-                                'class': "15px",
-                                'ligandtype': "14px",
-                                'receptorfamily': "13px",
-                                'receptor': "12px"
-                            }}
-        master_dict = OrderedDict([('name', ''),
-                                   ('value', 3000),
-                                   ('color', ''),
-                                   ('children',[])])
-        class_a_dict = OrderedDict([('name', 'Class A (Rhodopsin)'),
-                                   ('value', 0),
-                                   ('color', 'Red'),
-                                   ('children',data_a['children'])])
-        class_b1_dict = OrderedDict([('name', 'Class B1 (Secretin)'),
-                                   ('value', 0),
-                                   ('color', 'Green'),
-                                   ('children',data_b1['children'])])
-        class_b2_dict = OrderedDict([('name', 'Class B2 (Adhesion)'),
-                                  ('value', 0),
-                                  ('color', 'Blue'),
-                                  ('children',data_b2['children'])])
-        class_c_dict = OrderedDict([('name', 'Class C (Glutamate)'),
-                                  ('value', 0),
-                                  ('color', 'Purple'),
-                                  ('children',data_c['children'])])
-        class_f_dict = OrderedDict([('name', 'Class F (Frizzled)'),
-                                  ('value', 0),
-                                  ('color', 'Grey'),
-                                  ('children',data_f['children'])])
-        class_t2_dict = OrderedDict([('name', 'Class T2 (Taste 2)'),
-                                  ('value', 0),
-                                  ('color', 'Orange'),
-                                  ('children',data_t2['children'])])
-        class_cl_dict = OrderedDict([('name', 'Unclassified'),
-                                  ('value', 0),
-                                  ('color', 'Gold'),
-                                  ('children',data_cl['children'])])
-        class_o1_dict = OrderedDict([('name', 'Class O1 (fish-like odorant)'),
-                                  ('value', 0),
-                                  ('color', '#66CDAA'),
-                                  ('children', data_o1['children'])]) if data_o1 else None
-        class_o2_dict = OrderedDict([('name', 'Class O2 (tetrapod specific odorant)'),
-                                  ('value', 0),
-                                  ('color', '#3CB371'),
-                                  ('children', data_o2['children'])]) if data_o2 else None
-        ### APPENDING TO MASTER DICT
-        master_dict['children'].append(class_a_dict)
-        master_dict['children'].append(class_b1_dict)
-        master_dict['children'].append(class_b2_dict)
-        master_dict['children'].append(class_c_dict)
-        master_dict['children'].append(class_f_dict)
-        master_dict['children'].append(class_t2_dict)
-        master_dict['children'].append(class_cl_dict)
-        if class_o1_dict:
-            master_dict['children'].append(class_o1_dict)
-        if class_o2_dict:
-            master_dict['children'].append(class_o2_dict)
+    def _load_classification_tree_data():
+        """(families, leaf_by_family_slug) for every top-level GPCR class. families is a list of
+        (slug, name) for every ProteinFamily at or below a non-excluded class, up to the tree's
+        depth. leaf_by_family_slug maps a depth-4 family slug to the entry-name stem of its
+        representative human SWISSPROT protein (one leaf per receptor family)."""
+        class_slugs = set(
+            ProteinFamily.objects
+                .filter(parent__slug=DataMapperHome._CLASSIFICATION_ROOT_FAMILY_SLUG)
+                .exclude(slug__in=DataMapperHome._CLASSIFICATION_EXCLUDED_CLASS_SLUGS)
+                .values_list('slug', flat=True)
+        )
+
+        families = [
+            (slug, name)
+            for slug, name in ProteinFamily.objects
+                .exclude(slug=DataMapperHome._CLASSIFICATION_ROOT_FAMILY_SLUG)
+                .values_list('slug', 'name')
+            if slug.split('_')[0] in class_slugs and len(slug.split('_')) <= DataMapperHome._CLASSIFICATION_TREE_DEPTH
+        ]
+
+        leaf_by_family = {}
+        for fam_slug, entry_name in (
+            Protein.objects
+                .filter(source__name='SWISSPROT')
+                .order_by('family__slug', 'species_id')
+                .values_list('family__slug', 'entry_name')
+        ):
+            if fam_slug.split('_')[0] in class_slugs:
+                leaf_by_family.setdefault(fam_slug, entry_name.split('_')[0])
+        return families, leaf_by_family
+
+    @staticmethod
+    def _classification_node_label(name, level):
+        # Ligand-type and receptor-family names carry markup/suffixes not meant for display;
+        # class names and leaf (protein stem) names are used verbatim.
+        if level in (2, 3):
+            return name.replace('receptors', '').replace('<sub>', ' ').replace('</sub>', '').strip()
+        return name
+
+    @staticmethod
+    def _build_classification_tree(families, leaf_by_family):
+        def make_node(label, value=0):
+            return OrderedDict([('name', label), ('value', value), ('color', ''), ('children', [])])
+
+        root = make_node('', value=3000)
+        nodes = {}
+        # Sorting by slug guarantees a parent is emitted before its children, and gives a
+        # deterministic (if cosmetic) sibling order with no curated list to maintain.
+        for slug, fam_name in sorted(families, key=lambda f: f[0]):
+            parts = slug.split('_')
+            level = len(parts)
+            parent = root if level == 1 else nodes.get('_'.join(parts[:-1]))
+            if parent is None:
+                continue  # parent excluded/absent -> drop the orphan subtree
+            if level == DataMapperHome._CLASSIFICATION_TREE_DEPTH:
+                leaf_name = leaf_by_family.get(slug)
+                if not leaf_name:
+                    continue  # family with no SWISSPROT member -> no leaf
+                parent['children'].append(make_node(leaf_name))
+            else:
+                node = make_node(DataMapperHome._classification_node_label(fam_name, level))
+                nodes[slug] = node
+                parent['children'].append(node)
+        return root
+
+    @staticmethod
+    def _prune_classification_tree(node, level=0):
+        """Drop interior nodes left with no receptor leaves (e.g. a receptor-family branch whose
+        only member has no SWISSPROT protein). Depth-gated rather than "no children -> leaf" so a
+        genuinely childless interior node is distinguished from a real receptor leaf."""
+        if level >= DataMapperHome._CLASSIFICATION_TREE_DEPTH:
+            return node
+        kept = [
+            pruned for pruned in (
+                DataMapperHome._prune_classification_tree(child, level + 1)
+                for child in node['children']
+            )
+            if pruned is not None
+        ]
+        if not kept:
+            return None
+        node['children'] = kept
+        return node
+
+    @staticmethod
+    def _classification_tree_skeleton():
+        cached = cache.get(DataMapperHome._CLASSIFICATION_TREE_CACHE_KEY)
+        if cached is not None:
+            return deepcopy(cached)  # callers filter/mutate -- never hand out the cached object
+        families, leaf_by_family = DataMapperHome._load_classification_tree_data()
+        tree = DataMapperHome._prune_classification_tree(
+            DataMapperHome._build_classification_tree(families, leaf_by_family)
+        ) or OrderedDict([('name', ''), ('value', 3000), ('color', ''), ('children', [])])
+        cache.set(DataMapperHome._CLASSIFICATION_TREE_CACHE_KEY, tree, 60 * 60 * 24 * 7)
+        return deepcopy(tree)
+
+    @staticmethod
+    def _classification_tree_max_depth(node, level=0):
+        if not node.get('children'):
+            return level
+        return max(DataMapperHome._classification_tree_max_depth(c, level + 1) for c in node['children'])
+
+    @staticmethod
+    def _classification_tree_options(tree, depth, anchor="tree_plot"):
+        # branch_length holds, per level, the longest label actually present in the tree being
+        # returned -- used by the renderers purely as a text-width proxy for ring spacing, so it
+        # only needs to track real content rather than a hand-maintained literal.
+        branch_length = {lvl: '' for lvl in range(1, depth + 1)}
+
+        def walk(node, level):
+            if 1 <= level < depth:
+                name = node.get('name', '')
+                if len(name) > len(branch_length[level]):
+                    branch_length[level] = name
+            for child in (node.get('children') or []):
+                walk(child, level + 1)
+
+        walk(tree, 0)
+        return {
+            'depth': depth,
+            'branch_length': branch_length,
+            'branch_trunc': 0,
+            'leaf_offset': 30,
+            'anchor': anchor,
+            'label_free': [],
+            'fontSize': {
+                'class': "15px",
+                'ligandtype': "14px",
+                'receptorfamily': "13px",
+                'receptor': "12px"
+            }
+        }
+
+    @staticmethod
+    def GenerateClassificationTreeData(input_data): #ADD AN INPUT FILTER DICTIONARY
+        """
+        Full GPCR classification skeleton (class / ligand type / receptor family / receptor) as a
+        d3 list-tree (OrderedDict with name/value/color/children at every node), optionally
+        filtered down to `input_data`'s receptors. `color` is left blank on every node -- neither
+        consumer needs a backend-supplied color (Mapper_Tree.html's mapper_classification_tree.js
+        already recomputes colors client-side; drugged_gpcrome.html's datamapper.js gets a small
+        client-side fallback palette instead, see static/home/js/datamapper.js).
+        """
+        master_dict = DataMapperHome._classification_tree_skeleton()
 
         updated_data = {key.replace('_human', ''): value for key, value in input_data.items()}
         circles = {
@@ -898,12 +962,15 @@ class DataMapperHome(TemplateView):
 
         if isinstance(master_dict, dict) and master_dict.get('children') is not None and len(master_dict['children']) == 1:
             master_dict = master_dict['children'][0]
-            general_options['depth'] = 3
-            general_options['branch_length'] = {1: 'Alicarboxylic acid',
-                                             2: 'Gonadotrophin-releasing hormone',
-                                             3: ''}
-        else:
-            pass
+
+        depth = (
+            DataMapperHome._classification_tree_max_depth(master_dict)
+            if isinstance(master_dict, dict)
+            else DataMapperHome._CLASSIFICATION_TREE_DEPTH
+        )
+        general_options = DataMapperHome._classification_tree_options(
+            master_dict if isinstance(master_dict, dict) else {'children': []}, depth
+        )
 
         entry_names_list = list(input_data.keys())  # or: input_data.keys()
 
@@ -1104,7 +1171,7 @@ class MapperTreeView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        master_dict, general_options, circles, receptors, genes = DataMapperHome.generate_tree_plot({})
+        master_dict, general_options, circles, receptors, genes = DataMapperHome.GenerateClassificationTreeData({})
         context['tree'] = json.dumps(master_dict)
         context['tree_options'] = json.dumps(general_options)
         context['circles'] = json.dumps(circles if circles else {})

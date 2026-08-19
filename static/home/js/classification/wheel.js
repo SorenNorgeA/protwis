@@ -473,7 +473,7 @@ function classDisplayLabel(code) {
   const k = normKey(code);
   if (!k) return "";
   if (k === "Unclassified") return "U";
-  if (/^(A|B1|B2|C|F|T2|O1|O2)$/i.test(k)) return k.toUpperCase();
+  if (/^(A|B1|B2|C|F|O1|O2|T2|V)$/i.test(k)) return k.toUpperCase();
   return k;
 }
 

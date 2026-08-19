@@ -2,8 +2,66 @@
 // ###   TREE    ###
 // #################
 
+// Backend trees may ship blank per-node `color` (the palette now lives client-side, not in
+// Python). draw_tree()'s branch lines read d.target.color directly for stroke -- an empty string
+// clears the style, so branch lines would otherwise vanish. These are only a fallback: real colors
+// coming from the backend are never overwritten (see the `if (!n.color)` guards below).
+var TREE_CLASS_COLORS = {
+    'A': 'Red', 'B1': 'Green', 'B2': 'Blue', 'C': 'Purple', 'F': 'Grey',
+    'T2': 'Orange', 'O1': '#66CDAA', 'O2': '#3CB371', 'V': '#B8860B', 'U': 'Gold'
+};
+// Ligand-type ("chemotype") colors; mirrors CSS_COLORS in common/phylogenetic_tree.py, including
+// its Class B2 blanket override and its 'Black' default for anything unrecognized.
+var TREE_CHEMOTYPE_COLORS = {
+    'Adhesion': 'Crimson', 'Alicarboxylic acid': 'Red', 'Aminergic': 'OrangeRed',
+    'Amino acid': 'Orange', 'Ion': 'GoldenRod', 'Lipid': 'Gold', 'Melatonin': 'Yellow',
+    'Nucleotide': 'YellowGreen', 'Orphan': 'Gold', 'Other': 'Green', 'Peptide': 'SkyBlue',
+    'Protein': 'SteelBlue', 'Sensory': 'Indigo', 'Steroid': 'Purple'
+};
+
+function tree_class_key(label) {
+    // "Unclassified" is the class's real DB name; its canonical short symbol is "U".
+    var raw = String(label || '').trim();
+    return raw.startsWith('Unclassified') ? 'U' : raw.split(" (")[0].replace(/^Class\s+/i, '').trim();
+}
+
+function tree_hash_color(key) {
+    // Stable fallback for a class/chemotype this palette doesn't recognize yet (e.g. a brand new
+    // class), so it renders a consistent color instead of silently going colorless.
+    var hash = 0;
+    var str = String(key || '');
+    for (var i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0;
+    }
+    return 'hsl(' + (Math.abs(hash) % 360) + ', 68%, 48%)';
+}
+
+function tree_class_color(label) {
+    var key = tree_class_key(label);
+    return TREE_CLASS_COLORS[key] || tree_hash_color(key);
+}
+
+function ensure_tree_colors(data, depth) {
+    var classNodes = (depth === 4) ? (data.children || []) : [data];
+    classNodes.forEach(function (cls) {
+        var classKey = tree_class_key(cls.name);
+        if (!cls.color) { cls.color = tree_class_color(cls.name); }
+        (cls.children || []).forEach(function (lt) {
+            var chemKey = tree_class_key(lt.name);
+            var chemColor = (classKey === 'B2') ? 'LimeGreen' : (TREE_CHEMOTYPE_COLORS[chemKey] || 'Black');
+            (function paint(n) {
+                if (!n.color) { n.color = chemColor; }
+                (n.children || []).forEach(paint);
+            })(lt);
+        });
+    });
+    return data;
+}
+
 // Restructure tree data if only one Class is present
 function update_tree_data(data,depth) {
+    data = ensure_tree_colors(data, depth);
     if (depth === 4) {
         // Iterate over each class and update name
         data.children.forEach(Class_child => {
@@ -3305,10 +3363,10 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
         Draw_a_GPCRome(Data.Circle_4, 3, 185, dimensions, 7.2, 1.7, 3)
         Draw_a_GPCRome(Data.Circle_5, 4, 90, dimensions, 14, 14, 4)
     } else if (Object.keys(Data).length === 4) {
-        Draw_a_GPCRome(Data.Circle_1, 0, 440, dimensions, 4, 4)
-        Draw_a_GPCRome(Data.Circle_2, 1, 345, dimensions, 4, 4)
-        Draw_a_GPCRome(Data.Circle_3, 2, 250, dimensions, 4, 4)
-        Draw_a_GPCRome(Data.Circle_4, 3, 140, dimensions, 4, 4)
+        Draw_a_GPCRome(Data.Circle_1, 0, 440, dimensions, 4.4, 3)
+        Draw_a_GPCRome(Data.Circle_2, 1, 345, dimensions, 5.2, 3.5)
+        Draw_a_GPCRome(Data.Circle_3, 2, 250, dimensions, 7, 3.5)
+        Draw_a_GPCRome(Data.Circle_4, 3, 140, dimensions, 10, 6)
     }
 
     function Draw_a_GPCRome(Data, level, Radius, dimensions, SeamGapStartDegrees, SeamGapStopDegrees, NonSeamBadgeUnits) {

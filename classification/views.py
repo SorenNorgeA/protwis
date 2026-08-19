@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.core.cache import cache, caches
 from django.db.models import Case, F, IntegerField, Max, Prefetch, Q, When
 from django.db.models.functions import Greatest, Least, Upper
@@ -8,20 +7,19 @@ from django.utils.text import slugify
 from django.views import View
 from django.views.generic import TemplateView
 
+from classification import classification_db
 from classification.models import ClusterCoord, ReceptorSimilarity, StructureSimilarity, TreeNetwork
 from common.models import WebLink
 from mapper.views import DataMapperHome
-from protein.models import Gene, Protein, ProteinFamily, ProteinFamilyClassification, ProteinState
+from protein.models import Gene, Protein, ProteinFamily, ProteinState
 from collections import OrderedDict, defaultdict
 import math
 import json
-import os
 import re
 from string import Template
 from urllib.parse import urlencode
 
 import numpy as np
-import pandas as pd
 from sklearn.manifold import TSNE
 
 
@@ -34,7 +32,6 @@ except Exception:
 class ClassificationVisualizationMixin:
     GLOBAL_GROUP_KEY = "global"
     CLASS_GROUP_PREFIX = "class:"
-    BROWSER_CLASS_ORDER = ["A", "B1", "B2", "C", "F", "T2", "O1", "O2", "U"]
     MODALITY_GROUP_LABELS = [
         "Orphan receptors",
         "Polypeptide receptors",
@@ -52,18 +49,33 @@ class ClassificationVisualizationMixin:
         "OTHERGPCRS": "U",
         "UNCLASSIFIEDOTHERGPCRS": "U",
     }
+    # Alphabetical by symbol -- the general ordering rule for every class listing/dropdown/table
+    # in this app -- with "U" (Unclassified) always forced last, never sorted in alphabetically.
     CLASS_VISUALIZATION_CONFIG = OrderedDict([
         ("A", {"label": "Class A", "title": "Class A (Rhodopsin)", "slug": "001"}),
         ("B1", {"label": "Class B1", "title": "Class B1 (Secretin)", "slug": "002"}),
         ("B2", {"label": "Class B2", "title": "Class B2 (Adhesion)", "slug": "003"}),
         ("C", {"label": "Class C", "title": "Class C (Glutamate)", "slug": "004"}),
         ("F", {"label": "Class F", "title": "Class F (Frizzled)", "slug": "006"}),
-        ("T2", {"label": "Class T2", "title": "Class T2 (Taste 2)", "slug": "009"}),
         ("O1", {"label": "Class O1", "title": "Class O1 (Fish-like olfactory receptors)", "slug": "007"}),
         ("O2", {"label": "Class O2", "title": "Class O2 (Tetrapod-specific olfactory receptors)", "slug": "008"}),
+        ("T2", {"label": "Class T2", "title": "Class T2 (Taste 2)", "slug": "009"}),
+        ("V", {"label": "Class V", "title": "Class V (Vomeronasal)", "slug": "010"}),
         ("U", {"label": "Unclassified", "title": "Unclassified", "slug": "011"}),
     ])
     TREE_DISABLED_CLASS_KEYS = {"O1", "O2", "U"}
+    # Chemotypes that don't make sense as a standalone Chemotype-tab dataset.
+    TREE_EXCLUDED_CHEMOTYPES = {"odorant receptors", "ion receptors"}
+    # Editorial exceptions to the generic Class-tab tree shape -- verified against the DB (Class C
+    # genuinely has chemotype annotations, so this can't be derived, only curated).
+    CLASS_TREE_OVERRIDES = {
+        "C": {"skip_chemotype_layer": True, "fixed_color": "#d62728"},  # keep in sync with CLASS_COLORS["C"]
+    }
+    # Classes whose orphan-tagged receptors are split out into a legend rather than shown in the
+    # main tree. Orphan-tagged receptors exist in B2/C/Unclassified too, but generalizing the split
+    # is a visual redesign (it also requires a tree.js change) -- out of scope here.
+    ORPHAN_SPLIT_CLASS_KEYS = {"A"}
+    ORPHAN_CHEMOTYPE_KEYS = {"orphan receptors"}
 
     @classmethod
     def normalize_visualization_class_key(cls, raw_value):
@@ -99,9 +111,16 @@ class ClassificationVisualizationMixin:
             return None
         return cls.normalize_visualization_class_key(value[len(cls.CLASS_GROUP_PREFIX):])
 
-    @staticmethod
-    def _classification_df():
-        return Classification_tree()._load_df()
+    @classmethod
+    def tree_class_keys(cls):
+        """Ordered class keys eligible for classification trees -- single source of truth for
+        all three tabs (Class / Modality / Chemotype)."""
+        return [key for key in cls.CLASS_VISUALIZATION_CONFIG if key not in cls.TREE_DISABLED_CLASS_KEYS]
+
+    @classmethod
+    def class_slug_to_key_map(cls):
+        """ProteinFamily class slug ('001') -> visualization key ('A')."""
+        return {cfg["slug"]: key for key, cfg in cls.CLASS_VISUALIZATION_CONFIG.items()}
 
     def _group_modality_label(self, modality):
         key = str(modality or "").strip().lower()
@@ -169,28 +188,27 @@ class ClassificationVisualizationMixin:
         return str(browser_class_key or "").strip()
 
     def _build_receptor_family_catalog(self):
-        df = self._classification_df()
-        clean = Classification_tree._clean_cell
-        split = Classification_tree._split_uniprot_cell
-        class_title_to_key = self._class_title_to_key_map()
+        slug_to_key = self.class_slug_to_key_map()
+        name_to_key = {}
 
         normalized_rows = []
         orphan_family_classes = defaultdict(OrderedDict)
-        for _, row in df.iterrows():
-            class_label = clean(row.get("Class"))
-            chemotype = clean(row.get("Chemotype"))
-            family_name = clean(row.get("Receptor family"))
-            modality = clean(row.get("Modality"))
-            receptors = split(row.get("GPCRs (UniProt)"))
+        for row in classification_db.get_classification_rows():
+            class_label = row["class_family_name"]
+            chemotype = row["chemotype"]
+            family_name = row["receptor_family"]
+            modality = row["modality"]
             if not class_label or not chemotype or not family_name:
                 continue
+            class_key = slug_to_key.get(row["class_slug"])
+            name_to_key[class_label] = class_key
             modality_group = self._group_modality_label(modality)
             normalized_rows.append({
                 "class_label": class_label,
                 "chemotype": chemotype,
                 "family_name": family_name,
                 "modality_group": modality_group,
-                "receptors": receptors,
+                "receptor": row["uniprot"],
             })
             if modality_group == self.ORPHAN_MODALITY_GROUP_LABEL:
                 orphan_family_classes[family_name][class_label] = True
@@ -202,8 +220,7 @@ class ClassificationVisualizationMixin:
             chemotype = row["chemotype"]
             family_name = row["family_name"]
             modality_group = row["modality_group"]
-            receptors = row["receptors"]
-            class_key = class_title_to_key.get(class_label) or class_title_to_key.get(str(class_label).lower())
+            class_key = name_to_key.get(class_label)
             browser_class_key = self._browser_class_key(class_label, class_key)
             class_config = self.get_visualization_class_config(class_key) if class_key else None
             split_orphan_by_class = (
@@ -238,8 +255,7 @@ class ClassificationVisualizationMixin:
             entry["classes"][class_label] = True
             entry["chemotypes"][chemotype] = True
             entry["modality_groups"][modality_group] = True
-            for receptor in receptors:
-                entry["receptors"][receptor] = True
+            entry["receptors"][row["receptor"]] = True
 
             if not browser_class_key:
                 continue
@@ -278,13 +294,7 @@ class ClassificationVisualizationMixin:
             chemotype_labels = list(raw["chemotypes"].keys())
             receptor_labels = list(raw["receptors"].keys())
             modality_groups = list(raw["modality_groups"].keys())
-            class_keys = []
-            for label in class_labels:
-                lookup_key = class_title_to_key.get(label) or class_title_to_key.get(str(label).lower())
-                if lookup_key:
-                    class_keys.append(lookup_key)
-                else:
-                    class_keys.append("U")
+            class_keys = [name_to_key.get(label) or "U" for label in class_labels]
             entry = {
                 "key": family_key,
                 "name": raw["name"],
@@ -307,7 +317,7 @@ class ClassificationVisualizationMixin:
             family_by_storage_key[family_storage_key] = entry
 
         browser_nodes = []
-        browser_order = {key: idx for idx, key in enumerate(self.BROWSER_CLASS_ORDER)}
+        browser_order = {key: idx for idx, key in enumerate(self.CLASS_VISUALIZATION_CONFIG.keys())}
         for browser_class_key in sorted(hierarchy.keys(), key=lambda value: browser_order.get(value, 999)):
             class_bucket = hierarchy[browser_class_key]
             grouped_chemotypes = []
@@ -557,17 +567,20 @@ class ClassificationVisualizationMixin:
         if not normalized_type or not raw_selection:
             raise ValueError("Unknown classification tree selection")
 
-        df = self._classification_df()
-        clean = Classification_tree._clean_cell
-        split = Classification_tree._split_uniprot_cell
         requested_key = raw_selection.lower()
-        class_title_to_key = self._class_title_to_key_map()
+        slug_to_key = self.class_slug_to_key_map()
+        allowed = set(self.tree_class_keys())
 
-        rows = []
+        matched = []
         normalized_selection = raw_selection
-        for _, row in df.iterrows():
+        for row in classification_db.get_classification_rows():
+            class_key = slug_to_key.get(row["class_slug"])
+            if class_key not in allowed:
+                continue
             if normalized_type == "Modality":
-                raw_modality = clean(row.get("Modality")) or ""
+                raw_modality = (row["modality"] or "").strip()
+                if not raw_modality:
+                    continue
                 grouped_modality = self._group_modality_label(raw_modality)
                 if (
                     grouped_modality.lower() != requested_key
@@ -576,29 +589,25 @@ class ClassificationVisualizationMixin:
                     continue
                 normalized_selection = grouped_modality
             else:
-                chemotype = clean(row.get("Chemotype")) or ""
+                chemotype = (row["chemotype"] or "").strip()
+                if not chemotype or chemotype.lower() in self.TREE_EXCLUDED_CHEMOTYPES:
+                    continue
                 if chemotype.lower() != requested_key:
                     continue
                 normalized_selection = chemotype
-            rows.append(row)
+            matched.append((class_key, row))
 
-        if not rows:
+        if not matched:
             raise ValueError("Unknown classification tree selection")
 
         class_keys = OrderedDict()
         receptor_labels = OrderedDict()
         entry_names = OrderedDict()
-        for row in rows:
-            class_label = clean(row.get("Class")) or ""
-            class_key = class_title_to_key.get(class_label) or class_title_to_key.get(class_label.lower())
-            if class_key:
-                class_keys[class_key] = True
-            for receptor in split(row.get("GPCRs (UniProt)")):
-                label = str(receptor or "").strip().upper()
-                if not label:
-                    continue
-                receptor_labels[label] = True
-                entry_names["{}_human".format(label.lower())] = True
+        for class_key, row in matched:
+            class_keys[class_key] = True
+            label = row["uniprot"]
+            receptor_labels[label] = True
+            entry_names[row["entry_name"]] = True
 
         return {
             "type": normalized_type,
@@ -727,8 +736,6 @@ class ClassificationVisualizationsLanding(ClassificationVisualizationMixin, Temp
         "Steroid receptors",
         "Tastant receptors",
     ]
-    TREE_ONLY_EXCLUDED_CHEMOTYPES = {"odorant receptors", "ion receptors"}
-
     def _tree_only_url(self, tree_type, selection):
         return "{}?{}".format(
             reverse("classification-visualizations-tree"),
@@ -740,18 +747,17 @@ class ClassificationVisualizationsLanding(ClassificationVisualizationMixin, Temp
 
     def _build_modality_chemotype_branches(self):
         try:
-            df = self._classification_df()
+            rows = classification_db.get_classification_rows()
         except Exception:
             return []
 
-        clean = Classification_tree._clean_cell
         chemotype_to_modality = OrderedDict()
-        for _, row in df.iterrows():
-            chemotype = clean(row.get("Chemotype"))
-            modality = clean(row.get("Modality")) or "Other / unknown"
+        for row in rows:
+            chemotype = row["chemotype"]
+            modality = row["modality"] or "Other / unknown"
             if not chemotype:
                 continue
-            if chemotype.strip().lower() in self.TREE_ONLY_EXCLUDED_CHEMOTYPES:
+            if chemotype.strip().lower() in self.TREE_EXCLUDED_CHEMOTYPES:
                 continue
             if chemotype not in chemotype_to_modality:
                 chemotype_to_modality[chemotype] = modality
@@ -947,30 +953,8 @@ class GPCRSuperfamilyVisualizationDetail(TemplateView):
         ctx.update(CrossClassSimilarity().get_context_data())
         return ctx
 
-class Classification(TemplateView):
+class Classification(ClassificationVisualizationMixin, TemplateView):
     template_name = "classification/Classification.html"
-
-    # classification Excel
-    CLASSIFICATION_FOLDER = 'protein_data'
-    CLASSIFICATION_FILE = 'Classification.xlsx'
-
-    # mapping from "Excel Class" → (symbol, display_name)
-    CLASS_MAPPING = {
-        "Class A (Rhodopsin)":                      ("A",  "Rhodopsin"),
-        "Class B1 (Secretin)":                      ("B1", "Secretin"),
-        "Class B2 (Adhesion)":                      ("B2", "Adhesion"),
-        "Class C (Glutamate)":                      ("C",  "Glutamate"),
-        "Class F (Frizzled)":                       ("F",  "Frizzled"),
-        "Class T2 (Taste 2)":                       ("T2", "Taste 2"),
-        "Class O1 (fish-like odorant)":             ("O1", "Olfactory-polyfunctional 1"),
-        "Class O2 (tetrapod specific odorant)":     ("O2", "Olfactory-polyfunctional 2"),
-        "Other GPCRs":                              ("Cl", "Unclassified"),
-        # non-human:
-        "Class D (Fungal pheromone)":               ("D1", "Fungal pheromone 1"),
-        "Class E (Yeast cAMP)":                     ("E",  "Slime mold cAMP"),
-        "Class V? (Vomeronasal/pheromone?)":        ("V?", "Vomeronasal or pheromone?"),
-        # you can add V1/V2 etc later if they exist in backbone
-    }
 
     # Static class information for the Classes table
     CLASSES_TABLE_DATA = [
@@ -987,158 +971,36 @@ class Classification(TemplateView):
         {"code": "T2", "name": "Taste 2", "species": "Yes", "non_sensory_share": "-", "sensory_function": "Taste (bitter)"},
         {"code": "V1", "name": "Vomeronasal 1", "species": "Amphibia, reptiles & non-primate mammals", "non_sensory_share": "-", "sensory_function": "Pheromone-sensing"},
         {"code": "V2", "name": "Vomeronasal 2", "species": "Amphibia, reptiles & non-primate mammals", "non_sensory_share": "-", "sensory_function": "Pheromone-sensing"},
-        {"code": "Cl", "name": "Unclassified", "species": "Yes", "non_sensory_share": "Unknown", "sensory_function": "Unknown"},
+        {"code": "U", "name": "Unclassified", "species": "Yes", "non_sensory_share": "Unknown", "sensory_function": "Unknown"},
     ]
 
-
-    def _classification_path(self):
-        """
-        Path to Classification.xlsx.
-        """
-        return os.path.join(
-            settings.DATA_DIR,
-            self.CLASSIFICATION_FOLDER,
-            self.CLASSIFICATION_FILE,
-        )
-
-    def _load_df(self):
-        """
-        Load Classification.xlsx and return a dataframe with normalized column names.
-        Uses the same column picking logic as StructureSim for robustness.
-        """
-        path = self._classification_path()
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"File not found: {path}")
-
-        df = pd.read_excel(path)
-
-        # tolerant column name picker (handles embedded newlines etc.)
-        def pick(*cands):
-            names = set([str(c).strip() for c in cands])
-            for col in df.columns:
-                s = str(col).strip()
-                if s in names:
-                    return col
-            return None
-
-        # Find the columns we need
-        col_gene = pick('GPCRs (Gene name)', 'GPCRs\n(Gene name)', 'GPCRs (Gene name)')
-        col_uni = pick('GPCRs (UniProt)', 'GPCRs\n(UniProt)', 'GPCRs (UniProt)')
-        col_class = pick('Class')
-        col_family = pick('Receptor family')
-        col_chemotype = pick('Chemotype')
-        col_modality = pick('Modality')
-        col_sense = pick('Sense')
-
-        # Build a normalized dataframe with standard column names
-        normalized_cols = {}
-        if col_gene:
-            normalized_cols['GPCRs (Gene name)'] = df[col_gene]
-        if col_uni:
-            normalized_cols['GPCRs (UniProt)'] = df[col_uni]
-        if col_class:
-            normalized_cols['Class'] = df[col_class]
-        if col_family:
-            normalized_cols['Receptor family'] = df[col_family]
-        if col_chemotype:
-            normalized_cols['Chemotype'] = df[col_chemotype]
-        if col_modality:
-            normalized_cols['Modality'] = df[col_modality]
-        if col_sense:
-            normalized_cols['Sense'] = df[col_sense]
-
-        df_normalized = pd.DataFrame(normalized_cols)
-
-        # Ensure all required columns exist (fill with empty if missing)
-        required_cols = ['GPCRs (Gene name)', 'GPCRs (UniProt)', 'Class',
-                        'Receptor family', 'Chemotype', 'Modality', 'Sense']
-        for col in required_cols:
-            if col not in df_normalized.columns:
-                df_normalized[col] = None
-
-        return df_normalized
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
 
-        try:
-            df = self._load_df()
-        except FileNotFoundError as e:
-            ctx["error"] = f"File not found: {e}"
-            return ctx
-        except Exception as e:
-            ctx["error"] = f"Error loading Classification.xlsx: {e}"
-            return ctx
-
-        # Check if required columns exist
-        required_cols = ["Class", "Receptor family", "Chemotype", "Modality", "Sense"]
-        missing_cols = [col for col in required_cols if col not in df.columns]
-        if missing_cols:
-            ctx["error"] = f"Missing required columns in Classification.xlsx: {', '.join(missing_cols)}"
-            return ctx
-
-        # only keep backbone columns we care about
-        cols_needed = [
-            "GPCRs (Gene name)",
-            "GPCRs (UniProt)",
-            "Class",
-            "Receptor family",
-            "Chemotype",
-            "Modality",
-            "Sense",
+        slug_to_key = self.class_slug_to_key_map()
+        rows = [
+            dict(row, class_symbol=slug_to_key.get(row["class_slug"]))
+            for row in classification_db.get_classification_rows()
         ]
-        # Only include columns that actually exist
-        cols_needed = [col for col in cols_needed if col in df.columns]
-        df = df[cols_needed].copy()
-
-        # map Excel class → symbol (A, B1, O1, …)
-        class_to_symbol = {}
-        for excel_cls, (symbol, _name) in self.CLASS_MAPPING.items():
-            class_to_symbol[excel_cls] = symbol
-
-        # Handle NaN values in Class column before mapping
-        df["Class_symbol"] = df["Class"].apply(
-            lambda x: class_to_symbol.get(str(x).strip(), None)
-            if pd.notna(x) and str(x).strip() and str(x).strip().lower() != "nan"
-            else None
-        )
-
-        # drop rows that don't map to a symbol (just to be safe)
-        df = df.dropna(subset=["Class_symbol"])
-
-        # ---------- 1) Ligand type table ----------
-        # Using Chemotype as ligand_type and Modality as ligand_group (from Excel directly)
-        lt_agg = {}  # chemotype -> {"group": modality, "classes": set([...])}
-        for _, row in df.iterrows():
-            chemotype_val = row["Chemotype"]
-            if pd.isna(chemotype_val):
-                continue
-            chemotype = str(chemotype_val).strip()
-            if not chemotype or chemotype.lower() == "nan":
-                continue
-
-            modality_val = row["Modality"]
-            modality = "Other / unknown"
-            if pd.notna(modality_val):
-                modality = str(modality_val).strip()
-                if not modality or modality.lower() == "nan":
-                    modality = "Other / unknown"
-
-            symbol = row["Class_symbol"]
-            if pd.isna(symbol):
-                continue
-
-            entry = lt_agg.setdefault(chemotype, {"group": modality, "classes": set()})
-            # If modality differs for same chemotype, keep the first one
-            # (or could use the most common one, but keeping first for simplicity)
-            entry["classes"].add(symbol)
+        rows = [row for row in rows if row["class_symbol"]]
 
         # nice ordered list of classes
-        class_order = ["A", "B1", "B2", "C", "D1", "D2", "E", "F",
-                       "T2", "O1", "O2", "V1", "V2", "Cl"]
+        class_order = list(self.CLASS_VISUALIZATION_CONFIG.keys())
         def sort_classes(s):
             return sorted(s, key=lambda x: (class_order.index(x)
                                             if x in class_order else 999, x))
+
+        # ---------- 1) Ligand type table ----------
+        # Using Chemotype as ligand_type and Modality as ligand_group
+        lt_agg = {}  # chemotype -> {"group": modality, "classes": set([...])}
+        for row in rows:
+            chemotype = row["chemotype"]
+            if not chemotype:
+                continue
+            modality = row["modality"] or "Other / unknown"
+            entry = lt_agg.setdefault(chemotype, {"group": modality, "classes": set()})
+            entry["classes"].add(row["class_symbol"])
 
         ligand_type_rows = []
         for chemotype in sorted(lt_agg.keys(), key=str.lower):
@@ -1151,7 +1013,7 @@ class Classification(TemplateView):
             })
 
         # ---------- 2) Receptor families: non-sensory vs sensory vs orphan ----------
-        # Using Sense column directly:
+        # Using Sense directly:
         # - "non-sensory" -> non-sensory
         # - "unknown" -> orphan
         # - any other non-empty Sense -> sensory
@@ -1160,40 +1022,22 @@ class Classification(TemplateView):
         sensory_map = {}              # (family, chemotype) -> set(classes)
         orphan_map = {}               # (family, chemotype) -> set(classes)
 
-        for _, row in df.iterrows():
-            fam_val = row["Receptor family"]
-            if pd.isna(fam_val):
-                continue
-            fam = str(fam_val).strip()
-            if not fam or fam.lower() == "nan":
+        for row in rows:
+            fam = row["receptor_family"]
+            chemotype = row["chemotype"]
+            if not fam or not chemotype:
                 continue
 
-            chemotype_val = row["Chemotype"]
-            if pd.isna(chemotype_val):
-                continue
-            chemotype = str(chemotype_val).strip()
-            if not chemotype or chemotype.lower() == "nan":
-                continue
+            symbol = row["class_symbol"]
+            sense = (row["sense"] or "").strip().lower()
 
-            symbol = row["Class_symbol"]
-            if pd.isna(symbol):
-                continue
-
-            sense_val = row["Sense"]
-            sense = ""
-            if pd.notna(sense_val):
-                sense = str(sense_val).strip().lower()
-
-            # Check if sense is non-sensory (case-insensitive)
             if sense == "non-sensory":
                 non_sens_triples.add((symbol, fam, chemotype))
             elif sense == "unknown":
-                key = (fam, chemotype)
-                orphan_map.setdefault(key, set()).add(symbol)
+                orphan_map.setdefault((fam, chemotype), set()).add(symbol)
             elif sense:  # Any other non-empty sense value is considered sensory
-                key = (fam, chemotype)
-                sensory_map.setdefault(key, set()).add(symbol)
-            # If sense is empty/NaN, skip it (could be "unknown" or missing data)
+                sensory_map.setdefault((fam, chemotype), set()).add(symbol)
+            # If sense is empty, skip it
 
         # non-sensory: Class / Receptor family / Chemotype
         rf_non_rows = [
@@ -1274,311 +1118,26 @@ class Classification(TemplateView):
         return ctx
 
 
-class Classification_tree:
+# Row-getters shared by Classification_tree's Class/Modality/Chemotype tree builders --
+# classification_db.build_grouped_children groups classification_db.get_classification_rows()
+# dicts by an ordered list of these.
+CHEMOTYPE_GETTER = lambda row: row["chemotype"]
+FAMILY_GETTER = lambda row: row["receptor_family"]
+CLASS_KEY_GETTER = lambda row: row["class_key"]
+
+
+class Classification_tree(ClassificationVisualizationMixin):
     """
-    Plain helper class (not a Django view) — provides Excel-derived tree
-    datasets to whichever Detail page inlines the Classification-tree content.
+    Plain helper class (not a Django view) — provides DB-derived tree datasets (via
+    classification/classification_db.py) to whichever Detail page inlines the
+    Classification-tree content.
     """
-
-    # Reuse classification Excel path constants from Classification class
-    CLASSIFICATION_FOLDER = 'protein_data'
-    CLASSIFICATION_FILE = 'Classification.xlsx'
-
-    def _classification_path(self):
-        """
-        Path to Classification.xlsx.
-        """
-        return os.path.join(
-            settings.DATA_DIR,
-            self.CLASSIFICATION_FOLDER,
-            self.CLASSIFICATION_FILE,
-        )
-
-    def _load_df(self):
-        """
-        Load Classification.xlsx and return a dataframe with normalized column names.
-        Reuses the same logic as Classification class, but only keeps columns needed
-        for the classification tree datasets.
-        """
-        path = self._classification_path()
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"File not found: {path}")
-
-        df = pd.read_excel(path)
-
-        # tolerant column name picker (handles embedded newlines etc.)
-        def pick(*cands):
-            names = set([str(c).strip() for c in cands])
-            for col in df.columns:
-                s = str(col).strip()
-                if s in names:
-                    return col
-            return None
-
-        # Find the columns we need
-        col_uni = pick('GPCRs (UniProt)', 'GPCRs\n(UniProt)', 'GPCRs (UniProt)')
-        col_gene = pick('GPCRs (Gene name)', 'GPCRs\n(Gene name)', 'GPCRs (Gene name)')
-        col_class = pick('Class')
-        col_chemotype = pick('Chemotype')
-        col_family = pick('Receptor family')
-        col_modality = pick('Modality')
-
-        # Build a normalized dataframe with standard column names
-        normalized_cols = {}
-        if col_uni:
-            normalized_cols['GPCRs (UniProt)'] = df[col_uni]
-        if col_gene:
-            normalized_cols['GPCRs (Gene name)'] = df[col_gene]
-        if col_class:
-            normalized_cols['Class'] = df[col_class]
-        if col_chemotype:
-            normalized_cols['Chemotype'] = df[col_chemotype]
-        if col_family:
-            normalized_cols['Receptor family'] = df[col_family]
-        if col_modality:
-            normalized_cols['Modality'] = df[col_modality]
-
-        df_normalized = pd.DataFrame(normalized_cols)
-
-        # Ensure all required columns exist (fill with empty if missing)
-        required_cols = ['GPCRs (UniProt)', 'GPCRs (Gene name)', 'Class', 'Chemotype', 'Receptor family', 'Modality']
-        for col in required_cols:
-            if col not in df_normalized.columns:
-                df_normalized[col] = None
-
-        return df_normalized
-
-    @staticmethod
-    def _clean_cell(val):
-        if pd.isna(val):
-            return None
-        s = str(val).strip()
-        if not s or s.lower() == "nan":
-            return None
-        return s
-
-    @staticmethod
-    def _split_uniprot_cell(val):
-        """
-        Split UniProt cell into list of UniProt IDs.
-        Supports comma/semicolon-separated values.
-        """
-        s = Classification_tree._clean_cell(val)
-        if not s:
-            return []
-        return [x.strip() for x in re.split(r'[,;]\s*', s) if x.strip()]
-
-    @staticmethod
-    def _split_gene_cell(val):
-        s = Classification_tree._clean_cell(val)
-        if not s:
-            return []
-        return [x.strip() for x in re.split(r'[,;]\s*', s) if x.strip()]
-
-    def _build_leaf_label_lookup(self, df):
-        lookup = {}
-        if df is None or "GPCRs (UniProt)" not in df.columns:
-            return lookup
-
-        for _, row in df.iterrows():
-            uniprots = self._split_uniprot_cell(row.get("GPCRs (UniProt)"))
-            if not uniprots:
-                continue
-            genes = self._split_gene_cell(row.get("GPCRs (Gene name)"))
-            for idx, uid in enumerate(uniprots):
-                key = str(uid or "").strip().upper()
-                if not key:
-                    continue
-                gene = ""
-                if len(genes) == len(uniprots):
-                    gene = genes[idx]
-                elif len(genes) == 1:
-                    gene = genes[0]
-                entry = lookup.setdefault(key, {"UniProt": key, "Gene": "", "Protein": ""})
-                if gene and not entry["Gene"]:
-                    entry["Gene"] = gene
-
-        entry_names = ["{}_human".format(key.lower()) for key in lookup.keys()]
-        proteins = (
-            Protein.objects
-            .filter(entry_name__in=entry_names)
-            .only("entry_name", "name")
-            .prefetch_related(
-                Prefetch(
-                    "genes",
-                    queryset=Gene.objects.only("name", "position").order_by("position"),
-                    to_attr="primary_genes_self",
-                )
-            )
-        )
-        for protein in proteins:
-            key = str(protein.entry_name or "").split("_", 1)[0].upper()
-            if key not in lookup:
-                continue
-            protein_label = ""
-            try:
-                protein_label = protein.short()
-            except Exception:
-                protein_label = getattr(protein, "name", "") or ""
-            if protein_label and not lookup[key]["Protein"]:
-                lookup[key]["Protein"] = protein_label
-            if not lookup[key]["Gene"]:
-                genes = getattr(protein, "primary_genes_self", None) or []
-                if genes:
-                    lookup[key]["Gene"] = genes[0].name
-
-        for key, entry in lookup.items():
-            entry["Protein"] = entry.get("Protein") or key
-            entry["Gene"] = entry.get("Gene") or key
-            entry["UniProt"] = entry.get("UniProt") or key
-        return lookup
-
-    @staticmethod
-    def _build_nested(df):
-        """
-        Build nested mapping: Chemotype → Receptor family → sorted(set(UniProt)).
-        """
-        nested = {}
-        for _, row in df.iterrows():
-            chem = Classification_tree._clean_cell(row.get("Chemotype")) or "Other / unknown"
-            fam = Classification_tree._clean_cell(row.get("Receptor family")) or "Other / unknown"
-            uids = Classification_tree._split_uniprot_cell(row.get("GPCRs (UniProt)"))
-            if not uids:
-                continue
-            fam_map = nested.setdefault(chem, {})
-            uid_set = fam_map.setdefault(fam, set())
-            for uid in uids:
-                uid_set.add(uid)
-
-        # sort deterministically
-        nested_sorted = OrderedDict()
-        for chem in sorted(nested.keys(), key=lambda x: str(x).lower()):
-            fams = nested[chem]
-            fams_sorted = OrderedDict()
-            for fam in sorted(fams.keys(), key=lambda x: str(x).lower()):
-                fams_sorted[fam] = sorted(fams[fam], key=lambda x: str(x).upper())
-            nested_sorted[chem] = fams_sorted
-        return nested_sorted
-
-    @staticmethod
-    def _build_nested_family(df):
-        """
-        Build nested mapping: Receptor family → sorted(set(UniProt)).
-        """
-        nested = {}
-        for _, row in df.iterrows():
-            fam = Classification_tree._clean_cell(row.get("Receptor family")) or "Other / unknown"
-            uids = Classification_tree._split_uniprot_cell(row.get("GPCRs (UniProt)"))
-            if not uids:
-                continue
-            uid_set = nested.setdefault(fam, set())
-            for uid in uids:
-                uid_set.add(uid)
-
-        nested_sorted = OrderedDict()
-        for fam in sorted(nested.keys(), key=lambda x: str(x).lower()):
-            nested_sorted[fam] = sorted(nested[fam], key=lambda x: str(x).upper())
-        return nested_sorted
-
-    @staticmethod
-    def _build_nested_class_family(df, class_to_symbol):
-        """
-        Build nested mapping: Class_symbol → Receptor family → sorted(set(UniProt)).
-        """
-        nested = {}
-        for _, row in df.iterrows():
-            cls = Classification_tree._clean_cell(row.get("Class"))
-            sym = class_to_symbol.get(cls) if cls else None
-            if not sym:
-                continue
-            fam = Classification_tree._clean_cell(row.get("Receptor family")) or "Other / unknown"
-            uids = Classification_tree._split_uniprot_cell(row.get("GPCRs (UniProt)"))
-            if not uids:
-                continue
-            fam_map = nested.setdefault(sym, {})
-            uid_set = fam_map.setdefault(fam, set())
-            for uid in uids:
-                uid_set.add(uid)
-
-        nested_sorted = OrderedDict()
-        for sym in sorted(nested.keys(), key=lambda x: str(x).lower()):
-            fams = nested[sym]
-            fams_sorted = OrderedDict()
-            for fam in sorted(fams.keys(), key=lambda x: str(x).lower()):
-                fams_sorted[fam] = sorted(fams[fam], key=lambda x: str(x).upper())
-            nested_sorted[sym] = fams_sorted
-        return nested_sorted
-
-    @staticmethod
-    def _nested_to_tree(class_label, nested):
-        """
-        Convert nested mapping (Chemotype → Family → [UniProt]) into a D3-like node dict.
-        Shape matches what the existing radial tree renderer expects.
-        """
-        def leaf_node(name):
-            return OrderedDict([("name", name), ("value", 0), ("color", "")])
-
-        def inner_node(name, children):
-            return OrderedDict([("name", name), ("value", 0), ("color", ""), ("children", children)])
-
-        class_children = []
-        for chem, fams in nested.items():
-            fam_children = []
-            for fam, uids in fams.items():
-                fam_children.append(inner_node(fam, [leaf_node(uid) for uid in uids]))
-            class_children.append(inner_node(chem, fam_children))
-
-        class_node = inner_node(class_label, class_children)
-        root = OrderedDict([("name", ""), ("value", 3000), ("color", ""), ("children", [class_node])])
-        return root
-
-    @staticmethod
-    def _nested_family_to_tree(class_label, nested_family):
-        """
-        Convert nested mapping (Family → [UniProt]) into a D3-like node dict:
-        root('') → Class → Family → UniProt
-        """
-        def leaf_node(name):
-            return OrderedDict([("name", name), ("value", 0), ("color", "")])
-
-        def inner_node(name, children):
-            return OrderedDict([("name", name), ("value", 0), ("color", ""), ("children", children)])
-
-        fam_children = []
-        for fam, uids in nested_family.items():
-            fam_children.append(inner_node(fam, [leaf_node(uid) for uid in uids]))
-
-        class_node = inner_node(class_label, fam_children)
-        root = OrderedDict([("name", ""), ("value", 3000), ("color", ""), ("children", [class_node])])
-        return root
-
-    @staticmethod
-    def _nested_class_family_to_tree(nested_class_family):
-        """
-        Convert nested mapping (Class_symbol → Family → [UniProt]) into a D3-like node dict:
-        root('') → Class_symbol → Family → UniProt
-        """
-        def leaf_node(name):
-            return OrderedDict([("name", name), ("value", 0), ("color", "")])
-
-        def inner_node(name, children):
-            return OrderedDict([("name", name), ("value", 0), ("color", ""), ("children", children)])
-
-        class_children = []
-        for sym, fams in nested_class_family.items():
-            fam_children = []
-            for fam, uids in fams.items():
-                fam_children.append(inner_node(fam, [leaf_node(uid) for uid in uids]))
-            class_children.append(inner_node(sym, fam_children))
-
-        root = OrderedDict([("name", ""), ("value", 3000), ("color", ""), ("children", class_children)])
-        return root
 
     def _build_tree_datasets(self, **kwargs):
         """
-        Build the Excel-derived tree datasets independent of the current request,
-        so a parent page (e.g. ClassificationVisualizationDetail) can inline this
-        content with its own fixed type/selection.
+        Build the DB-derived tree datasets (via classification/classification_db.py) independent
+        of the current request, so a parent page (e.g. ClassificationVisualizationDetail) can
+        inline this content with its own fixed type/selection.
 
         Returns (ctx, tree_sets) where tree_sets is the raw dict (not JSON-serialized)
         needed by build_selection_context to validate/resolve a selection.
@@ -1586,257 +1145,142 @@ class Classification_tree:
         ctx = dict(kwargs)
 
         try:
-            df = self._load_df()
-        except FileNotFoundError as e:
-            ctx["error"] = f"File not found: {e}"
-            return ctx, {}
+            rows = classification_db.get_classification_rows()
         except Exception as e:
-            ctx["error"] = f"Error loading Classification.xlsx: {e}"
+            ctx["error"] = f"Error loading classification annotations from the database: {e}"
             return ctx, {}
 
-        # Check if required columns exist
-        required_cols = ["Class", "Chemotype", "Modality", "Receptor family", "GPCRs (UniProt)"]
-        missing_cols = [col for col in required_cols if col not in df.columns]
-        if missing_cols:
-            ctx["error"] = f"Missing required columns in Classification.xlsx: {', '.join(missing_cols)}"
+        slug_to_key = self.class_slug_to_key_map()
+        allowed_keys = self.tree_class_keys()
+        allowed = set(allowed_keys)
+
+        rows = [dict(row, class_key=slug_to_key.get(row["class_slug"])) for row in rows]
+        rows = [row for row in rows if row["class_key"] in allowed]
+        if not rows:
+            ctx["error"] = "No classification annotations found in the database."
             return ctx, {}
 
-        # Define classes to process
-        class_configs = {
-            "A": {
-                "class_names": ["Class A (Rhodopsin)"],
-                "family_name": "Class A (Rhodopsin)",
-                "display_name": "Class A"
-            },
-            "B1": {
-                "class_names": ["Class B1 (Secretin)"],
-                "family_name": "Class B1 (Secretin)",
-                "display_name": "Class B1"
-            },
-            "B2": {
-                "class_names": ["Class B2 (Adhesion)"],
-                "family_name": "Class B2 (Adhesion)",
-                "display_name": "Class B2"
-            },
-            "C": {
-                "class_names": ["Class C (Glutamate)"],
-                "family_name": "Class C (Glutamate)",
-                "display_name": "Class C"
-            },
-            "F": {
-                "class_names": ["Class F (Frizzled)"],
-                "family_name": "Class F (Frizzled)",
-                "display_name": "Class F"
-            },
-            "T2": {
-                "class_names": ["Class T2 (Taste 2)"],
-                "family_name": "Class T2 (Taste 2)",
-                "display_name": "Class T2"
-            }
-        }
-
-        # Generate data for each class.
-        # Only Class A is split into non-orphan/orphan by Chemotype == "Orphan receptors".
-        classes_data = {}
-
-        # Map Excel class string -> symbol (A, B1, ...)
-        class_to_symbol = {}
-        for class_key, config in class_configs.items():
-            for nm in config["class_names"]:
-                class_to_symbol[nm] = class_key
-
-        def class_mask_for(config):
-            return df["Class"].apply(
-                lambda x: str(x).strip() in config["class_names"]
-                if pd.notna(x) and str(x).strip() and str(x).strip().lower() != "nan"
-                else False
-            )
-
-        # Base tree options; JS will compute exact depth/branch lengths.
         base_tree_options = {
             "branch_trunc": 0,
             "leaf_offset": 30,
             "anchor": "",
             "label_free": [],
-            # For renderer behavior:
             "centerBadgeR": 0,
             "centerBadgePadding": 0,
             "firstRingExtra": 45,
         }
-
-        # Build new unified tree_sets payload for the new UI.
         tree_sets = {
             "Class": {"options": [], "plots": {}},
             "Modality": {"options": [], "plots": {}},
             "Chemotype": {"options": [], "plots": {}},
         }
-        leaf_label_lookup = self._build_leaf_label_lookup(df)
 
-        for class_key, config in class_configs.items():
-            class_data = {}
+        self._add_class_plots(tree_sets, rows, allowed_keys, base_tree_options)
+        self._add_modality_plots(tree_sets, rows, base_tree_options)
+        self._add_chemotype_plots(tree_sets, rows, base_tree_options)
 
-            class_df = df[class_mask_for(config)].copy()
-            tree_options = dict(base_tree_options)
+        ctx["tree_sets"] = json.dumps(tree_sets)
+        ctx["tree_leaf_label_lookup"] = json.dumps(classification_db.build_leaf_label_lookup(rows))
+        return ctx, tree_sets
 
-            if class_key == "A":
-                orphan_key = "Orphan receptors"
-                chem_series = class_df["Chemotype"].apply(lambda v: self._clean_cell(v) or "")
-                orphan_df = class_df[chem_series.str.lower() == orphan_key.lower()].copy()
-                non_orphan_df = class_df[chem_series.str.lower() != orphan_key.lower()].copy()
+    def _add_class_plots(self, tree_sets, rows, allowed_keys, base_tree_options):
+        by_class = {}
+        for row in rows:
+            by_class.setdefault(row["class_key"], []).append(row)
 
-                if len(non_orphan_df) > 0:
-                    nested = self._build_nested(non_orphan_df)
-                    class_data["non_orphan"] = {"tree": self._nested_to_tree(config["class_names"][0], nested),
-                                                "tree_options": tree_options}
-                else:
-                    class_data["non_orphan"] = None
+        for class_key in allowed_keys:  # iteration order == CLASS_VISUALIZATION_CONFIG order
+            class_rows = by_class.get(class_key)
+            if not class_rows:
+                continue  # class has no annotation rows yet (e.g. Class V until it's populated)
 
-                if len(orphan_df) > 0:
-                    nested = self._build_nested(orphan_df)
-                    class_data["orphan"] = {"tree": self._nested_to_tree(config["class_names"][0], nested),
-                                            "tree_options": tree_options}
-                else:
-                    class_data["orphan"] = None
+            config = self.get_visualization_class_config(class_key)
+            override = self.CLASS_TREE_OVERRIDES.get(class_key, {})
+            label = config["label"]
+            class_family_name = class_rows[0]["class_family_name"]
+
+            # Orphan split (curated opt-in -- see ORPHAN_SPLIT_CLASS_KEYS).
+            orphan_leaf_labels = []
+            if class_key in self.ORPHAN_SPLIT_CLASS_KEYS:
+                is_orphan = lambda row: (row["chemotype"] or "").strip().lower() in self.ORPHAN_CHEMOTYPE_KEYS
+                orphan_rows = [row for row in class_rows if is_orphan(row)]
+                class_rows = [row for row in class_rows if not is_orphan(row)]
+                orphan_leaf_labels = sorted(
+                    {row["uniprot"] for row in orphan_rows}, key=lambda x: str(x).upper()
+                )
+            if not class_rows:
+                continue
+
+            if override.get("skip_chemotype_layer"):
+                children = classification_db.build_grouped_children(class_rows, [FAMILY_GETTER])
+                tree_opts = dict(base_tree_options, colorMode="fixed", fixedColor=override["fixed_color"])
+                meta = {"title": label, "liftClassLayer": True, "collapseLabels": ["Family"]}
             else:
-                # No split for other classes
-                if len(class_df) > 0:
-                    if class_key == "C":
-                        # Special rule: Class C has NO Chemotype layer (Class → Family → Receptor).
-                        nested_fam = self._build_nested_family(class_df)
-                        class_data["non_orphan"] = {"tree": self._nested_family_to_tree(config["class_names"][0], nested_fam),
-                                                    "tree_options": tree_options}
-                    else:
-                        nested = self._build_nested(class_df)
-                        class_data["non_orphan"] = {"tree": self._nested_to_tree(config["class_names"][0], nested),
-                                                    "tree_options": tree_options}
-                else:
-                    class_data["non_orphan"] = None
-                class_data["orphan"] = None
+                children = classification_db.build_grouped_children(class_rows, [CHEMOTYPE_GETTER, FAMILY_GETTER])
+                tree_opts = dict(base_tree_options, colorMode="chemotype")
+                meta = {"title": label, "liftClassLayer": True, "collapseLabels": ["Chemotype", "Family"]}
 
-            classes_data[class_key] = {
-                "data": class_data,
-                "display_name": config["display_name"]
+            if orphan_leaf_labels:
+                meta["orphanLeafLabels"] = orphan_leaf_labels
+
+            tree_sets["Class"]["options"].append({"key": class_key, "label": label})
+            tree_sets["Class"]["plots"][class_key] = {
+                "tree": classification_db.d3_root([classification_db.d3_node(class_family_name, children)]),
+                "tree_options": tree_opts,
+                "meta": meta,
             }
 
-            # ----- tree_sets["Class"] options/plots -----
-            if class_key == "A":
-                # Gather orphan leaf labels (UniProt) for the Class A legend (alphabetical).
-                orphan_leaf_labels = []
-                try:
-                    if class_df is not None and "Chemotype" in class_df.columns:
-                        orphan_key = "Orphan receptors"
-                        chem_series = class_df["Chemotype"].apply(lambda v: self._clean_cell(v) or "")
-                        orphan_df = class_df[chem_series.str.lower() == orphan_key.lower()].copy()
-                        uid_set = set()
-                        for _, row in orphan_df.iterrows():
-                            for uid in self._split_uniprot_cell(row.get("GPCRs (UniProt)")):
-                                uid_set.add(uid)
-                        orphan_leaf_labels = sorted(uid_set, key=lambda x: str(x).upper())
-                except Exception:
-                    orphan_leaf_labels = []
-
-                if class_data.get("non_orphan") and class_data["non_orphan"].get("tree"):
-                    key = "A"
-                    label = "Class A"
-                    tree_sets["Class"]["options"].append({"key": key, "label": label})
-                    tree_sets["Class"]["plots"][key] = {
-                        "tree": class_data["non_orphan"]["tree"],
-                        "tree_options": dict(tree_options, **{"colorMode": "chemotype"}),
-                        "meta": {
-                            "title": label,
-                            "liftClassLayer": True,
-                            "collapseLabels": ["Chemotype", "Family"],
-                            # Render an orphan legend under this plot (SVG extension).
-                            "orphanLeafLabels": orphan_leaf_labels,
-                        },
-                    }
-            else:
-                if class_data.get("non_orphan") and class_data["non_orphan"].get("tree"):
-                    key = class_key
-                    label = config["display_name"]
-                    # Class C is fixed-color (no chemotype layer); other classes use chemotype coloring.
-                    if class_key == "C":
-                        # Keep in sync with CLASS_COLORS["C"] in the template
-                        tree_opts = dict(tree_options, **{"colorMode": "fixed", "fixedColor": "#d62728"})
-                        meta = {"title": label, "liftClassLayer": True, "collapseLabels": ["Family"]}
-                    else:
-                        tree_opts = dict(tree_options, **{"colorMode": "chemotype"})
-                        meta = {"title": label, "liftClassLayer": True, "collapseLabels": ["Chemotype", "Family"]}
-                    tree_sets["Class"]["options"].append({"key": key, "label": label})
-                    tree_sets["Class"]["plots"][key] = {"tree": class_data["non_orphan"]["tree"], "tree_options": tree_opts, "meta": meta}
-
-        # Sort Class options in the desired order
-        class_order = ["A", "B1", "B2", "C", "F", "T2"]
-        tree_sets["Class"]["options"].sort(key=lambda o: (class_order.index(o["key"]) if o["key"] in class_order else 999, o["label"]))
-
-        # ----- tree_sets["Modality"] -----
-        m_series = df["Modality"].apply(lambda v: (self._clean_cell(v) or ""))
-        modality_groups = [
-            ("Orphan receptors", m_series.str.lower() == "orphan receptors"),
-            ("Polypeptide receptors", m_series.str.lower().isin(["peptide receptors", "protein receptors", "polypeptide receptors"])),
-            ("Small molecule receptors", (m_series != "") & ~m_series.str.lower().isin(["orphan receptors", "peptide receptors", "protein receptors", "polypeptide receptors"])),
-        ]
-        for key, mask in modality_groups:
-            label = key
-            m_df = df[mask].copy()
-            if len(m_df) == 0:
+    def _add_modality_plots(self, tree_sets, rows, base_tree_options):
+        buckets = {label: [] for label in self.MODALITY_GROUP_LABELS}
+        for row in rows:
+            modality = (row["modality"] or "").strip()
+            if not modality:
                 continue
-            nested_cf = self._build_nested_class_family(m_df, class_to_symbol)
-            tree_sets["Modality"]["options"].append({"key": key, "label": label})
+            buckets[self._group_modality_label(modality)].append(row)
+
+        for key in self.MODALITY_GROUP_LABELS:
+            bucket_rows = buckets[key]
+            if not bucket_rows:
+                continue
+            tree_sets["Modality"]["options"].append({"key": key, "label": key})
             tree_sets["Modality"]["plots"][key] = {
-                "tree": self._nested_class_family_to_tree(nested_cf),
-                "tree_options": dict(base_tree_options, **{"colorMode": "class"}),
-                "meta": {"title": label, "liftClassLayer": False, "collapseLabels": []},
+                "tree": classification_db.d3_root(
+                    classification_db.build_grouped_children(
+                        bucket_rows, [CLASS_KEY_GETTER, FAMILY_GETTER], {0: self._class_order_sort_key}
+                    )
+                ),
+                "tree_options": dict(base_tree_options, colorMode="class"),
+                "meta": {"title": key, "liftClassLayer": False, "collapseLabels": []},
             }
-        modality_order = ["Orphan receptors", "Polypeptide receptors", "Small molecule receptors"]
-        tree_sets["Modality"]["options"].sort(
-            key=lambda o: modality_order.index(o["key"]) if o["key"] in modality_order else 999
-        )
 
-        # ----- tree_sets["Chemotype"] -----
-        # Exclude chemotypes that do not make sense as a standalone Chemotype dataset.
-        excluded_chemotypes = {"odorant receptors", "ion receptors"}
-        chemotypes = set()
-        for v in df["Chemotype"].values.tolist():
-            c = self._clean_cell(v)
-            if c:
-                if str(c).strip().lower() in excluded_chemotypes:
-                    continue
-                chemotypes.add(c)
-        for chem in sorted(chemotypes, key=lambda x: str(x).lower()):
-            c_series = df["Chemotype"].apply(lambda v: (self._clean_cell(v) or ""))
-            c_df = df[c_series.str.lower() == str(chem).lower()].copy()
-            if len(c_df) == 0:
+    def _add_chemotype_plots(self, tree_sets, rows, base_tree_options):
+        by_chem = {}
+        for row in rows:
+            chem = (row["chemotype"] or "").strip()
+            if not chem or chem.lower() in self.TREE_EXCLUDED_CHEMOTYPES:
                 continue
-            nested_cf = self._build_nested_class_family(c_df, class_to_symbol)
-            # Decide coloring:
-            # - If this chemotype spans multiple classes, color by class.
-            # - If it is only in a single class (or collapses away), color uniformly by chemotype.
-            class_syms = set()
-            for v in c_df["Class"].values.tolist():
-                cls = self._clean_cell(v)
-                sym = class_to_symbol.get(cls) if cls else None
-                if sym:
-                    class_syms.add(sym)
+            by_chem.setdefault(chem, []).append(row)
+
+        for chem in sorted(by_chem.keys(), key=lambda x: str(x).lower()):
+            chem_rows = by_chem[chem]
+            class_syms = {row["class_key"] for row in chem_rows}
             if len(class_syms) > 1:
-                tree_opts = dict(base_tree_options, **{"colorMode": "class"})
+                tree_opts = dict(base_tree_options, colorMode="class")
             else:
-                tree_opts = dict(base_tree_options, **{"colorMode": "chemotype", "forceChemotype": chem})
+                tree_opts = dict(base_tree_options, colorMode="chemotype", forceChemotype=chem)
             tree_sets["Chemotype"]["options"].append({"key": chem, "label": chem})
             tree_sets["Chemotype"]["plots"][chem] = {
-                "tree": self._nested_class_family_to_tree(nested_cf),
+                "tree": classification_db.d3_root(
+                    classification_db.build_grouped_children(
+                        chem_rows, [CLASS_KEY_GETTER, FAMILY_GETTER], {0: self._class_order_sort_key}
+                    )
+                ),
                 "tree_options": tree_opts,
-                # Collapse singleton layers for cleaner plots:
-                # - If a chemotype exists only in 1 class, collapse Class.
-                # - If that class has only 1 family for this chemotype, collapse Family too.
                 "meta": {"title": chem, "liftClassLayer": False, "collapseLabels": ["Class", "Family"]},
             }
 
-        # Pass data to template as JSON
-        ctx["classes_data"] = json.dumps(classes_data)  # legacy (test template / backwards compat)
-        ctx["tree_sets"] = json.dumps(tree_sets)
-        ctx["tree_leaf_label_lookup"] = json.dumps(leaf_label_lookup)
-        return ctx, tree_sets
+    def _class_order_sort_key(self, class_key):
+        order = self.tree_class_keys()
+        return order.index(class_key) if class_key in order else len(order)
 
     @staticmethod
     def build_selection_context(tree_sets, requested_type="Class", requested_selection="",
@@ -1862,194 +1306,34 @@ class Classification_tree:
 class GPCRBrowser(TemplateView):
     template_name = "classification/GPCRBrowser.html"
 
-    # classification Excel (same file as Classification/StructureSim use)
-    CLASSIFICATION_FOLDER = 'protein_data'
-    CLASSIFICATION_FILE = 'Classification.xlsx'
-
-    def _classification_path(self):
-        """
-        Path to Classification.xlsx.
-        """
-        return os.path.join(
-            settings.DATA_DIR,
-            self.CLASSIFICATION_FOLDER,
-            self.CLASSIFICATION_FILE,
-        )
-
-    def _load_df(self):
-        """
-        Load Classification.xlsx and return a dataframe with normalized column names.
-        """
-        path = self._classification_path()
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"File not found: {path}")
-
-        df = pd.read_excel(path)
-
-        # tolerant column name picker (handles embedded newlines etc.)
-        def pick(*cands):
-            names = set([str(c).strip() for c in cands])
-            for col in df.columns:
-                s = str(col).strip()
-                if s in names:
-                    return col
-            return None
-
-        col_uni = pick('GPCRs (UniProt)', 'GPCRs\n(UniProt)', 'GPCRs (UniProt)')
-        col_gene = pick('GPCRs (Gene name)', 'GPCRs\n(Gene name)', 'GPCRs (Gene name)')
-        col_class = pick('Class')
-        col_family = pick('Receptor family')
-        col_chemotype = pick('Chemotype')
-        col_modality = pick('Modality')
-        col_sense = pick('Sense')
-
-        normalized_cols = {}
-        if col_uni:
-            normalized_cols['GPCRs (UniProt)'] = df[col_uni]
-        if col_gene:
-            normalized_cols['GPCRs (Gene name)'] = df[col_gene]
-        if col_class:
-            normalized_cols['Class'] = df[col_class]
-        if col_family:
-            normalized_cols['Receptor family'] = df[col_family]
-        if col_modality:
-            normalized_cols['Modality'] = df[col_modality]
-        if col_chemotype:
-            normalized_cols['Chemotype'] = df[col_chemotype]
-        if col_sense:
-            normalized_cols['Sense'] = df[col_sense]
-
-        df_normalized = pd.DataFrame(normalized_cols)
-
-        # Ensure required columns exist (fill with empty if missing)
-        required_cols = [
-            'GPCRs (UniProt)',
-            'GPCRs (Gene name)',
-            'Class',
-            'Receptor family',
-            'Modality',
-            'Chemotype',
-            'Sense',
-        ]
-        for col in required_cols:
-            if col not in df_normalized.columns:
-                df_normalized[col] = None
-
-        return df_normalized
+    @staticmethod
+    def _strip_tags(s):
+        if not s:
+            return ""
+        return re.sub(r"<[^>]+>", "", str(s)).strip()
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # Always provide a JSON value to the template (even on error)
-        context["gpcr_rows"] = "[]"
 
-        try:
-            df = self._load_df()
-        except FileNotFoundError as e:
-            context["error"] = f"File not found: {e}"
-            return context
-        except Exception as e:
-            context["error"] = f"Error loading Classification.xlsx: {e}"
-            return context
-
-        # Build per-UniProt mapping from Excel (handle multiple IDs in one cell)
-        uni_to_excel = {}
-        for _, row in df.iterrows():
-            uni_val = row.get("GPCRs (UniProt)")
-            if pd.isna(uni_val):
-                continue
-            uni_str = str(uni_val).strip()
-            if not uni_str or uni_str.lower() == "nan":
-                continue
-
-            gene_val = row.get("GPCRs (Gene name)")
-            gene_str = ""
-            if pd.notna(gene_val):
-                gene_str = str(gene_val).strip()
-                if gene_str.lower() == "nan":
-                    gene_str = ""
-
-            rec = {
-                "Class": "" if pd.isna(row.get("Class")) else str(row.get("Class")).strip(),
-                "Receptor family": "" if pd.isna(row.get("Receptor family")) else str(row.get("Receptor family")).strip(),
-                "Modality": "" if pd.isna(row.get("Modality")) else str(row.get("Modality")).strip(),
-                "Chemotype": "" if pd.isna(row.get("Chemotype")) else str(row.get("Chemotype")).strip(),
-                "Sense": "" if pd.isna(row.get("Sense")) else str(row.get("Sense")).strip(),
-                "GPCRs (Gene name)": gene_str,
+        rows = [
+            {
+                "uniprot": row["uniprot"],
+                "entry_name": row["entry_name"],
+                "gene": row["gene"],
+                "protein_name_html": row["protein_name"],
+                "protein_name_text": self._strip_tags(row["protein_name"]),
+                "class": row["class_family_name"],
+                "family": row["receptor_family"],
+                "modality": row["modality"],
+                "chemotype": row["chemotype"],
+                "sense": row["sense"],
+                "sequence": row["sequence"],
             }
-
-            for uid in re.split(r'[,;]\s*', uni_str):
-                uid = uid.strip()
-                if not uid:
-                    continue
-                if uid.lower() == "nan":
-                    continue
-                # Keep first-seen record; fill missing fields opportunistically
-                existing = uni_to_excel.get(uid)
-                if existing is None:
-                    uni_to_excel[uid] = rec
-                else:
-                    for k, v in rec.items():
-                        if (not existing.get(k)) and v:
-                            existing[k] = v
-
-        # Bulk fetch proteins and their primary gene
-        entry_names = [("%s_human" % u.lower()) for u in uni_to_excel.keys()]
-        proteins = (Protein.objects
-                    .filter(entry_name__in=entry_names)
-                    .only("entry_name", "name", "sequence")
-                    .prefetch_related(
-                        Prefetch(
-                            "genes",
-                            queryset=Gene.objects.only("name", "position").order_by("position"),
-                        )
-                    ))
-        protein_by_entry = {p.entry_name: p for p in proteins}
-
-        # Build rows for DataTables (keep stable order by UniProt code)
-        def strip_tags(s):
-            if not s:
-                return ""
-            return re.sub(r"<[^>]+>", "", str(s)).strip()
-
-        rows = []
-        for uni in sorted(uni_to_excel.keys(), key=lambda x: str(x).lower()):
-            entry_name = "%s_human" % str(uni).lower()
-            p = protein_by_entry.get(entry_name)
-
-            # primary gene: first by Gene.position (Meta ordering)
-            gene_db = ""
-            if p is not None:
-                try:
-                    g0 = next(iter(getattr(p, "genes").all()), None)
-                except Exception:
-                    g0 = None
-                if g0 is not None and getattr(g0, "name", None):
-                    gene_db = g0.name
-
-            excel = uni_to_excel.get(uni, {})
-            gene = gene_db or excel.get("GPCRs (Gene name)", "") or ""
-
-            prot_name_html = ""
-            if p is not None and getattr(p, "name", None):
-                prot_name_html = p.name
-
-            seq = ""
-            if p is not None and getattr(p, "sequence", None):
-                seq = p.sequence
-
-            rows.append({
-                "uniprot": uni,
-                "entry_name": entry_name,
-                "gene": gene,
-                "protein_name_html": prot_name_html,
-                "protein_name_text": strip_tags(prot_name_html),
-                "class": excel.get("Class", "") or "",
-                "family": excel.get("Receptor family", "") or "",
-                "modality": excel.get("Modality", "") or "",
-                "chemotype": excel.get("Chemotype", "") or "",
-                "sense": excel.get("Sense", "") or "",
-                "sequence": seq,
-            })
+            for row in sorted(
+                classification_db.get_primary_classification_rows(),
+                key=lambda r: str(r["uniprot"]).lower(),
+            )
+        ]
 
         context["gpcr_rows"] = json.dumps(rows)
         return context
@@ -2062,83 +1346,6 @@ class ClassificationWheel:
     to whichever Detail page inlines the wheel content.
     """
 
-    # classification Excel (same file as Classification/GPCRBrowser use)
-    CLASSIFICATION_FOLDER = 'protein_data'
-    CLASSIFICATION_FILE = 'Classification.xlsx'
-
-    def _classification_path(self):
-        """
-        Path to Classification.xlsx.
-        """
-        return os.path.join(
-            settings.DATA_DIR,
-            self.CLASSIFICATION_FOLDER,
-            self.CLASSIFICATION_FILE,
-        )
-
-    def _load_df(self):
-        """
-        Load Classification.xlsx and return a dataframe with normalized column names.
-        Only keeps columns needed for wheel annotation.
-        """
-        path = self._classification_path()
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"File not found: {path}")
-
-        df = pd.read_excel(path)
-
-        # tolerant column name picker (handles embedded newlines etc.)
-        def pick(*cands):
-            names = set([str(c).strip() for c in cands])
-            for col in df.columns:
-                s = str(col).strip()
-                if s in names:
-                    return col
-            return None
-
-        col_uni = pick('GPCRs (UniProt)', 'GPCRs\n(UniProt)', 'GPCRs (UniProt)')
-        col_class = pick('Class')
-        col_family = pick('Receptor family')
-        # Some legacy exports used "Ligand type"; current file uses "Chemotype"
-        col_chemotype = pick('Chemotype')
-        col_ligand_type = pick('Ligand type', 'Ligand\n type', 'Ligand type ')
-        col_modality = pick('Modality')
-        col_sense = pick('Sense')
-
-        normalized_cols = {}
-        if col_uni:
-            normalized_cols['GPCRs (UniProt)'] = df[col_uni]
-        if col_class:
-            normalized_cols['Class'] = df[col_class]
-        if col_family:
-            normalized_cols['Receptor family'] = df[col_family]
-        if col_chemotype:
-            normalized_cols['Chemotype'] = df[col_chemotype]
-        if col_ligand_type:
-            normalized_cols['Ligand type'] = df[col_ligand_type]
-        if col_modality:
-            normalized_cols['Modality'] = df[col_modality]
-        if col_sense:
-            normalized_cols['Sense'] = df[col_sense]
-
-        df_normalized = pd.DataFrame(normalized_cols)
-
-        # Ensure required columns exist (fill with None if missing)
-        required_cols = [
-            'GPCRs (UniProt)',
-            'Class',
-            'Receptor family',
-            'Chemotype',
-            'Ligand type',
-            'Modality',
-            'Sense',
-        ]
-        for col in required_cols:
-            if col not in df_normalized.columns:
-                df_normalized[col] = None
-
-        return df_normalized
-
     @staticmethod
     def build_wheel_context():
         """
@@ -2146,81 +1353,18 @@ class ClassificationWheel:
         to inline the wheel content directly.
         """
         context = {}
-        loader = ClassificationWheel()
 
-        # --- Step 1: Load Excel metadata (Classification.xlsx) ---
-        meta_lookup = {}
-
-        def _clean_cell(val):
-            if pd.isna(val):
-                return ""
-            s = str(val).strip()
-            if not s or s.lower() == "nan":
-                return ""
-            return s
-
-        def _normalize_uniprot_key(raw):
-            """
-            Normalize a UniProt-style key to match wheel's EntryName.
-            Wheel EntryName is the uppercased stem (e.g. ADRB2 from adrb2_human).
-            """
-            s = _clean_cell(raw).upper()
-            if not s:
-                return ""
-            # Common formats we may encounter
-            s = s.replace(" ", "")
-            if s.endswith("_HUMAN") or s.endswith("-HUMAN"):
-                s = s[:-6]
-            if "_" in s:
-                s = s.split("_", 1)[0]
-            if "-" in s:
-                s = s.split("-", 1)[0]
-            return s
-
-        try:
-            df = loader._load_df()
-        except FileNotFoundError as e:
-            # Wheel can still render; it will just miss annotations
-            context["error"] = f"File not found: {e}"
-            df = None
-        except Exception as e:
-            context["error"] = f"Error loading Classification.xlsx: {e}"
-            df = None
-
-        if df is not None:
-            for _, row in df.iterrows():
-                uni_val = row.get("GPCRs (UniProt)")
-                uni_str = _clean_cell(uni_val)
-                if not uni_str:
-                    continue
-
-                chemotype = _clean_cell(row.get("Chemotype")) or _clean_cell(row.get("Ligand type"))
-                rec = {
-                    "Class": _clean_cell(row.get("Class")),
-                    # Keep legacy key ("Ligand type") for backwards compatibility,
-                    # but also provide the new explicit field ("Chemotype").
-                    "Ligand type": chemotype,
-                    "Chemotype": chemotype,
-                    "Receptor family": _clean_cell(row.get("Receptor family")),
-                    "Modality": _clean_cell(row.get("Modality")),
-                    "Sense": _clean_cell(row.get("Sense")),
-                }
-
-                # One cell may contain multiple UniProt mnemonics (comma/semicolon separated)
-                for token in re.split(r'[,;]\s*', uni_str):
-                    key = _normalize_uniprot_key(token)
-                    if not key:
-                        continue
-
-                    existing = meta_lookup.get(key)
-                    if existing is None:
-                        # store a copy so multiple keys from one row don't share the same dict
-                        meta_lookup[key] = rec.copy()
-                    else:
-                        # Fill missing fields opportunistically
-                        for k, v in rec.items():
-                            if (not existing.get(k)) and v:
-                                existing[k] = v
+        # --- Step 1: DB-derived metadata, keyed by the wheel's EntryName (uppercased UniProt stem) ---
+        meta_lookup = {
+            row["uniprot"]: {
+                "Class": row["class_family_name"],
+                "Chemotype": row["chemotype"],
+                "Receptor family": row["receptor_family"],
+                "Modality": row["modality"],
+                "Sense": row["sense"],
+            }
+            for row in classification_db.get_primary_classification_rows()
+        }
 
         # --- Step 2: Helper to inject metadata into wheel structure ---
         def enrich_wheel_with_metadata(wheelstructure):
@@ -3879,10 +3023,6 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
 
     template_name = 'classification/StructureSim.html'
 
-    # ProteinFamilyClassification cache (Chemotype/Modality/Sense lookup)
-    PF_CLASS_CACHE_KEY = 'structuresim:pfclass:db:v4'
-    PF_CLASS_CACHE_TIMEOUT = 60 * 60 * 24  # 24h
-
     # -------------------------- DB-backed embedding + annotations --------------------------
 
     @staticmethod
@@ -4134,25 +3274,23 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
     def _get_pf_classification_map_db(self):
         """
         Map ProteinFamily.id -> {'Chemotype','Modality','Sense'} using ProteinFamilyClassification.
+        Delegates to the shared classification_db loader (also used by Classification_tree) so
+        there is one reader of ProteinFamilyClassification, not two that can drift. A family can
+        carry up to 2 rows (order 1/2); this collapses to the order-1 row since StructureSim only
+        needs one chemotype/modality per family, falling back to whichever row is present.
         """
-        cached = cache_alignment.get(self.PF_CLASS_CACHE_KEY)
-        if cached is not None:
-            return cached
-
+        full = classification_db.get_pf_classification_map()
         mapping = {}
-        qs = (
-            ProteinFamilyClassification.objects
-            .select_related('sense', 'chemotype', 'modality')
-            .only('protein_family_id', 'sense__name', 'chemotype__name', 'modality__name')
-        )
-        for pfc in qs:
-            mapping[pfc.protein_family_id] = {
-                'Chemotype': (pfc.chemotype.name if pfc.chemotype else ""),
-                'Modality': (pfc.modality.name if pfc.modality else ""),
-                'Sense': (pfc.sense.name if pfc.sense else ""),
+        for family_id, records in full.items():
+            primary = next(
+                (r for r in records if r.get('chemotype_order') == 1 or r.get('modality_order') == 1),
+                records[0],
+            )
+            mapping[family_id] = {
+                'Chemotype': primary.get('Chemotype', ''),
+                'Modality': primary.get('Modality', ''),
+                'Sense': primary.get('Sense', ''),
             }
-
-        cache_alignment.set(self.PF_CLASS_CACHE_KEY, mapping, self.PF_CLASS_CACHE_TIMEOUT)
         return mapping
 
     def _protein_annotations_db(self, protein, pf_class_map):

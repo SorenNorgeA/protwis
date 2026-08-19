@@ -1344,16 +1344,17 @@
     selector.className = "cv-family-class-selector";
 
     const browserNodes = payload.receptorFamilies.browserNodes || [];
-    const browserClassOrder = ["A", "B1", "B2", "C", "F", "T2", "O1", "O2", "U"];
+    const browserClassOrder = ["A", "B1", "B2", "C", "F", "O1", "O2", "T2", "V", "U"];
     const browserClassLabels = {
       "A": "Class A (Rhodopsin)",
       "B1": "Class B1 (Secretin)",
       "B2": "Class B2 (Adhesion)",
       "C": "Class C (Glutamate)",
       "F": "Class F (Frizzled)",
-      "T2": "Class T2 (Taste 2)",
       "O1": "Class O1 (Fish-like olfactory receptors)",
       "O2": "Class O2 (Tetrapod-specific olfactory receptors)",
+      "T2": "Class T2 (Taste 2)",
+      "V": "Class V (Vomeronasal)",
       "U": "Unclassified / Other GPCRs",
     };
     const browserNodeByKey = {};
