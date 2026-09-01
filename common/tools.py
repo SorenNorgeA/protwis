@@ -7,6 +7,7 @@ import sys
 import yaml
 import time
 import logging
+import re
 import urllib
 from urllib.parse import quote
 from urllib.request import urlopen
@@ -287,7 +288,7 @@ def urlopen_with_retry(url, data = None, retries = 5, sleeptime = 5):
         elif retry == retries:
             return False
 
-def parse_uniprot_file(accession, path_to_file=False, logger=None, local_uniprot_dir=None, remote_uniprot_dir='http://www.uniprot.org/uniprot/', excel_sequences=None):
+def parse_uniprot_file(accession, path_to_file=False, logger=None, local_uniprot_dir=None, remote_uniprot_dir='http://www.uniprot.org/uniprot/', excel_sequences=None, entrez_lookup=None):
 
     '''
         Parse a Uniprot file with the given accession number, either from a local file or from the Uniprot website.
@@ -300,9 +301,18 @@ def parse_uniprot_file(accession, path_to_file=False, logger=None, local_uniprot
         - local_uniprot_dir: The local directory where Uniprot files are stored
         - remote_uniprot_dir: The remote directory (URL) where Uniprot files can be accessed.
         - excel_sequences: A dictionary containing GPCR protein sequences
+        - entrez_lookup: A table for looking up Entrez gene IDs based on gene symbol and species-name/taxon-id
         Returns:
         - up: A dictionary containing the parsed information from the Uniprot file
     '''
+
+    # Define regex patterns for parsing gene names and synonyms from the Uniprot file
+    name_tag_pattern = re.compile(r'GN   Name=([A-Za-z0-9.)(_-]+)')
+    synonym_tag_pattern = re.compile(r'GN   Synonyms=(?<!..:)((?:[A-Za-z0-9.)(_-]+(?:,\s*)?)+)')
+    gene_name_only_pattern = re.compile(r'GN   ([A-Za-z0-9.)(_-]+);')
+    trailing_name_pattern = re.compile(r'GN   (?:(?:\{?|ECO).+\}), ([A-Za-z0-9.)(_-]+)')
+    leading_name_pattern = re.compile(r'GN   ([A-Za-z0-9.)(_-]+) (?:\{.+\}?)')
+    gene_pattern_list = [name_tag_pattern, gene_name_only_pattern, trailing_name_pattern, leading_name_pattern]
 
     filename = accession + '.txt'
     if not path_to_file:
@@ -393,14 +403,16 @@ def parse_uniprot_file(accession, path_to_file=False, logger=None, local_uniprot
 
             # genes
             elif line.startswith('GN'):
-                split_gn_line = line.split(';')
-                for segment in split_gn_line:
-                    if '=' in segment:
-                        split_segment = segment.split('=')
-                        split_segment = split_segment[1].split(',')
-                        for gene_name in split_segment:
-                            split_gene_name = gene_name.split('{')
-                            up['genes'].append(split_gene_name[0].strip())
+                for p in gene_pattern_list:
+                    m = p.search(line)
+                    if m:
+                        for gene_name in m.groups():
+                            up['genes'].append(gene_name)
+                m = synonym_tag_pattern.search(line)
+                if m:
+                    for gene_name in re.findall(r'[A-Za-z0-9.)(_-]+', m.group(1)):
+                        if gene_name not in up['genes']:
+                            up['genes'].append(gene_name)
 
             # # structures
             # elif line.startswith('DR') and 'PDB;' in line:
@@ -428,6 +440,24 @@ def parse_uniprot_file(accession, path_to_file=False, logger=None, local_uniprot
 
         # close the Uniprot file
         uf.close()
+
+        if entrez_lookup is not None:
+            ## Handle edge cases where gene name is not provided but entrez gene id is provided, by looking up the gene symbol based on the species and entrez gene id in the lookup table
+            if len(up['entrez_geneids']) > 0 and len(up['genes']) == 0:
+                try:
+                    reverse_lookup = {v: k for k, v in entrez_lookup["by_species_name"][up['species_latin_name']].items()}
+                    try:
+                        up['genes'] = [reverse_lookup[up['entrez_geneids'][0]]]
+                    except KeyError:
+                        if logger is not None: logger.warning('Could not find entrez gene id ' + up['entrez_geneids'][0] + ' in the lookup table for species ' + up['species_latin_name'])
+                except KeyError:
+                    if logger is not None: logger.warning('Could not find species ' + up['species_latin_name'] + ' in the lookup table')
+
+            # filter genes based on entrez lookup (to remove non-official gene symbols)
+            clean_genes = [gene for gene in up['genes'] if gene in entrez_lookup["by_species_name"].get(up['species_latin_name'], {})]
+            # If we still have genes left after filtering, update the genes list to the filtered list. If not, keep the original list.
+            if len(clean_genes) > 0:
+                up['genes'] = clean_genes
 
         if excel_sequences is not None:
             try:

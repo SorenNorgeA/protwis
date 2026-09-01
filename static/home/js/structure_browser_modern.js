@@ -105,7 +105,7 @@
       targets: "_all",
       className: "dt-head-nowrap dt-head-center dt-center dt-body-center",
       createdCell: function (td) {
-        td.classList.add("expand_1line");
+        td.classList.add("expand_1line"); 
       }
     },
     { targets: [0], orderable: false }, // checkbox column
@@ -117,57 +117,184 @@
   ];
 
   const columns = [
-    // RECEPTOR
-    ({ data: "id", name: "Select", orderable: false, searchable: false, render: (data) => `<input type="checkbox" class="select-row" value="${data}">` }),
-    ({ data: "gpcrdb_link", name: "GPCRdb", orderable: false, searchable: false, render: (d,t) => (t === 'display' && d ? `<a href="${d}" target="_blank" rel="noopener"><img class="gpcrdb-link" src="/static/home/logo/gpcr/main.png" width="12" height="12" alt="GPCRdb"></a>` : '') }),
-    { data: "Gene", name: "Gene" },
-    ({ data:"entry_name", name:"UniProt", render:(d,t,r)=> t==="display" ? (r?.uniprot_link ? `<a href="${r.uniprot_link}" target="_blank" rel="noopener">${d?d.split("_")[0].toUpperCase():"-"}</a>` : (d?d.split("_")[0].toUpperCase():"-")) : (t==="filter"||t==="sort" ? (d?d.split("_")[0].toUpperCase():"") : (d||"")) }),
-    ({ data: "iuphar_name", name: "Protein", render: (d,t,r) => { if (t !== 'display') return d; const url = r && r.iuphar_link; return (url && url !== "-") ? `<a href="${url}" target="_blank" rel="noopener">${d}</a>` : d; } }),
-    { data: "id", name: "ID", visible: false },
+  // RECEPTOR
+  {
+    data: "id",
+    name: "Select",
+    orderable: false,
+    searchable: false,
+    render: (data) =>
+      `<input type="checkbox" class="select-row" value="${data}">`,
+  },
+  {
+    data: "gpcrdb_link",
+    name: "GPCRdb",
+    orderable: false,
+    searchable: false,
+    render: (d, t) =>
+      t === "display" && d
+        ? `<a href="${d}" target="_blank" rel="noopener"><img class="gpcrdb-link" src="/static/home/logo/gpcr/main.png" width="12" height="12" alt="GPCRdb"></a>`
+        : "",
+  },
+  {
+    data: "entry_name",
+    name: "UniProt",
+    render: (d, t, r) =>
+      t === "display"
+        ? r?.uniprot_link
+          ? `<a href="${r.uniprot_link}" target="_blank" rel="noopener">${d ? d.split("_")[0].toUpperCase() : "-"}</a>`
+          : d
+            ? d.split("_")[0].toUpperCase()
+            : "-"
+        : t === "filter" || t === "sort"
+          ? d
+            ? d.split("_")[0].toUpperCase()
+            : ""
+          : d || "",
+  },
+  {
+    data: "gene",
+    name: "Gene",
+    render: (d, t) => {
+       if (!d) return "";
+       const name = d.name || "";
+       const url = d.entrez_url;
+       if (t !== "display" || !url || url === "-") return name;
+       return `<a href="${url}" target="_blank" rel="noopener">${name}</a>`;
+     },
+  },
+  {
+    data: "iuphar_name",
+    name: "Protein",
+    render: (d, t, r) => {
+      if (t !== "display") return d;
+      const url = r && r.iuphar_link;
+      return url && url !== "-"
+        ? `<a href="${url}" target="_blank" rel="noopener">${d}</a>`
+        : d;
+    },
+  },
+  { data: "id", name: "ID", visible: false },
 
-    // CLASSIFICATION
-    { data: "family", name: "Receptor family" },
-    { data: "class", name: "Class" },
-    { data: "species", name: "Species" },
+  // CLASSIFICATION
+  { data: "family", name: "Receptor family" },
+  { data: "class", name: "Class" },
+  { data: "species", name: "Species" },
 
-    // STRUCTURE
-    { data: "method", name: "Method" },
-    ({ data: "pdb", name: "PDB", render: (d,t) => t!=='display' ? d : (d && d!=="-" ? `<a href="https://gpcrdb.org/structure/${d}" target="_blank" rel="noopener">${d}</a>` : d) }),
-    ({ data: "refined", name: "Refined structure", render: (d,t) => d === "-" ? "-" : (t === 'display' ? `<a href="${d}" target="_blank">${d.replace("refined/", "").toUpperCase()}_refined</a>` : d.replace("refined/", "").toUpperCase() + "_refined") }),
-    ({ data: "resolution", name: "Resolution", render: d => d ? parseFloat(d).toFixed(1) : "-" }),
-    { data: "preferred_chain", name: "Preferred chain" },
-    { data: "state", name: "State" },
-    ({ data: "active_pct", name: "Degree active (%)", render: d => d != null ? Math.round(d) : "-" }),
-    { data: "coverage", name: "% of Seq" },
+  // STRUCTURE
+  { data: "method", name: "Method" },
+  {
+    data: "pdb",
+    name: "PDB",
+    render: (d, t) =>
+      t !== "display"
+        ? d
+        : d && d !== "-"
+          ? `<a href="https://gpcrdb.org/structure/${d}" target="_blank" rel="noopener">${d}</a>`
+          : d,
+  },
+  {
+    data: "refined",
+    name: "Refined structure",
+    render: (d, t) =>
+      d === "-"
+        ? "-"
+        : t === "display"
+          ? `<a href="${d}" target="_blank">${d.replace("refined/", "").toUpperCase()}_refined</a>`
+          : d.replace("refined/", "").toUpperCase() + "_refined",
+  },
+  {
+    data: "resolution",
+    name: "Resolution",
+    render: (d) => (d ? parseFloat(d).toFixed(1) : "-"),
+  },
+  { data: "preferred_chain", name: "Preferred chain" },
+  { data: "state", name: "State" },
+  {
+    data: "active_pct",
+    name: "Degree active (%)",
+    render: (d) => (d != null ? Math.round(d) : "-"),
+  },
+  { data: "coverage", name: "% of Seq" },
 
-    // SIGNAL PROTEIN
-    { data: "arrestin_family", name: "Family" },
-    ({ data: "arrestin_name", name: "Subtype", render: (d,t,r) => t!=='display' ? d : (r?.arrestin_entry && r.arrestin_entry!=="-" ? `<a href="https://gpcrdb.org/signprot/${r.arrestin_entry}/" target="_blank" rel="noopener">${d}</a>` : d) }),
-    { data: "arrestin_note", name: "Note" },
-    { data: "arrestin_coverage", name: "% of Seq" },
+  // SIGNAL PROTEIN
+  { data: "arrestin_family", name: "Family" },
+  {
+    data: "arrestin_name",
+    name: "Subtype",
+    render: (d, t, r) =>
+      t !== "display"
+        ? d
+        : r?.arrestin_entry && r.arrestin_entry !== "-"
+          ? `<a href="https://gpcrdb.org/signprot/${r.arrestin_entry}/" target="_blank" rel="noopener">${d}</a>`
+          : d,
+  },
+  { data: "arrestin_note", name: "Note" },
+  { data: "arrestin_coverage", name: "% of Seq" },
 
-    // AUXILIARY PROTEIN
-    ({ data: "fusions", name: "Fusion", render: (d,t) => expand1LineRender(d,t) }),
-    ({ data: "antibodies", name: "Antibodies", render: (d,t) => expand1LineRender(d,t) }),
+  // AUXILIARY PROTEIN
+  {
+    data: "fusions",
+    name: "Fusion",
+    render: (d, t) => expand1LineRender(d, t),
+  },
+  {
+    data: "antibodies",
+    name: "Antibodies",
+    render: (d, t) => expand1LineRender(d, t),
+  },
 
-    // STRUCTURE LIGAND
-    ({ data: "ligands", name: "Name", render: (d,t) => expandFirstThenHoverLinkList(d,t,id => `https://gpcrdb.org/ligand/${id}/info`, { showCountHint: true }) }),
-    ({ data: "ligand_type", name: "Type", render: (d,t) => expand1LineRender(d,t) }),
-    ({ data: "ligand_role", name: "Modality", render: (d,t) => expand1LineRender(d,t) }),
+  // STRUCTURE LIGAND
+  {
+    data: "ligands",
+    name: "Name",
+    render: (d, t) =>
+      expandFirstThenHoverLinkList(
+        d,
+        t,
+        (id) => `https://gpcrdb.org/ligand/${id}/info`,
+        { showCountHint: true },
+      ),
+  },
+  {
+    data: "ligand_type",
+    name: "Type",
+    render: (d, t) => expand1LineRender(d, t),
+  },
+  {
+    data: "ligand_role",
+    name: "Modality",
+    render: (d, t) => expand1LineRender(d, t),
+  },
 
-    // PHYSIOLOGICAL LIGAND
-    ({ data: "endo_ligands", name: "Name", render: (d,t) => expandFirstThenHoverLinkList(d,t,id => `https://gpcrdb.org/ligand/${id}/info`, { showCountHint: true }) }),
-    ({ data: "endo_type", name: "Type", render: (d,t) => expand1LineRender(d,t) }),
+  // PHYSIOLOGICAL LIGAND
+  {
+    data: "endo_ligands",
+    name: "Name",
+    render: (d, t) =>
+      expandFirstThenHoverLinkList(
+        d,
+        t,
+        (id) => `https://gpcrdb.org/ligand/${id}/info`,
+        { showCountHint: true },
+      ),
+  },
+  {
+    data: "endo_type",
+    name: "Type",
+    render: (d, t) => expand1LineRender(d, t),
+  },
 
-    // SODIUM ION SITE
-    { data: "sodium_site", name: "D2x50 S3x39" },
-    { data: "sodium", name: "Sodium in structure" },
+  // SODIUM ION SITE
+  { data: "sodium_site", name: "D2x50 S3x39" },
+  { data: "sodium", name: "Sodium in structure" },
 
-    // REFERENCE
-    { data: "authors", name: "Authors" },
-    { data: "reference", name: "Reference" },
-    { data: "pub_date", name: "Publication date" }
-  ];
+  // REFERENCE
+  { data: "authors", name: "Authors" },
+  { data: "reference", name: "Reference" },
+  { data: "pub_date", name: "Publication date" },
+];
+
 
   // ===== 3) COLVIS (Table Control) ===========================================
   function syncTableControlBtn(table) {
@@ -705,7 +832,7 @@
 
     // default: open modal
     superpositionModern(tableId,
-      ["pdb", "entry_short", "iuphar_name", "family", "class", "species", "state", "pub_date"],
+      ["pdb", "entry_name", "gene", "iuphar_name", "family", "class", "species", "state", "pub_date"],
       "structure_browser", "gpcr", "pdb"
     );
   }
@@ -744,7 +871,11 @@
       tr.appendChild(checkboxTd);
       columns.forEach(key => {
         const td = document.createElement("td");
-        td.innerHTML = row[key] || '';
+        if(key == 'gene') {
+          td.innerHTML = row[key] ? row[key].name || '' : '';
+        } else {
+          td.innerHTML = row[key] || ''; 
+        }
         if (hidden_columns.includes(key)) td.style.display = "none";
         tr.appendChild(td);
       });

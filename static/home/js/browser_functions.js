@@ -120,7 +120,13 @@ function superposition(oTable, columns, site, source='gpcr', structure_column_in
         }
 
         else if (site==='homology_model_browser') {
-            var state = $(this).children().eq(7).text();
+            let stateIdx = undefined;
+            //Find state among headers and set index
+            $("table[id=superposition_modal_table] > thead > tr:first-child > th").each(function( index ) { 
+                if ( $( this ).text() === "State") 
+                    { stateIdx = index } 
+                });
+            var state = $(this).children().eq(stateIdx).text();
             ref_id = $(this).children().eq(columns.indexOf(structure_column_index)+1).text()+"_"+state;
 
             AddToSelection('reference', 'structure_model', ref_id);

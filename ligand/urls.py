@@ -108,7 +108,7 @@ urlpatterns = [
     path('userselectionbiasedsubtype_emax_rank_order', views.UserBiased.as_view(subtype=True, way='EmaxRankOrderSubtype'), name='userbiasedsubtype_emax_rank_order'),
     path('userselectionbiasedsubtype_tau_rank_order', views.UserBiased.as_view(subtype=True, way='TauRankOrderSubtype'), name='userbiasedsubtype_tau_rank_order'),
     path('userselectionbiasedsubtype_emax_path_profile', views.UserBiased.as_view(subtype=True, way='EmaxPathProfileSubtype'), name='userbiasedsubtype_emax_path_profile'),
-    path('userselectionbiasedsubtype_tau_path_profile', views.UserBiased.as_view(subtype=True, way='TauPathProfilesubtype'), name='userbiasedsubtype_tau_path_profile'),
+    path('userselectionbiasedsubtype_tau_path_profile', views.UserBiased.as_view(subtype=True, way='TauPathProfileSubtype'), name='userbiasedsubtype_tau_path_profile'),
 
     #Balanced reference calculations
     path('pathwaybiased', views.CachedOTFBalancedBrowser, name='bias_browser-list'),

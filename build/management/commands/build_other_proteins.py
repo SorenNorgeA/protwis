@@ -62,7 +62,7 @@ class Command(BuildHumanProteins):
 
     def handle(self, *args, **options):
         self.entrez_lookup = build_entrezgeneid_lookup_dict(self.entrezid_source_file, self.logger)
-        
+
         if options['purge']:
             try:
                 self.purge_orthologs()
@@ -132,8 +132,8 @@ class Command(BuildHumanProteins):
                 if extension != 'txt':
                     continue
 
-                up = parse_uniprot_file(accession=accession, logger=self.logger, 
-                                        local_uniprot_dir=self.local_uniprot_dir, excel_sequences=self.excel_sequences)
+                up = parse_uniprot_file(accession=accession, logger=self.logger,
+                                        local_uniprot_dir=self.local_uniprot_dir, excel_sequences=self.excel_sequences, entrez_lookup=self.entrez_lookup)
                 # Skip TREMBL on first loop, and SWISSPROT on second
                 if 'source' in up:
                     if reviewed != up['source']:

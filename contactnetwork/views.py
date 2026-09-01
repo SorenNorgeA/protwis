@@ -266,7 +266,9 @@ def PdbTableData(request):
                 "protein_conformation__protein__parent__parent",
                 "protein_conformation__protein__family__parent",
                 "protein_conformation__protein__family__parent__parent__parent",
-                "protein_conformation__protein__species",Prefetch("ligands", queryset=StructureLigandInteraction.objects.filter(
+                "protein_conformation__protein__species",
+                "protein_conformation__protein__genes",
+                Prefetch("ligands", queryset=StructureLigandInteraction.objects.filter(
                 annotated=True).exclude(structure__structure_type__slug__startswith='af-').prefetch_related('ligand', 'ligand__ligand_type', 'ligand_role')))
         data = data.prefetch_related('extra_proteins__protein_conformation','extra_proteins__wt_protein').order_by(
         'extra_proteins__protein_conformation__protein__parent','state').annotate(
@@ -318,51 +320,55 @@ def PdbTableData(request):
         signalling_header = 'Arrestin'
     else:
         signalling_header = 'Signalling protein'
-    data_table = "<table id2='structure_selection' border=0 class='structure_selection row-border text-center compact text-nowrap' width='100%'> \
-        <thead><tr> \
-            <th rowspan=2> <input class ='form-check-input check_all' type='checkbox' value='' onclick='check_all(this);'> </th> \
-            <th colspan=5>Receptor</th> \
-            <th colspan=3>Species</th> \
-            <th colspan=4>Structure</th> \
-            <th colspan=3>Receptor state <a href=\"https://docs.gpcrdb.org/structures.html#structure-descriptors\" target=\"_blank\"><span class=\"glyphicon glyphicon-info-sign\"></span></a></th> \
-            <th colspan=4>{}</th> \
-            <th colspan=2>Auxiliary protein</th> \
-            <th colspan=2>Ligand</th> \
-        </tr> \
-        <tr><th></th> \
-            <th></th> \
-            <th></th> \
-            <th></th> \
-            <th>% of Seq</th> \
-            <th id=species></th> \
-            <th></th> \
-            <th>Identity %<br>to Human</th> \
-            <th></th> \
-            <th></th> \
-            <th></th> \
-            <th></th> \
-            <th></th> \
-            <th>Degree active (%)</th> \
-            <th>TM6 tilt</th>".format(signalling_header)
+    data_table = f'''
+    <table id2='structure_selection' border=0 class='structure_selection row-border text-center compact text-nowrap' width='100%'> 
+        <thead><tr> 
+            <th rowspan=2> <input class ='form-check-input check_all' type='checkbox' value='' onclick='check_all(this);'> </th> 
+            <th colspan=6>Receptor</th> 
+            <th colspan=3>Species</th> 
+            <th colspan=4>Structure</th> 
+            <th colspan=3>Receptor state <a href=\"https://docs.gpcrdb.org/structures.html#structure-descriptors\" target=\"_blank\"><span class=\"glyphicon glyphicon-info-sign\"></span></a></th> 
+            <th colspan=4>{signalling_header}</th> 
+            <th colspan=2>Auxiliary protein</th> 
+            <th colspan=2>Ligand</th> 
+        </tr> 
+        <tr>
+            <!-- Protein Name --> <th></th>
+            <!-- Gene Name --> <th></th>
+            <!-- Protein Long --> <th></th> 
+            <!-- Protein Family --> <th></th> 
+            <!-- Class --> <th></th> 
+            <!-- Fraction_of_wt_seq --> <th>% of Seq</th> 
+            <!-- Species --> <th id=species></th> 
+            <!-- species best --> <th></th> 
+            <!-- identity to human --> <th>Identity %<br>to Human</th> 
+            <!-- Method --> <th></th>
+            <!-- pdb_id --> <th></th> 
+            <!-- resolution --> <th>Res (Å)</th>
+            <!-- resolution_best --> <th></th> 
+            <!-- state --> <th></th> 
+            <!-- gprot_bound_likeness --> <th>Degree active (%)</th> 
+            <!-- tm6_angle --> <th>TM6 tilt</th>'''
 #            <th><a href=\"http://docs.gpcrdb.org/structures.html\" target=\"_blank\">Cytosolic</br> opening</a></th>"
 #            <th><a href=\"http://docs.gpcrdb.org/structures.html\" target=\"_blank\">7TM Open IC (Å)</a></th> \
 #            <th>TM6 tilt (%, inactive: 0-X, intermed: X-Y, active Y-Z)</th> \
-    data_table += "<th></th> \
-            <th></th> \
-            <th>Note</th> \
-            <th>% of Seq</th> \
-            <th></th> \
-            <th></th> \
-            <th></th> \
-            <th></th> \
-        </tr> \
-        <tr> \
-            <th colspan=6></th> \
-            <th colspan=1 id=best_species class='text-center'></th> \
-            <th colspan=4></th> \
-            <th colspan=1 id=best_res class='text-center'></th> \
-            <th colspan=12></th> \
-        </tr></thead><tbody>\n"
+    data_table += ''' 
+            <!-- signal_protein --> <th></th>
+            <!-- signal_protein_subtype --> <th></th>
+            <!-- signal_protein_note --> <th>Note</th> 
+            <!-- signal_protein_seq_cons --> <th>% of Seq</th>
+            <!-- fusion --> <th></th> 
+            <!-- antibody --> <th></th> 
+            <!-- ligand --> <th></th> 
+            <!-- ligand_function --> <th></th> 
+        </tr> 
+        <tr> 
+            <th colspan=7></th> 
+            <th colspan=1 id=best_species class='text-center'></th> 
+            <th colspan=4></th> 
+            <th colspan=1 id=best_res class='text-center'></th> 
+            <th colspan=12></th> 
+        </tr></thead><tbody>\n'''
 
     identity_lookup = {}
     for s in data:
@@ -383,6 +389,8 @@ def PdbTableData(request):
         r['protein_family'] = shorted.family.parent.short()
         r['class'] = shorted.family.parent.parent.parent.shorter()
         r['species'] = s.protein_conformation.protein.species.common_name
+        gene_obj = shorted.genes.first()
+        r['gene'] = gene_obj.name if gene_obj else "-"
         # # r['date'] = s.publication_date
         r['state'] = s.state.name
         r['distance_representative'] = 'Yes' if s.distance_representative else 'No'
@@ -559,64 +567,39 @@ def PdbTableData(request):
         #         pdb_id = pdb_id.replace('_HUMAN', '')
 
         data_dict[pdb_id] = r
-        data_table += "<tr> \
-                        <td data-sort='0'><input class='form-check-input pdb_selected' type='checkbox' value='' onclick='thisPDB(this);' representative='{}' distance_representative='{}' class_consensus_based_representative='{}' long='{}'  id='{}'></td> \
-                        <td>{}</td> \
-                        <td><span>{}</span></td> \
-                        <td>{}</td> \
-                        <td>{}</td> \
-                        <td>{}</td> \
-                        <td><p class='no_margins' style='color:{}'>{}</td> \
-                        <td>{}</td> \
-                        <td>{}</td> \
-                        <td>{}</td> \
-                        <td class='shorten'>{}</td> \
-                        <td><p class='no_margins' style='color:{}'>{}</p></td> \
-                        <td>{}</td> \
-                        <td>{}</td> \
-                        <td>{}</td> \
-                        <td>{}</td> \
-                        <td>{}</td> \
-                        <td>{}</td> \
-                        <td>{}</td> \
-                        <td><p class='no_margins' style='color:{}'>{}</p></td> \
-                        <td>{}</td> \
-                        <td>{}</td> \
-                        <td>{}</td> \
-                        <td>{}</td> \
-                        </tr> \n".format(
-                                        r['contact_representative'],
-                                        r['distance_representative'],
-                                        r['class_consensus_based_representative'],
-                                        r['protein_long'],
-                                        pdb_id,
-                                        r['protein'],
-                                        r['protein_long'],
-                                        r['protein_family'],
-                                        r['class'],
-                                        r['fraction_of_wt_seq'],
-                                        'green' if r['closest_to_human_raw'] else 'red',
-                                        r['species'],
-                                        'Best' if r['closest_to_human_raw'] else '',
-                                        r['identity_to_human'],
-                                        r['method'],
-                                        pdb_id,
-                                        'green' if r['resolution_best'] else 'red',
-                                        r['resolution'],
-                                        'Best' if r['resolution_best'] else '',
-                                        r['state'],
-                                        r['gprot_bound_likeness'],
-                                        r['tm6_angle'],
-                                        r['signal_protein'],
-                                        r['signal_protein_subtype'],
-                                        r['signal_protein_note'],
-                                        r['signal_protein_seq_cons_color'],
-                                        r['signal_protein_seq_cons'],
-                                        r['fusion'],
-                                        r['antibody'],
-                                        r['ligand'],
-                                        r['ligand_function'],
-                                        )
+        resolution_colour = 'green' if r['resolution_best'] else 'red'
+        resolution_best = 'Best' if r['resolution_best'] else ''
+        species_colour = 'green' if r['closest_to_human_raw'] else 'red'
+        species_best = 'Best' if r['closest_to_human_raw'] else ''
+        data_table += f'''<tr> \
+                        <td data-sort='0'><input class='form-check-input pdb_selected' type='checkbox' value='' 
+                                onclick='thisPDB(this);' representative='{r['contact_representative']}' distance_representative='{ r['distance_representative']}' 
+                                class_consensus_based_representative='{r['class_consensus_based_representative']}' long='{r['protein_long']}'  id='{pdb_id}'></td> \
+                        <td>{r['protein']}</td> 
+                        <td>{r['gene']}</td> 
+                        <td><span>{r['protein_long']}</span></td> 
+                        <td>{r['protein_family']}</td> 
+                        <td>{r['class']}</td> 
+                        <td>{r['fraction_of_wt_seq']}</td> 
+                        <td><p class='no_margins' style='color:{species_colour}'>{r['species']}</p></td> 
+                        <td>{species_best}</td> 
+                        <td>{r['identity_to_human']}</td> 
+                        <td>{r['method']}</td> 
+                        <td class='shorten'>{pdb_id}</td> 
+                        <td style='color:{resolution_colour}'>{r['resolution']}</td> 
+                        <td>{resolution_best}</td> 
+                        <td>{r['state']}</td> 
+                        <td>{r['gprot_bound_likeness']}</td>
+                        <td>{r['tm6_angle']}</td>
+                        <td>{r['signal_protein']}</td>
+                        <td>{r['signal_protein_subtype']}</td>
+                        <td>{r['signal_protein_note']}</td>
+                        <td><p class='no_margins' style='color:{r['signal_protein_seq_cons_color']}'>{r['signal_protein_seq_cons']}</p></td>
+                        <td>{r['fusion']}</td>
+                        <td>{r['antibody']}</td>
+                        <td>{r['ligand']}</td>
+                        <td>{r['ligand_function']}</td>
+                        </tr> \n'''
     data_table += "</tbody></table>"
     return HttpResponse(data_table)
 

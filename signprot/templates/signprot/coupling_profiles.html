@@ -107,11 +107,12 @@ function copyToClipboard(txt) {
         datatable = $("#receptor_table").DataTable(table_options);
 
         var yadcf_options = [];
-        var list = [0, 1, 2, 3, 4];
-        for (i in list){
+        var list = [0, 1, 2, 3, 4, 5];
+        for (i of list){
           yadcf_options.push({
-            column_number : list[i],
+            column_number : i,
             filter_type: "multi_select",
+            column_data_type: i === 4 ? "html" : "text",
             select_type: "select2",
             filter_default_label: "",
             filter_reset_button_text: false,
@@ -152,11 +153,12 @@ function copyToClipboard(txt) {
               for (val in this.list) {
                 item = this.list[val].split('_')[0].toUpperCase();
                 datatable.row.add([
-                  dict[item][0],
-                  dict[item][1],
-                  dict[item][2],
-                  dict[item][3],
-                  dict[item][4],
+                  dict[item][0],//class
+                  dict[item][1],//ligandtype
+                  dict[item][2],//family
+                  dict[item][3],//uniprot
+                  dict[item][4],//gene_as_anchor
+                  dict[item][5],//iuphar
                 ]);
                 value += this.list[val] + " ";
               }
@@ -646,9 +648,11 @@ function linkLikeClick(element, color) {
                   <th>Ligand type</th>
                   <th>Receptor Family</th>
                   <th>Receptor<br>(UniProt)</th>
+                  <th>Receptor<br>(Gene)</th>
                   <th>Receptor<br>(GtP)</th>
               </tr>
               <tr>
+                <th></th>
                 <th></th>
                 <th></th>
                 <th></th>

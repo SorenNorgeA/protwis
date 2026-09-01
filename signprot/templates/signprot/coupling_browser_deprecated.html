@@ -533,7 +533,7 @@
               <th colspan=1 style='height:35px; text-align:left;'>
                   Source
               </th>
-              <th colspan=4 style='height:35px; text-align:left;'>
+              <th colspan=5 style='height:35px; text-align:left;'>
                   Receptor
               </th>
               <th colspan=2 style='height:35px; text-align:left;'>
@@ -577,6 +577,7 @@
                       <div><button class='icon-button' type='button' data-toggle="tooltip" data-placement="bottom" title="Export UniProt IDs"><i id='uniprot_copy1' class="glyphicon glyphicon-export"></i></button></div>
                   </div>
               </th>
+              <th>Gene</th>
               <th>IUPHAR</th>
               <th>Name</th>
               <th>Phys. /<br>Surr.</th>
@@ -604,7 +605,7 @@
               <th class='no-sort checkbox_tr'>
                   <input class="select-all" type="checkbox" onclick="select_all(this)">
               </th>
-              {% for n in "x"|rjust:"16" %}
+              {% for n in "x"|rjust:"17" %}
                   <th></th>
               {% endfor %}
           </tr>
@@ -626,6 +627,9 @@
                       <td class="expand">{{ pvals.protein.family }}</td>
                       <td class="uniprot1">
                           <a href="https://www.uniprot.org/uniprot/{{ pvals.protein.accession }}" target="_blank">{{ pvals.protein.uniprot|safe }}</a>
+                      </td>
+                      <td class="text-left">
+                            <a href="{{ pvals.protein.entrezweblink }}" target="_blank">{{ pvals.protein.genename | safe }}</a>
                       </td>
                       <td class="text-left">
                           <a href="{{ pvals.protein.gtp_link }}" target="_blank">{{ pvals.protein.iuphar|safe }}</a>

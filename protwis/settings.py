@@ -57,6 +57,7 @@ INSTALLED_APPS = (
     'angles',
     'hotspots',
     'django_rdkit',
+    'table_provider',
 )
 
 MIDDLEWARE = (

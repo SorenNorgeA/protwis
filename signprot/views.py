@@ -159,7 +159,7 @@ class PhosphorylationBrowser(TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         sites = self.calculating()
-        context['fixed_headers'] = ['uniprot', 'gtodb', 'family', 'class']
+        context['fixed_headers'] = ['uniprot', 'gene', 'gtodb', 'family', 'class']
         context['segment_headers'] = self._headers()['headers']
         context['extra_headers'] = ['log(Emax/EC50)', 'emax', 'pEC50']
 
@@ -276,6 +276,7 @@ class PhosphorylationBrowser(TemplateView):
             # Construct base data
             base_data = {
                 'uniprot': self.get_uniprot_link(protein),  # GPCR
+                'gene': self.get_gene_link(protein),
                 'gtodb': self.get_gtodb_link(protein),
                 'family': parent1.name.replace('receptors', '').replace('Class', '') if parent1 else '',
                 'class': parent3.name.split(' ')[1] if parent3 else '',
@@ -351,6 +352,22 @@ class PhosphorylationBrowser(TemplateView):
             )
         else:
             return protein.entry_name.split("_")[0].upper()
+
+    def get_gene_link(self, protein):
+        """Retrieve the gene link for the protein."""
+        gene_display = None
+
+        if protein.genes.count() > 0:
+            if protein.genes.first().entrez_id:
+                gene_display = format_html(
+                '<a href="{}" target="_blank">{}</a>',
+                protein.genes.first().entrez_weblink,
+                protein.genes.first().name
+            )
+            else:
+                gene_display = protein.genes.first().name
+
+        return gene_display
 
     def get_gtodb_link(self, protein):
         """Retrieve the Guide to Pharmacology link for the protein."""
@@ -745,6 +762,8 @@ class CouplingBrowser(TemplateView):
             protein_data[prot.id]['family'] = prot.family.parent.short()
             protein_data[prot.id]['uniprot'] = prot.entry_short()
             protein_data[prot.id]['iuphar'] = prot.family.name.replace('receptor', '').strip()
+            protein_data[prot.id]['genename'] = prot.genes.first().name if prot.genes.count() else ''
+            protein_data[prot.id]['entrezweblink'] = prot.genes.first().entrez_weblink if prot.genes.count() else ''
             protein_data[prot.id]['accession'] = prot.accession
             protein_data[prot.id]['entryname'] = prot.entry_name
             protein_data[prot.id]['gtp_fam_supp'] = []
@@ -904,6 +923,8 @@ class CouplingBrowser_deprecated(TemplateView):
             protein_data[prot.id]['family'] = prot.family.parent.short()
             protein_data[prot.id]['uniprot'] = prot.entry_short()
             protein_data[prot.id]['iuphar'] = prot.family.name.replace('receptor', '').strip()
+            protein_data[prot.id]['genename'] = prot.genes.first().name if prot.genes.count() else ''
+            protein_data[prot.id]['entrezweblink'] = prot.genes.first().entrez_weblink if prot.genes.count() else ''
             protein_data[prot.id]['accession'] = prot.accession
             protein_data[prot.id]['entryname'] = prot.entry_name
 
@@ -1421,7 +1442,7 @@ def CouplingProfiles(request, render_part="both", signalling_data="empty"):
 
         # Collect receptor information
         receptor_panel = Protein.objects.filter(entry_name__in=receptor_dictionary)\
-                                .prefetch_related("family", "family__parent__parent__parent")
+                                .prefetch_related("family", "family__parent__parent__parent", "genes")
 
         receptor_dictionary = {}
         for p in receptor_panel:
@@ -1430,8 +1451,12 @@ def CouplingProfiles(request, render_part="both", signalling_data="empty"):
             rec_ligandtype = p.family.parent.parent.short()
             rec_family = p.family.parent.short()
             rec_uniprot = p.entry_short()
+            gene = p.genes.first()
+            rec_genename = gene.name if gene else "-"
+            rec_entrezweblink = gene.entrez_weblink if gene else None
+            rec_gene_as_anchor = f'<a href="{rec_entrezweblink}" target="_blank">{rec_genename}</a>' if rec_entrezweblink else rec_genename
             rec_iuphar = p.family.name.replace("receptor", '').replace("<i>","").replace("</i>","").strip()
-            receptor_dictionary[rec_uniprot] = [rec_class, rec_ligandtype, rec_family, rec_uniprot, rec_iuphar]
+            receptor_dictionary[rec_uniprot] = [rec_class, rec_ligandtype, rec_family, rec_uniprot, rec_gene_as_anchor, rec_iuphar]
 
         whole_receptors = Protein.objects.prefetch_related("family", "family__parent__parent__parent").filter(sequence_type__slug="wt", family__slug__startswith="0")
         whole_rec_dict = {}

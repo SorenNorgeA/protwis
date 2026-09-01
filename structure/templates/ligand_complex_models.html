@@ -513,7 +513,17 @@
                     
                                         <!--               RECEPTOR            -->
                     <!-- Gene name 3 -->
-                    <td>{{ model.gene_name }}</td>
+                    <td>
+                        {% if model.gene_name %}
+                            {% if model.gene_entrez_weblink %}
+                                <a href="{{ model.gene_entrez_weblink }}" target="_blank">{{ model.gene_name | safe }}</a>
+                            {% else %}
+                                <span>{{ model.gene_name | safe }}</span>
+                            {% endif %}                                    
+                        {% else %}
+                            <span>-</span>
+                        {% endif %}
+                    </td>
 
                     <!-- Protein name 4 -->
                     <td> <a href=" /protein/{{model.protein_conformation.protein.entry_name}} ">{{ model.protein_conformation.protein.name|receptor_short|safe }}</a></td>

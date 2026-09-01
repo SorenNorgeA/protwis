@@ -35,6 +35,7 @@ urlpatterns = [
     url(r'^seqsign/', include('seqsign.urls')),
     url(r'^angles/', include('angles.urls')),
     url(r'^hotspots/', include('hotspots.urls')),
+    url(r'^table_provider/', include('table_provider.urls')),
     url("robots.txt", TemplateView.as_view(template_name="common/robots.txt", content_type="text/plain")),
 ]
 
