@@ -90,6 +90,7 @@ class Command(BaseCommand):
             ['build_receptor_similarity'],
             ['build_ligand_search'],
             ['build_text'],
+            ['build_structure_browser_table'],
         ]
         phase3 = [
             ['build_af_complex_models'],

@@ -158,7 +158,8 @@
   <script src="{% static 'home/js/alignment.js' %}"></script>
   <script src="{% static 'home/js/browser_functions.js' %}"></script>
   <script src="{% static 'home/js/jquery.powertip.js' %}"></script>
-  <script src="{% static 'home/js/xlsx.full.min.js' %}"></script>
+  <!-- xlsx.full.min.js (~930KB) is loaded lazily on first Export-Excel click, see structure_browser_modern.js -->
+  <script>window.XLSX_STATIC_URL = "{% static 'home/js/xlsx.full.min.js' %}";</script>
   <script src="{% static 'home/js/select2_4.1.0-rc.0_full.js' %}"></script>
   <script src="{% static 'home/js/NewDrugsBrowser_datatables.min.js' %}"></script>
   <script src="{% static 'home/js/NorgesDTFilterBuilder.js' %}"></script>

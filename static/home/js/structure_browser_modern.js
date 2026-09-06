@@ -636,7 +636,25 @@
     return { groupRow: row, merges };
   }
 
-  function exportToXlsx(mode) {
+  // xlsx.full.min.js is ~930KB and only needed for the Export-Excel button,
+  // which most visitors never click — load it on first use instead of on
+  // every page load.
+  let _xlsxLoadPromise = null;
+  function loadXlsxLib() {
+    if (window.XLSX) return Promise.resolve();
+    if (_xlsxLoadPromise) return _xlsxLoadPromise;
+    _xlsxLoadPromise = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = window.XLSX_STATIC_URL;
+      s.onload = () => resolve();
+      s.onerror = () => { _xlsxLoadPromise = null; reject(new Error('Failed to load xlsx library')); };
+      document.head.appendChild(s);
+    });
+    return _xlsxLoadPromise;
+  }
+
+  async function exportToXlsx(mode) {
+    await loadXlsxLib();
     const table    = $('#StructureBrowserTable').DataTable();
     const settings = table.settings()[0];
     const REFINED_BASE  = 'https://gpcrdb.org/structure/';
@@ -1006,11 +1024,16 @@
     });
 
     // Fetch & build table
+    // TEMP DIAGNOSTIC INSTRUMENTATION — remove once the slow-load cause is confirmed.
+    const _perf = { t0: performance.now() };
     fetch("/structure/data/")
       .then(resp => { if (!resp.ok) throw new Error(`HTTP ${resp.status}`); return resp.json(); })
       .then(structure_data => {
+        _perf.tFetched = performance.now();
+
         initializeDataTable("#StructureBrowserTable", structure_data);
         const table = $("#StructureBrowserTable").DataTable();
+        _perf.tTableInit = performance.now();
 
         // Add the Table Control (ColVis) and wire up custom menu
         table.button().add(1, controlTableButtonWithGroups(table));
@@ -1028,18 +1051,32 @@
 
         // Keep dividers and Table Control indicator in sync with visibility toggles
         table.on('column-visibility.dt', function(){ applyGroupBorders(table); syncTableControlBtn(table); });
+        _perf.tButtons = performance.now();
 
         // Build the column filters
         createFilters();
+        _perf.tFilters = performance.now();
 
         // Finish UI
         $("#Init_loader").busyLoad("hide").hide();
         $("#StructureBrowserTableContainer").show();
         table.columns.adjust().draw(false);
         syncTableControlBtn(table);
+        _perf.tDraw = performance.now();
 
         // initial export state
         updateExportSelectedState();
+        _perf.tDone = performance.now();
+
+        console.log('[StructureBrowser perf, ms]', {
+          'fetch + json parse':        Math.round(_perf.tFetched   - _perf.t0),
+          'DataTable init (data model)': Math.round(_perf.tTableInit - _perf.tFetched),
+          'buttons / colvis wiring':   Math.round(_perf.tButtons   - _perf.tTableInit),
+          'createFilters (dropdowns)': Math.round(_perf.tFilters   - _perf.tButtons),
+          'columns.adjust + draw':     Math.round(_perf.tDraw      - _perf.tFilters),
+          'export-state + misc':       Math.round(_perf.tDone      - _perf.tDraw),
+          'TOTAL (fetch to ready)':    Math.round(_perf.tDone      - _perf.t0),
+        });
       })
       .catch(err => {
         console.error("Failed to fetch structure data:", err);
