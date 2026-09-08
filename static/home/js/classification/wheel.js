@@ -175,7 +175,7 @@ const coloringSchemes = {
     "F": CLASS_COLORS_TREE["F"],
     "T2": CLASS_COLORS_TREE["T2"],
     "V": CLASS_COLORS_TREE["V"],
-    "Unclassified": CLASS_COLORS_TREE["Unclassified"],
+    "U": CLASS_COLORS_TREE["Unclassified"],
   },
   "Chemotype": buildSchemeFromCategories(CLASSIC_CHEMOTYPES, getChemotypeColor),
   "Modality": buildSchemeFromCategories(CLASSIC_MODALITIES, (m) => MODALITY_COLORS_FIXED[m] || stableColorForKey(m, CHEMOTYPE_FALLBACK_PALETTE)),
@@ -208,7 +208,7 @@ const coloringSchemesOdorant = {
 // ----------------------------
 function getLastLegendLabelForColorBy(colorBy) {
   const cb = normKey(colorBy);
-  if (cb === "Class") return "Unclassified";
+  if (cb === "Class") return "U";
   if (cb === "Modality" || cb === "Chemotype") return "Orphan receptors";
   if (cb === "Sense") return "Unknown";
   return null;
@@ -499,10 +499,13 @@ function addClassPills(locationId, wheelType) {
   const svg = d3v4.select("#" + locationId + "_svg");
   if (svg.empty()) return;
 
-  // Nudge for the Unclassified label pill (px, +x = right).
-  // The single-letter "U" badge looks best when pushed farther out,
-  // matching the radial feel of the other one-letter class badges.
-  const UNCLASSIFIED_PILL_DX = -15;
+  // Per-class cosmetic nudges for the badge pill+text (px, SVG space: +x = right, +y = down).
+  // Purely visual fine-tuning for a few badges that otherwise sit a little awkwardly on their
+  // circle -- expect these to keep changing by eye as the page gets polished.
+  const CLASS_BADGE_NUDGE = {
+    B2: { dx: -10, dy: 5 },
+    F:  { dx: -5,  dy: -10 },
+  };
 
   // Class headers are tagged with the highlight class in datamapper's wheel renderer.
   svg.selectAll("text")
@@ -544,11 +547,11 @@ function addClassPills(locationId, wheelType) {
           .style("stroke", "#000")
           .style("stroke-width", "0.75px");
 
-        // Unclassified: nudge pill + text slightly to the right.
-        if (normKey(d) === "Unclassified") {
+        const nudge = CLASS_BADGE_NUDGE[normKey(d)];
+        if (nudge) {
           const tTr = txt.attr("transform") || "";
-          txt.attr("transform", (tTr ? (tTr + " ") : "") + `translate(${UNCLASSIFIED_PILL_DX},-10)`);
-          rect.attr("transform", `translate(${UNCLASSIFIED_PILL_DX},-10)`);
+          txt.attr("transform", (tTr ? (tTr + " ") : "") + `translate(${nudge.dx},${nudge.dy})`);
+          rect.attr("transform", `translate(${nudge.dx},${nudge.dy})`);
         }
       } catch (e) {
         // ignore

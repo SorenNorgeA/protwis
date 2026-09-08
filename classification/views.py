@@ -1465,7 +1465,7 @@ class ClassSimilarityDataMixin:
         "U": "#9e9e9e",
     }
 
-    CLASS_CLUSTER_PAYLOAD_CACHE_KEY = "classclustertree:payload:v9"
+    CLASS_CLUSTER_PAYLOAD_CACHE_KEY = "classclustertree:payload:v10"
     CLASS_CLUSTER_PAYLOAD_CACHE_TIMEOUT = 60 * 60 * 24
     CLASS_CLUSTER_PAYLOAD_VERSION = 3
     CLASS_CLUSTER_DATASET_KEY = "superfamily"
@@ -1518,6 +1518,10 @@ class ClassSimilarityDataMixin:
         unclassified_family_ids = self._resolve_unclassified_family_ids()
         classes = []
         for display_name in self.CLASS_ORDER:
+            if display_name == "Unclassified":
+                # Excluded from the Cluster tab's own t-SNE input (not just its display) so
+                # its row doesn't skew where the other classes land in the projection.
+                continue
             slug_code = self.CLASS_CODE_BY_NAME.get(display_name)
             symbol = self.CLASS_SYMBOL_BY_NAME.get(display_name, display_name)
             if slug_code == "011":

@@ -3720,8 +3720,10 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                const angle = (d.midAngle * 180 / Math.PI) - 90;
                return (angle >= -90 && angle < 90) ? "start" : "end";
            })
-           .attr("dominant-baseline", "middle")
-           .attr("dy", "0.05em")
+           // PowerPoint's SVG importer doesn't honor dominant-baseline (browsers do), which made
+           // downloaded-SVG labels shift vertically once pasted there. A plain dy offset is a
+           // universally-supported attribute both renderers apply identically.
+           .attr("dy", "0.35em")
            .attr("transform", (d) => {
                const pos = positionFromAngle(labelAnchorAngle(d), d.type, d.type === 'family');
 
@@ -3797,7 +3799,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                         .attr("x", firstPos.x)
                         .attr("y", firstPos.y+off_set)
                         .attr("text-anchor", "start")
-                        .attr("dominant-baseline", "middle")
+                        .attr("dy", "0.35em")
                         .attr("transform", `rotate(${firstPos.rotation + additionalRotation}, ${firstPos.x}, ${firstPos.y})`)
                         .attr("class", "GPCRome-family-label-split")
                         .text(firstPart)
@@ -3808,7 +3810,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                         .attr("x", secondPos.x)
                         .attr("y", secondPos.y-off_set)
                         .attr("text-anchor", "start")
-                        .attr("dominant-baseline", "middle")
+                        .attr("dy", "0.35em")
                         .attr("transform", `rotate(${secondPos.rotation + additionalRotation}, ${secondPos.x}, ${secondPos.y})`)
                         .attr("class", "GPCRome-family-label-split")
                         .text(secondPart)
@@ -3822,7 +3824,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                         .attr("x", secondPos.x)
                         .attr("y", secondPos.y+off_set)
                         .attr("text-anchor", "end")
-                        .attr("dominant-baseline", "middle")
+                        .attr("dy", "0.35em")
                         .attr("transform", `rotate(${secondPos.rotation + additionalRotation}, ${secondPos.x}, ${secondPos.y})`)
                         .attr("class", "GPCRome-family-label-split")
                         .text(firstPart)
@@ -3833,7 +3835,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                         .attr("x", firstPos.x)
                         .attr("y", firstPos.y-off_set)
                         .attr("text-anchor", "end")
-                        .attr("dominant-baseline", "middle")
+                        .attr("dy", "0.35em")
                         .attr("transform", `rotate(${firstPos.rotation + additionalRotation}, ${firstPos.x}, ${firstPos.y})`)
                         .attr("class", "GPCRome-family-label-split")
                         .text(secondPart)
@@ -3938,8 +3940,8 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                     const angle = (classGapMidAngle[d] * 180 / Math.PI) - 90;
                     return (angle >= -90 && angle < 90) ? "start" : "end";
                 })
-                .attr("dominant-baseline", "middle")
-                .attr("dy", "0.1em")
+                // See the receptor-label pass above for why dominant-baseline was dropped.
+                .attr("dy", "0.35em")
                 .attr("transform", (d) => `rotate(0, ${headerX(d)}, ${headerY(d)})`)
                 .html((d) => GPCRome_formatTextWithHTML(d, CircleSubHeaders))
                 .style("font-size", FontsizeClass)
