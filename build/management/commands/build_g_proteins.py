@@ -58,7 +58,7 @@ class Command(BaseCommand):
     local_uniprot_dir = os.sep.join([settings.DATA_DIR, 'g_protein_data', 'uniprot'])
     local_uniprot_beta_dir = os.sep.join([settings.DATA_DIR, 'g_protein_data', 'uniprot_beta'])
     local_uniprot_gamma_dir = os.sep.join([settings.DATA_DIR, 'g_protein_data', 'uniprot_gamma'])
-    
+
     #Setting the variables for the test tracking of the model upadates
     tracker = {}
     all_models = django.apps.apps.get_models()[6:]
@@ -181,7 +181,7 @@ class Command(BaseCommand):
         files = os.listdir(uniprot_dir)
         for f in files:
             acc = f.split('.')[0]
-            up = parse_uniprot_file(accession=acc, logger=self.logger, local_uniprot_dir=self.local_uniprot_dir)
+            up = parse_uniprot_file(accession=acc, logger=self.logger, local_uniprot_dir=self.local_uniprot_dir, entrez_lookup=self.entrez_lookup)
             pst = ProteinSequenceType.objects.get(slug='wt')
             try:
                 species, created = Species.objects.get_or_create(latin_name=up['species_latin_name'],
@@ -661,7 +661,7 @@ class Command(BaseCommand):
         rns = ResidueNumberingScheme.objects.get(slug='cgn')
 
         for a in accessions:
-            up = parse_uniprot_file(accession=a, logger=self.logger, local_uniprot_dir=self.local_uniprot_dir)
+            up = parse_uniprot_file(accession=a, logger=self.logger, local_uniprot_dir=self.local_uniprot_dir, entrez_lookup=self.entrez_lookup)
 
             # Fetch Protein Family for gproteins
             for k in cgn_dict.keys():
@@ -691,7 +691,7 @@ class Command(BaseCommand):
         accessions_orth = df.loc[df['Uniprot_ID'].isin(orthologs)]
         accessions_orth = accessions_orth['Uniprot_ACC'].unique()
         for a in accessions_orth:
-            up = parse_uniprot_file(accession=a, logger=self.logger, local_uniprot_dir=self.local_uniprot_dir)
+            up = parse_uniprot_file(accession=a, logger=self.logger, local_uniprot_dir=self.local_uniprot_dir, entrez_lookup=self.entrez_lookup)
             # Fetch Protein Family for gproteins
             for k in cgn_dict.keys():
                 name = str(up['entry_name']).upper()
@@ -798,16 +798,16 @@ class Command(BaseCommand):
             g = False
             try:
                 entrez_geneid = select_entrez_id(i, uniprot, self.entrez_lookup)
-                
+
                 if entrez_geneid is not None:
                     resource = WebResource.objects.get(slug='entrez_gene')
                     entrez_link, created = WebLink.objects.get_or_create(web_resource=resource, index=entrez_geneid)
                 else:
                     entrez_link = None
 
-                g, created = Gene.objects.get_or_create(name=gene, species=species, position=i, 
-                                                        entrez_id=entrez_geneid, entrez_weblink=entrez_link)                    
-                
+                g, created = Gene.objects.get_or_create(name=gene, species=species, position=i,
+                                                        entrez_id=entrez_geneid, entrez_weblink=entrez_link)
+
                 if created:
                     self.logger.info('Created gene ' + g.name + ' for protein ' + p.name)
             except IntegrityError:

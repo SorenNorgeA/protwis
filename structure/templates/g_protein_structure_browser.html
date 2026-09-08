@@ -96,7 +96,7 @@
                                 </div>
                             </div>
                         </th>
-                        <th colspan=5 class="over_header">
+                        <th colspan=6 class="over_header">
                             <div>
                                 <div class='overhead_text'>RECEPTOR</div>
                                 <div class='overhead_close'>
@@ -160,6 +160,7 @@
                                 <div><button class='icon-button' type='button'><i id='uniprot_copy' class="glyphicon glyphicon-export uniprot-export"></i></button></div>
                             </div>
                         </th>
+                        <th>Gene</th>
                         <th>IUPHAR</th>
                         <th>Receptor family</th>
                         <th>Class</th>
@@ -192,6 +193,7 @@
                         <th></th>
                         <th></th>
                         <th class='rightborder'></th>
+                        <th></th>
                         <th></th>
                         <th></th>
                         <th></th>
@@ -258,8 +260,20 @@
                         <td class="text-center">{{ structure.resolution|floatformat:"1" }}</td>
                         {% if structure.protein_conformation %}
                             <td><span><a href="http://www.uniprot.org/uniprot/{{ structure.protein_conformation.protein.parent.accession }}">{{ structure.protein_conformation.protein.parent.entry_short|safe }}</a></span></td>
+                            <td>
+                            {% if structure.protein_conformation.protein.parent.genes.first %}
+                                {% if structure.protein_conformation.protein.parent.genes.first.entrez_weblink %}
+                                    <a href="{{ structure.protein_conformation.protein.parent.genes.first.entrez_weblink }}" target="_blank">{{structure.protein_conformation.protein.parent.genes.first.name | safe }}</a>
+                                {% else %}
+                                   <span>{{ structure.protein_conformation.protein.parent.genes.first.name | safe }}</span>
+                                {% endif %}                                    
+                            {% else %}
+                                <span>-</span>
+                            {% endif %}
+                            </td>
                             <td class='uniprot'><a href="/protein/{{ structure.protein_conformation.protein.parent.entry_name }}">{{ structure.protein_conformation.protein.parent.short|safe }}</a></td>
                         {% else %}
+                            <td>-</td>
                             <td>-</td>
                             <td>-</td>
                         {% endif %}
@@ -338,7 +352,7 @@
                             </div>
                         </div>
                     </th>
-                    <th colspan=5 class="over_header">
+                    <th colspan=6 class="over_header">
                         <div>
                             <div class='overhead_text'>RECEPTOR</div>
                             <div class='overhead_close'>
@@ -393,6 +407,7 @@
                             <div><button class='icon-button' type='button'><i id='uniprot_copy' class="glyphicon glyphicon-export uniprot-export"></i></button></div>
                         </div>
                     </th>
+                    <th>Gene</th>
                     <th>IUPHAR</th>
                     <th>Receptor family</th>
                     <th>Class</th>
@@ -421,6 +436,7 @@
                     <th></th>
                     <th></th>
                     <th class='rightborder'></th>
+                    <th></th>
                     <th></th>
                     <th></th>
                     <th></th>
@@ -473,6 +489,21 @@
                         <td>-</td>
                     {% endif %}
 
+                    <td>
+                        {% if structure.protein_conformation %}
+                            {% if structure.protein_conformation.protein.parent.genes.first %}
+                                {% if structure.protein_conformation.protein.parent.genes.first.entrez_weblink %}
+                                    <a href="{{ structure.protein_conformation.protein.parent.genes.first.entrez_weblink }}" target="_blank">{{structure.protein_conformation.protein.parent.genes.first.name | safe }}</a>
+                                {% else %}
+                                    <span>{{ structure.protein_conformation.protein.parent.genes.first.name | safe }}</span>
+                                {% endif %}                                    
+                            {% else %}
+                                <span>-</span>
+                            {% endif %}
+                        {% else %}
+                            <span>-</span>
+                        {% endif %}
+                    </td>
 
                     {% if structure.protein_conformation %}
                         <td class='uniprot'>
@@ -576,6 +607,7 @@
                   <th>Subtype</th>
                   <th>PDB</th>
                   <th>UniProt</th>
+                  <th>Gene</th>
                   <th>IUPHAR</th>
                   <th>Rec. family</th>
                   <th>Class</th>

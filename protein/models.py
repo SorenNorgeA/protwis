@@ -227,7 +227,7 @@ class IdentifiedSites(models.Model):
     residues = models.ManyToManyField('residue.Residue', related_name='site_residue')
 
 class Site(models.Model):
-    slug = models.CharField(max_length=20)
+    slug = models.CharField(max_length=30)
     name = models.CharField(max_length=30)
 
 

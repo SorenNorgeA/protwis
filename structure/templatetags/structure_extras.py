@@ -196,3 +196,49 @@ def receptor_short ( objs ):
     if not objs.startswith('mGlu'):
         objs = objs[0].upper()+objs[1:]
     return objs.replace(" receptor","").replace("-adrenoceptor","")
+
+
+@register.filter
+def br_after_class_code ( objs ):
+    objs = objs.strip()
+    m = re.match("^([A-Z][0-9]?)\s(\(.+\))", objs)
+    if m:
+        return m.group(1) + "<br/>" + m.group(2)
+    else:
+        return objs
+
+@register.filter(name='times')
+def times(number):
+    return range(number)
+
+@register.filter(name='class_code_to_name')
+def class_code_to_name(class_code):
+    class_names = {
+        "A": "Class A (Rhodopsin)",
+        "B1": "Class B1 (Secretin)",
+        "B2": "Class B2 (Adhesion)",
+        "C": "Class C (Glutamate)",
+        "D1": "Class D1 (Ste2-like fungal pheromone)",
+        "F": "Class F (Frizzled)",
+        "O1": "Class O1 (Fish-like olfactory)",
+        "O2": "Class O2 (Tetrapod specific olfactory)",
+        "T2": "Class T2 (Taste 2)",
+        "O": "Class U (Unclassified)"
+    }
+    return class_names.get(class_code, "Invalid class code")
+
+@register.filter(name='format_class_header')
+def format_class_header(class_code):
+    class_names = {
+        "Class A (Rhodopsin)": "Class A<br>(Rhodopsin)",
+        "Class B1 (Secretin)": "Class B1<br>(Secretin)",
+        "Class B2 (Adhesion)": "Class B2<br>(Adhesion)",
+        "Class C (Glutamate)": "Class C<br>(Glutamate)",
+        "Class D1 (Ste2-like fungal pheromone)": "Class D1<br>(Ste2-like fungal pheromone)",
+        "Class F (Frizzled)": "Class F<br>(Frizzled)",
+        "Class O1 (fish-like odorant)": "Class O1<br>(Fish-like olfactory)",
+        "Class O2 (tetrapod specific odorant)": "Class O2<br>(Tetrapod specific olfactory)",
+        "Class T2 (Taste 2)": "Class T2<br>(Taste&nbsp;2)",
+        "Other GPCRs": "Class U<br>(Unclassified)"
+    }
+    return class_names.get(class_code, class_code)

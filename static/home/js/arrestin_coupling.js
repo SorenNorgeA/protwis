@@ -56,7 +56,7 @@ $(document).ready(function() {
     aaSorting: [],
     order: [
       [2, "asc"],
-      [4, "asc"]
+      [5, "asc"]
     ],
     autoWidth: true,
     bInfo: true,
@@ -74,11 +74,12 @@ $(document).ready(function() {
   column_filters = column_filters.concat(createYADCFfilters(3, 1, "multi_select", "select2", "", false, null, null, "200px"));
   column_filters = column_filters.concat(createYADCFfilters(4, 1, "multi_select", "select2", "", false, "exact", "html", "80px"));
   column_filters = column_filters.concat(createYADCFfilters(5, 1, "multi_select", "select2", "", false, "exact", "html", "80px"));
+  column_filters = column_filters.concat(createYADCFfilters(6, 1, "multi_select", "select2", "", false, "exact", "html", "80px"));
   // Ligands section
-  column_filters = column_filters.concat(createYADCFfilters(6, 1, "multi_select", "select2", "", false, "exact", "html", "200px"));
-  column_filters = column_filters.concat(createYADCFfilters(7, 1, "multi_select", "select2", "", false, null, null, "50px"));
+  column_filters = column_filters.concat(createYADCFfilters(7, 1, "multi_select", "select2", "", false, "exact", "html", "200px"));
+  column_filters = column_filters.concat(createYADCFfilters(8, 1, "multi_select", "select2", "", false, null, null, "50px"));
   // Coupling data filters
-  column_filters = column_filters.concat(createYADCFfilters(8, 9, "range_number", null, ["Min", "Max"], false, null, null, "40px", null, "-"));
+  column_filters = column_filters.concat(createYADCFfilters(9, 9, "range_number", null, ["Min", "Max"], false, null, null, "40px", null, "-"));
   // column_filters = column_filters.concat(make_rank_col_filters(8, 19, "hide_ranksub", rankedRangeFiltert1));
   // Hidden GPCRdb support type column calls customized function
   // column_filters = column_filters.concat([

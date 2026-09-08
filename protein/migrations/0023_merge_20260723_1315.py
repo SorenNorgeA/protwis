@@ -8,6 +8,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ('protein', '0021_protein_family_classification'),
         ('protein', '0022_auto_20260310_1709'),
+        ('protein', '0023_auto_20260830_0735'),
     ]
 
     operations = [

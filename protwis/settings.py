@@ -58,6 +58,7 @@ INSTALLED_APPS = (
     'hotspots',
     'classification',
     'django_rdkit',
+    'table_provider',
 )
 
 MIDDLEWARE = (

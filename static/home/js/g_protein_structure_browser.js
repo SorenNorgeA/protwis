@@ -76,6 +76,116 @@ function gproteinstructurebrowser(effector) {
 
     let column_filters = [];
     var oTable2;
+
+    ////////////////////////////
+    //// Column definitions ////
+    ////////////////////////////
+
+    ///// Filter Types /////
+
+    //Initialisation of basic defaults for a null filter column
+    const base_defaults = {
+        filter_type: "none",
+        select_type: null,
+        filter_default_label: "",
+        filter_reset_button_text: false,
+        filter_match_mode: null,
+        column_data_type: null,
+        width: null
+    }
+
+    //defaults for a free text type filter
+    const text_defaults = {
+        ...base_defaults,
+        filter_type: "text",
+        column_data_type: "text",
+        select_type:"select2",
+    }
+
+    //defaults for a multi-select select type filter
+    const multiselect_defaults = {
+        ...base_defaults,
+        filter_type: "multi_select",
+        select_type:"select2",
+        column_data_type: "text",
+        filter_match_mode: "exact",
+    }
+
+    //defaults for a number range type filter
+    const range_number_defaults = {
+        ...base_defaults,
+        filter_type: "range_number",
+        filter_default_label: ['Min', 'Max'],
+    }
+
+    /// Table Column Definitions ///
+
+    //column definitions for g-protein browser
+    const gprotein_coldefs = {
+        selector                     : { column_number: 0, ...base_defaults, },
+        gprotein_family              : { column_number: 1, ...multiselect_defaults, filter_default_label: "Fam.", width: "50px" },
+        gprotein_alpha               : { column_number: 2, ...multiselect_defaults, filter_default_label: "&alpha", column_data_type: "html", width: "40px" },
+        gprotein_alpha_species       : { column_number: 3, ...multiselect_defaults, filter_default_label: "Species", width: "55px" },
+        gprotein_note                : { column_number: 4, ...multiselect_defaults, filter_default_label: "Note", width: "80px" },
+        gprotein_percent_of_sequence : { column_number: 5, ...range_number_defaults, width: "30px" },
+        gprotein_beta                : { column_number: 6, ...multiselect_defaults, filter_default_label: "&beta", width: "40px" },
+        gprotein_beta_species        : { column_number: 7, ...multiselect_defaults, filter_default_label: "Species", width: "55px" },
+        gprotein_gamma               : { column_number: 8, ...multiselect_defaults, filter_default_label: "&gamma", width: "40px" },
+        gprotein_gamma_species       : { column_number: 9, ...multiselect_defaults, filter_default_label: "Species", width: "55px" },
+        structure_method             : { column_number: 10, ...multiselect_defaults, filter_default_label: "Method", width: "60px" },
+        structure_pdb                : { column_number: 11, ...multiselect_defaults, filter_default_label: "PDB", column_data_type: "html", width: "50px" },
+        structure_refined_structure  : { column_number: 12, ...multiselect_defaults, filter_default_label: "Refined", column_data_type: "html", width: "50px" },
+        structure_resolution         : { column_number: 13, ...range_number_defaults, width: "30px" },
+        receptor_uniprot             : { column_number: 14, ...multiselect_defaults, filter_default_label: "UniProt", column_data_type: "html", width: "60px" },
+        receptor_gene                : { column_number: 15, ...multiselect_defaults, filter_default_label: "Gene", column_data_type: "html", width: "60px" },
+        receptor_iuphar              : { column_number: 16, ...multiselect_defaults, filter_default_label: "IUPHAR", column_data_type: "html", width: "60px" },
+        receptor_family	             : { column_number: 17, ...multiselect_defaults, filter_default_label: "Receptor family", column_data_type: "html", width: "120px" },
+        receptor_class               : { column_number: 18, ...multiselect_defaults, filter_default_label: "Class", column_data_type: "html", width: "80px" },
+        receptor_species             : { column_number: 19, ...multiselect_defaults, filter_default_label: "Species", width: "55px" },
+        otherproteins_receptor_fusion: { column_number: 20, ...text_defaults, filter_default_label: "Receptor fusion", width: "100px" },
+        otherproteins_antibodies     : { column_number: 21, ...text_defaults, filter_default_label: "Antibodies", width: "100px" },
+        otherproteins_other          : { column_number: 22, ...text_defaults, filter_default_label: "Other", width: "100px" },
+        structurelig_name            : { column_number: 23, ...text_defaults, filter_default_label: "Ligand name", width: "100px" },
+        structurelig_type            : { column_number: 24, ...multiselect_defaults, filter_default_label: "Ligand type", width: "100px" },
+        structurelig_function        : { column_number: 25, ...multiselect_defaults, filter_default_label: "Modality", width: "100px" },
+        physligand_name              : { column_number: 26, ...multiselect_defaults, filter_default_label: "Ligand name", width: "100px" },
+        physligand_type              : { column_number: 27, ...multiselect_defaults, filter_default_label: "Ligand type", width: "100px" },
+        reference_authors            : { column_number: 28, ...multiselect_defaults, filter_default_label: "Last author", width: "100px" },
+        reference_reference          : { column_number: 29, ...base_defaults, filter_default_label: "Reference", width: "140px" },
+        reference_pdb_date           : { column_number: 30, ...base_defaults, filter_type: "range_date", filter_default_label: ["Min","Max"], width: "30px" },
+        protein_id_hidden            : { column_number: 31, ...base_defaults}
+    };
+
+        //column definitions for arrestin browser
+    const arrestin_coldefs = {
+        selector                     : { column_number: 0, ...base_defaults, },
+        structure_pdb                : { column_number: 1, ...multiselect_defaults, filter_default_label: "PDB", column_data_type: 'html', width: null },
+        structure_method             : { column_number: 2, ...multiselect_defaults, filter_default_label: "Method", width: "60px" },
+        structure_resolution         : { column_number: 3, ...range_number_defaults, width: "30px" },
+        receptor_uniprot             : { column_number: 4, ...multiselect_defaults, filter_default_label: "UniProt", width: "60px" },
+        receptor_gene                : { column_number: 5, ...multiselect_defaults, filter_default_label: "Gene", column_data_type: "html", width: "60px" },
+        receptor_iuphar              : { column_number: 6, ...multiselect_defaults, filter_default_label: "IUPHAR", column_data_type: "html",           width: "60px" },
+        receptor_family              : { column_number: 7, ...multiselect_defaults, filter_default_label: "Receptor family", column_data_type: "html", width: "120px" },
+        receptor_class               : { column_number: 8, ...multiselect_defaults, filter_default_label: "Class", column_data_type: "html", width: "80px" },
+        receptor_species             : { column_number: 9, ...multiselect_defaults, filter_default_label: "Species", column_data_type: null, width: "55px" },
+        arrestin_family              : { column_number: 10, ...multiselect_defaults, filter_default_label: "Fam.", width: "50px" },
+        arrestin_arrestin            : { column_number: 11, ...multiselect_defaults, filter_default_label: "Arrestin", column_data_type: "html", width: "40px" },
+        arrestin_species             : { column_number: 12, ...multiselect_defaults, filter_default_label: "Species", width: "55px" },
+        arrestin_note                : { column_number: 13, ...multiselect_defaults, filter_default_label: "Note", width: "80px" },
+        arrestin_percentseq          : { column_number: 14, ...range_number_defaults, width: "30px" },
+        otherproteins_receptor_fusion: { column_number: 15, ...text_defaults, filter_default_label: "Receptor fusion", width: "100px" },
+        otherproteins_antibodies     : { column_number: 16, ...text_defaults, filter_default_label: "Antibodies", width: "100px" },
+        otherproteins_other          : { column_number: 17, ...text_defaults, filter_default_label: "Other", width: "100px" },
+        structurelig_name            : { column_number: 18, ...text_defaults, filter_default_label: "Ligand name", width: "100px" },
+        structurelig_type            : { column_number: 19, ...multiselect_defaults, filter_default_label: "Ligand type", width: "100px" },
+        structurelig_function        : { column_number: 20, ...multiselect_defaults, filter_default_label: "Modality", width: "100px" },
+        reference_authors            : { column_number: 21, ...multiselect_defaults, filter_default_label: "Last author", width: "100px" },
+        reference_reference          : { column_number: 22, ...multiselect_defaults, filter_default_label: "Reference", width: "140px" },
+        reference_pdb_date           : { column_number: 23, ...base_defaults, filter_type: "range_date", filter_default_label: ["Min", "Max"], width: "30px" },
+        protein_id_hidden            : { column_number: 24, ...base_defaults}
+    };
+
+    let use_defs = null;
     if (effector === "gprot"){
       oTable2 = $("#structures_scrollable").DataTable({
           "scrollY":        "65vh",
@@ -83,51 +193,21 @@ function gproteinstructurebrowser(effector) {
           "scrollCollapse": true,
           "scroller": true,
           "paging":         true,
-          "pageLength":     100, 
+          "pageLength":     100,
           // "bSortCellsTop": true,
           "aaSorting": [],
           "autoWidth": false,
-          "order": [[29,"desc"],[1,"asc"]],
+          "order": [[gprotein_coldefs.reference_pdb_date.column_number,"desc"],[gprotein_coldefs.receptor_family.column_number,"asc"]],
           "columnDefs": [
               { "targets": "no-sort", "orderable": false },
-              { "targets": -1, "visible": false, "searchable": false } // hidden protein id
+              { "targets": gprotein_coldefs.protein_id_hidden.column_number, "visible": false, "searchable": false } // hidden protein id
               ],
-          "columns": buildColumnsFromDOM("#structures_scrollable", {23: {"width": "20%"}}),
+          "columns": buildColumnsFromDOM("#structures_scrollable", {[gprotein_coldefs.reference_pdb_date.column_number]: {"width": "20%"}}),
           "bInfo" : true,
       });
 
-      // Selector column
-      // Arg list: createYADCFfilters(start_column, num_cols, filter_type, select_type*, filter_default_label*, filter_reset_button_text*, filter_match_mode*, column_data_type*, width*)
-      column_filters = column_filters.concat(createYADCFfilters(0, 1, "none"));
-      // Receptor section
-      column_filters = column_filters.concat(createYADCFfilters(1, 1, "multi_select", "select2", "Fam.", false, "exact", null, "50px"));
-      column_filters = column_filters.concat(createYADCFfilters(2, 1, "multi_select", "select2", "&alpha", false, "exact", "html", "40px"));
-      column_filters = column_filters.concat(createYADCFfilters(3, 1, "multi_select", "select2", "Species", false, null, null, "55px"));
-      column_filters = column_filters.concat(createYADCFfilters(3, 1, "multi_select", "select2", "Note", false, null, null, "80px"));
-      column_filters = column_filters.concat(createYADCFfilters(5, 1, "range_number", null, ["Min", "Max"], false, null, null, "30px"));
-      column_filters = column_filters.concat(createYADCFfilters(6, 1, "multi_select", "select2", "&beta", false, "exact", "html", "40px"));
-      column_filters = column_filters.concat(createYADCFfilters(7, 1, "multi_select", "select2", "Species", false, null, null, "55px"));
-      column_filters = column_filters.concat(createYADCFfilters(8, 1, "multi_select", "select2", "&gamma", false, "exact", "html", "40px"));
-      column_filters = column_filters.concat(createYADCFfilters(9, 1, "multi_select", "select2", "Species", false, null, null, "55px"));
-      column_filters = column_filters.concat(createYADCFfilters(10, 1, "multi_select", "select2", "Method", false, null, null, "60px"));
-      column_filters = column_filters.concat(createYADCFfilters(11, 2, "multi_select", "select2", "", false, null, "html", "50px"));
-      column_filters = column_filters.concat(createYADCFfilters(13, 1, "range_number", null, ["Min", "Max"], false, null, null, "30px"));
-      column_filters = column_filters.concat(createYADCFfilters(14, 1, "multi_select", "select2", "UniProt", false, "exact", "html", "60px"));
-      column_filters = column_filters.concat(createYADCFfilters(15, 1, "multi_select", "select2", "IUPHAR", false, "exact", "html", "60px"));
-      column_filters = column_filters.concat(createYADCFfilters(16, 1, "multi_select", "select2", "Receptor family", false, "exact", "html", "120px"));
-      column_filters = column_filters.concat(createYADCFfilters(17, 1, "multi_select", "select2", "Class", false, "exact", "html", "80px"));
-      column_filters = column_filters.concat(createYADCFfilters(18, 1, "multi_select", "select2", "Species", false, "exact", null, "55px"));
-      column_filters = column_filters.concat(createYADCFfilters(19, 1, "text", "select2", "Receptor fusion", false, null, null, "100px"));
-      column_filters = column_filters.concat(createYADCFfilters(20, 1, "text", "select2", "Antibodies", false, null, null, "100px"));
-      column_filters = column_filters.concat(createYADCFfilters(21, 1, "text", "select2", "Other", false, null, null, "100px"));
-      column_filters = column_filters.concat(createYADCFfilters(22, 1, "text", "select2", "Ligand name", false, null, null, "100px"));
-      column_filters = column_filters.concat(createYADCFfilters(23, 1, "multi_select", "select2", "Ligand type", false, null, null, "100px"));
-      column_filters = column_filters.concat(createYADCFfilters(24, 1, "multi_select", "select2", "Modality", false, "exact", null, "100px"));
-      column_filters = column_filters.concat(createYADCFfilters(25, 1, "multi_select", "select2", "Ligand name", false, null, null, "100px"));
-      column_filters = column_filters.concat(createYADCFfilters(26, 1, "multi_select", "select2", "Ligand type", false, null, null, "100px"));
-      column_filters = column_filters.concat(createYADCFfilters(27, 1, "multi_select", "select2", "Last author", false, null, null, "100px"));
-      column_filters = column_filters.concat(createYADCFfilters(28, 1, "multi_select", "select2", "Reference", false, null, null, "140px"));
-      column_filters = column_filters.concat(createYADCFfilters(29, 1, "range_date", null, ["Min", "Max"], false, null, null, "30px"));
+      use_defs = gprotein_coldefs;
+
     } else {
       // Arrestin browser has historically drifted between header and body column counts.
       // Normalize header to body BEFORE DataTables init to avoid '_DT_CellIndex' crashes.
@@ -142,48 +222,35 @@ function gproteinstructurebrowser(effector) {
           "aaSorting": [],
           "autoWidth": false,
           // Arrestin browser columns:
-          // 0 checkbox, 1 PDB, 2 Method, 3 Resolution, ... , 22 PDB Date, 23 hidden protein id
-          "order": [[22,"desc"],[9,"asc"]],
+          "order": [[arrestin_coldefs.reference_pdb_date.column_number,"desc"],[arrestin_coldefs.receptor_species.column_number,"asc"]],
           "columnDefs": [
               { "targets": "no-sort", "orderable": false },
-              { "targets": -1, "visible": false, "searchable": false } // hidden protein id
+              { "targets": arrestin_coldefs.protein_id_hidden.column_number, "visible": false, "searchable": false } // hidden protein id
               ],
           // Prefer body-derived column count to avoid header drift breaking initialization
           "columns": arrestinBodyCols ? new Array(arrestinBodyCols).fill(null) : buildColumnsFromDOM("#structures_scrollable"),
           "bInfo" : true,
       });
-      // Selector column
-      // Arg list: createYADCFfilters(start_column, num_cols, filter_type, select_type*, filter_default_label*, filter_reset_button_text*, filter_match_mode*, column_data_type*, width*)
-      column_filters = column_filters.concat(createYADCFfilters(0, 1, "none"));
-      // Structure Block
-      column_filters = column_filters.concat(createYADCFfilters(1, 1, "multi_select", "select2", "PDB", false, null, 'html'));
-      column_filters = column_filters.concat(createYADCFfilters(2, 1, "multi_select", "select2", "Method", false, null, null, "60px"));
-      column_filters = column_filters.concat(createYADCFfilters(3, 1, "range_number", null, ["Min", "Max"], false, null, null, "30px"));
-      // Receptor Block
-      column_filters = column_filters.concat(createYADCFfilters(4, 1, "multi_select", "select2", "UniProt", false, "exact", "html", "60px"));
-      column_filters = column_filters.concat(createYADCFfilters(5, 1, "multi_select", "select2", "IUPHAR", false, "exact", "html", "60px"));
-      column_filters = column_filters.concat(createYADCFfilters(6, 1, "multi_select", "select2", "Receptor family", false, "exact", "html", "120px"));
-      column_filters = column_filters.concat(createYADCFfilters(7, 1, "multi_select", "select2", "Class", false, "exact", "html", "80px"));
-      column_filters = column_filters.concat(createYADCFfilters(8, 1, "multi_select", "select2", "Species", false, "exact", null, "55px"));
-      // Arrestin block
-      column_filters = column_filters.concat(createYADCFfilters(9, 1, "multi_select", "select2", "Fam.", false, "exact", null, "50px"));
-      column_filters = column_filters.concat(createYADCFfilters(10, 1, "multi_select", "select2", "Arrestin", false, "exact", "html", "40px"));
-      column_filters = column_filters.concat(createYADCFfilters(11, 1, "multi_select", "select2", "Species", false, null, null, "55px"));
-      column_filters = column_filters.concat(createYADCFfilters(12, 1, "multi_select", "select2", "Note", false, null, null, "80px"));
-      column_filters = column_filters.concat(createYADCFfilters(13, 1, "range_number", null, ["Min", "Max"], false, null, null, "30px"));
-      // Other proteins block
-      column_filters = column_filters.concat(createYADCFfilters(14, 1, "text", "select2", "Receptor fusion", false, null, null, "100px"));
-      column_filters = column_filters.concat(createYADCFfilters(15, 1, "text", "select2", "Antibodies", false, null, null, "100px"));
-      column_filters = column_filters.concat(createYADCFfilters(16, 1, "text", "select2", "Other", false, null, null, "100px"));
-      column_filters = column_filters.concat(createYADCFfilters(17, 1, "text", "select2", "Ligand name", false, null, null, "100px"));
-      column_filters = column_filters.concat(createYADCFfilters(18, 1, "multi_select", "select2", "Ligand type", false, null, null, "100px"));
-      column_filters = column_filters.concat(createYADCFfilters(19, 1, "multi_select", "select2", "Modality", false, "exact", null, "100px"));
-      // column_filters = column_filters.concat(createYADCFfilters(21, 1, "multi_select", "select2", "Ligand name", false, null, null, "100px"));
-      // column_filters = column_filters.concat(createYADCFfilters(22, 1, "multi_select", "select2", "Ligand type", false, null, null, "100px"));
-      column_filters = column_filters.concat(createYADCFfilters(20, 1, "multi_select", "select2", "Last author", false, null, null, "100px"));
-      column_filters = column_filters.concat(createYADCFfilters(21, 1, "multi_select", "select2", "Reference", false, null, null, "140px"));
-      column_filters = column_filters.concat(createYADCFfilters(22, 1, "range_date", null, ["Min", "Max"], false, null, null, "30px"));
-  }
+      use_defs = arrestin_coldefs;
+    }
+
+    //Create filters from column definition objects above, and add to table
+    for (let col_def of Object.values(use_defs)) {
+        column_filters = column_filters.concat(
+            createYADCFfilters(col_def.column_number,
+                1, //columns spanned
+                col_def.filter_type,
+                col_def.select_type,
+                col_def.filter_default_label,
+                col_def.filter_reset_button_text,
+                col_def.filter_match_mode,
+                col_def.column_data_type,
+                col_def.width));
+    }
+
+    //Javascript object properties are not necessarily internally ordered, so re-sort to numeric column order for consistency
+    column_filters.sort( (a, b) => a.column_number - b.column_number );
+
     yadcf.init(oTable2, column_filters, {
       cumulative_filtering: false
     });
@@ -314,8 +381,12 @@ function gproteinstructurebrowser(effector) {
     });
 
     $("#superpose_btn").click(function() {
-        // superposition(oTable2, [1,2,11,14,15,16,17,18,29], "g_protein_structure_browser", "gprot", 11);
-        superposition(oTable2, [1,2,11,14,15,16,17,18,29], "g_protein_structure_browser", "gprot", 11);
+        const required_cols = ["gprotein_family", "gprotein_alpha", "structure_pdb", "receptor_uniprot", "receptor_gene",
+            "receptor_iuphar", "receptor_family", "receptor_class",
+            "receptor_species", "reference_pdb_date"].map(function(col) {
+                return gprotein_coldefs[col].column_number;
+            });
+        superposition(oTable2, required_cols, "g_protein_structure_browser", "gprot", gprotein_coldefs.structure_pdb.column_number);
     });
 
     $('#superpose_template_btn').click(function () {
