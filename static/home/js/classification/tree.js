@@ -372,7 +372,7 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
         })
         .style("font-family", function(d) {
             // Custom font family - can be modified here
-            return options.fontFamily || "Palatino";
+            return options.fontFamily || "'Palatino Linotype', Georgia, 'Times New Roman', serif";
         })
         .style("fill", function (d) {
             if (d.color) { return "#111"; }
@@ -402,9 +402,9 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
                 .attr("transform", tr || null)
                 .attr("x", bb.x - pad.x)
                 // Some fonts render slightly "high" relative to the bbox; allow tiny manual nudge.
-                .attr("y", bb.y - pad.y + (options.labelBoxDy || 0))
+                .attr("y", bb.y - pad.y + (options.labelBoxDy || 0) + (options.labelBoxTopTrim || 0))
                 .attr("width", bb.width + pad.x * 2)
-                .attr("height", bb.height + pad.y * 2)
+                .attr("height", bb.height + pad.y * 2 - (options.labelBoxTopTrim || 0) - (options.labelBoxBottomTrim || 0))
                 .attr("rx", 10)
                 .attr("ry", 10)
                 .style("fill", "#FFF")
@@ -418,6 +418,12 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
         const leafPadX = (options.leafBoxPadX !== undefined) ? options.leafBoxPadX : 4;
         const leafPadY = (options.leafBoxPadY !== undefined) ? options.leafBoxPadY : 2;
         const leafDy = (options.leafBoxDy !== undefined) ? options.leafBoxDy : 0;
+        // getBBox() height is driven by the font's full ascent+descent metric, not the actual
+        // ink height of these (mostly ascender-free, uppercase/digit) labels, so most of a leaf
+        // pill's "extra" height sits above the glyphs. Trim it off the top only, keeping the
+        // bottom edge (and its padding) exactly where it was.
+        const leafTopTrim = (options.leafBoxTopTrim !== undefined) ? options.leafBoxTopTrim : 0;
+        const leafBottomTrim = (options.leafBoxBottomTrim !== undefined) ? options.leafBoxBottomTrim : 0;
         const leafRx = (options.leafBoxRx !== undefined) ? options.leafBoxRx : 4;
         const leafStrokeW = (options.leafBoxStrokeWidth !== undefined) ? options.leafBoxStrokeWidth : 1;
         const leafStrokeMode = (options.leafBoxStrokeColorMode !== undefined) ? options.leafBoxStrokeColorMode : "chemotype"; // "chemotype" | "black"
@@ -434,9 +440,9 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
                 g.insert("rect", "text")
                     .attr("transform", tr || null)
                     .attr("x", bb.x - leafPadX)
-                    .attr("y", bb.y - leafPadY + leafDy)
+                    .attr("y", bb.y - leafPadY + leafDy + leafTopTrim)
                     .attr("width", bb.width + leafPadX * 2)
-                    .attr("height", bb.height + leafPadY * 2)
+                    .attr("height", bb.height + leafPadY * 2 - leafTopTrim - leafBottomTrim)
                     .attr("rx", leafRx)
                     .attr("ry", leafRx)
                     .style("fill", "#fff")
@@ -498,7 +504,7 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
     function custom_string_pixlen(text, depth, options) {
         var canvas = document.createElement('canvas');
         var ctx = canvas.getContext("2d");
-        var fontFamily = options.fontFamily || "Palatino";
+        var fontFamily = options.fontFamily || "'Palatino Linotype', Georgia, 'Times New Roman', serif";
 
         if (options.depth === 4) {
             if (depth === 1) {
@@ -764,7 +770,7 @@ function custom_draw_dendrogram_curved(data, options, stacked_meta, centerLabel)
             }
         })
         .style("font-family", function(d) {
-            return options.fontFamily || "Palatino";
+            return options.fontFamily || "'Palatino Linotype', Georgia, 'Times New Roman', serif";
         })
         .style("fill", function (d) {
             if (d.color) { return "#111"; }
@@ -792,9 +798,9 @@ function custom_draw_dendrogram_curved(data, options, stacked_meta, centerLabel)
             g.insert("rect", "text")
                 .attr("transform", tr || null)
                 .attr("x", bb.x - pad.x)
-                .attr("y", bb.y - pad.y + (options.labelBoxDy || 0))
+                .attr("y", bb.y - pad.y + (options.labelBoxDy || 0) + (options.labelBoxTopTrim || 0))
                 .attr("width", bb.width + pad.x * 2)
-                .attr("height", bb.height + pad.y * 2)
+                .attr("height", bb.height + pad.y * 2 - (options.labelBoxTopTrim || 0) - (options.labelBoxBottomTrim || 0))
                 .attr("rx", 10)
                 .attr("ry", 10)
                 .style("fill", "#FFF")
@@ -807,6 +813,12 @@ function custom_draw_dendrogram_curved(data, options, stacked_meta, centerLabel)
         const leafPadX = (options.leafBoxPadX !== undefined) ? options.leafBoxPadX : 4;
         const leafPadY = (options.leafBoxPadY !== undefined) ? options.leafBoxPadY : 2;
         const leafDy = (options.leafBoxDy !== undefined) ? options.leafBoxDy : 0;
+        // getBBox() height is driven by the font's full ascent+descent metric, not the actual
+        // ink height of these (mostly ascender-free, uppercase/digit) labels, so most of a leaf
+        // pill's "extra" height sits above the glyphs. Trim it off the top only, keeping the
+        // bottom edge (and its padding) exactly where it was.
+        const leafTopTrim = (options.leafBoxTopTrim !== undefined) ? options.leafBoxTopTrim : 0;
+        const leafBottomTrim = (options.leafBoxBottomTrim !== undefined) ? options.leafBoxBottomTrim : 0;
         const leafRx = (options.leafBoxRx !== undefined) ? options.leafBoxRx : 4;
         const leafStrokeW = (options.leafBoxStrokeWidth !== undefined) ? options.leafBoxStrokeWidth : 1;
         const leafStrokeMode = (options.leafBoxStrokeColorMode !== undefined) ? options.leafBoxStrokeColorMode : "chemotype";
@@ -823,9 +835,9 @@ function custom_draw_dendrogram_curved(data, options, stacked_meta, centerLabel)
                 g.insert("rect", "text")
                     .attr("transform", tr || null)
                     .attr("x", bb.x - leafPadX)
-                    .attr("y", bb.y - leafPadY + leafDy)
+                    .attr("y", bb.y - leafPadY + leafDy + leafTopTrim)
                     .attr("width", bb.width + leafPadX * 2)
-                    .attr("height", bb.height + leafPadY * 2)
+                    .attr("height", bb.height + leafPadY * 2 - leafTopTrim - leafBottomTrim)
                     .attr("rx", leafRx)
                     .attr("ry", leafRx)
                     .style("fill", "#fff")
@@ -1161,7 +1173,7 @@ function custom_draw_dendrogram_straight(data, options, stacked_meta, centerLabe
             }
         })
         .style("font-family", function(d) {
-            return options.fontFamily || "Palatino";
+            return options.fontFamily || "'Palatino Linotype', Georgia, 'Times New Roman', serif";
         })
         .style("fill", function (d) {
             if (d.color) { return "#111"; }
@@ -1189,9 +1201,9 @@ function custom_draw_dendrogram_straight(data, options, stacked_meta, centerLabe
             g.insert("rect", "text")
                 .attr("transform", tr || null)
                 .attr("x", bb.x - pad.x)
-                .attr("y", bb.y - pad.y + (options.labelBoxDy || 0))
+                .attr("y", bb.y - pad.y + (options.labelBoxDy || 0) + (options.labelBoxTopTrim || 0))
                 .attr("width", bb.width + pad.x * 2)
-                .attr("height", bb.height + pad.y * 2)
+                .attr("height", bb.height + pad.y * 2 - (options.labelBoxTopTrim || 0) - (options.labelBoxBottomTrim || 0))
                 .attr("rx", 10)
                 .attr("ry", 10)
                 .style("fill", "#FFF")
@@ -1204,6 +1216,12 @@ function custom_draw_dendrogram_straight(data, options, stacked_meta, centerLabe
         const leafPadX = (options.leafBoxPadX !== undefined) ? options.leafBoxPadX : 4;
         const leafPadY = (options.leafBoxPadY !== undefined) ? options.leafBoxPadY : 2;
         const leafDy = (options.leafBoxDy !== undefined) ? options.leafBoxDy : 0;
+        // getBBox() height is driven by the font's full ascent+descent metric, not the actual
+        // ink height of these (mostly ascender-free, uppercase/digit) labels, so most of a leaf
+        // pill's "extra" height sits above the glyphs. Trim it off the top only, keeping the
+        // bottom edge (and its padding) exactly where it was.
+        const leafTopTrim = (options.leafBoxTopTrim !== undefined) ? options.leafBoxTopTrim : 0;
+        const leafBottomTrim = (options.leafBoxBottomTrim !== undefined) ? options.leafBoxBottomTrim : 0;
         const leafRx = (options.leafBoxRx !== undefined) ? options.leafBoxRx : 4;
         const leafStrokeW = (options.leafBoxStrokeWidth !== undefined) ? options.leafBoxStrokeWidth : 1;
         const leafStrokeMode = (options.leafBoxStrokeColorMode !== undefined) ? options.leafBoxStrokeColorMode : "chemotype";
@@ -1220,9 +1238,9 @@ function custom_draw_dendrogram_straight(data, options, stacked_meta, centerLabe
                 g.insert("rect", "text")
                     .attr("transform", tr || null)
                     .attr("x", bb.x - leafPadX)
-                    .attr("y", bb.y - leafPadY + leafDy)
+                    .attr("y", bb.y - leafPadY + leafDy + leafTopTrim)
                     .attr("width", bb.width + leafPadX * 2)
-                    .attr("height", bb.height + leafPadY * 2)
+                    .attr("height", bb.height + leafPadY * 2 - leafTopTrim - leafBottomTrim)
                     .attr("rx", leafRx)
                     .attr("ry", leafRx)
                     .style("fill", "#fff")
@@ -1269,7 +1287,7 @@ function custom_formatTextWithHTML(text) {
         .replace(" receptor", '')
         .replace("-adrenoceptor", '')
         .replace(" receptor-", '-')
-        .replace("<sub>", '</tspan><tspan baseline-shift="-0.25em" font-size="70%">')
+        .replace("<sub>", '</tspan><tspan baseline-shift="-0.18em" font-size="70%">')
         .replace("</sub>", '</tspan><tspan>')
         .replace("<i>", '</tspan><tspan font-style="italic">')
         .replace("</i>", '</tspan><tspan>')
@@ -1746,7 +1764,7 @@ function renderOrphanLegendPills(svgId, labels, options) {
     // Measure max text bbox so all pills share the same size.
     const padX = 4;
     const padY = 2;
-    const fontFamily = (options && options.fontFamily) ? options.fontFamily : "Palatino";
+    const fontFamily = (options && options.fontFamily) ? options.fontFamily : "'Palatino Linotype', Georgia, 'Times New Roman', serif";
     const fontSize = (options && options.fontSize && options.fontSize.receptor) ? options.fontSize.receptor : "9px";
 
     let maxW = 0;
@@ -1861,6 +1879,11 @@ function renderCurrent() {
     tree_options.labelBoxPadX = 7;
     tree_options.labelBoxPadY = 1;
     tree_options.labelBoxDy = 0.33;
+    // getBBox() height includes the font's full ascent (room for tall ascenders these labels
+    // mostly don't have), which stacks up as empty space above the text. Trim it off the top
+    // only -- purely a visual constant, expect to retune by eye.
+    tree_options.labelBoxTopTrim = 2;
+    tree_options.labelBoxBottomTrim = 0.5;
     // Modality and class-colored plots should have colored internal pills too.
     tree_options.labelBoxStrokeColorMode = (tree_options.colorMode === "chemotype") ? "chemotype" : "class";
 
@@ -1868,6 +1891,8 @@ function renderCurrent() {
     tree_options.leafBoxPadX = 4;
     tree_options.leafBoxPadY = 0;
     tree_options.leafBoxDy = 0;
+    tree_options.leafBoxTopTrim = 2;
+    tree_options.leafBoxBottomTrim = 0.5;
     tree_options.leafBoxRx = 4;
     tree_options.leafBoxStrokeWidth = 1;
     // Leaf pills should be colored for class-mode plots too.
@@ -1885,7 +1910,12 @@ function renderCurrent() {
 
     tree_options.circleRadii = { chemotype: 40, family: 34, other: 30 };
     tree_options.fontSize = { 'class': "25px", 'ligandtype': "9px", 'receptorfamily': "9px", 'receptor': "9px" };
-    tree_options.fontFamily = 'Palatino';
+    // "Palatino" alone isn't a real font name on Windows (it ships "Palatino Linotype"
+    // instead), so the browser and PowerPoint each independently guess a different
+    // substitute serif font for it -- and getBBox()-sized label pills baked against one
+    // guess don't match the other guess's glyph metrics once reopened elsewhere. Naming a
+    // real, cross-platform-resolvable stack keeps both renderers in agreement.
+    tree_options.fontFamily = "'Palatino Linotype', Georgia, 'Times New Roman', serif";
 
     // Dendrogram-specific options
     // Horizontal compression: < 1.0 brings root closer to leaves (e.g., 0.7 = 70% of original spacing)
