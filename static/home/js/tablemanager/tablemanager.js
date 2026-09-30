@@ -18,11 +18,15 @@ class TableManager {
     columnSpecification,
     tableId, 
     DataTypeFactoryReference,
-    CellStyleFactoryReference
+    CellStyleFactoryReference,
+    eventRegistry
   ) {
     this.dataTypeFactory = DataTypeFactoryReference || new DataTypeFactory();
     this.cellStyleFactory = CellStyleFactoryReference || new CellStyleFactory();
-    
+    this.eventRegistry = eventRegistry || new TableEventRegister();
+    this.eventPubSub = new EventPubSub();
+    this.cache = new FetchCache();
+
     this.columns = this.initialiseColumns(columnSpecification);
     this.tableId = tableId;
     
@@ -95,10 +99,20 @@ class TableManager {
 
     this.dataTableReference = $(`#${this.tableId}`).DataTable(dataTableOptions);
 
-    tableComponents = this.createSecondaryTableStructure(tableComponents);
-
+    tableComponents = this.createSecondaryTableStructure(tableComponents, dataTableOptions);
     this.populateSuperHeaders(tableComponents.superHeaderRow);
-
+    
+    // If the showCategoryCounts option is enabled, create the category count header cells 
+    // and set up an event listener for DataTables search events to update the counts accordingly.
+    if (dataTableOptions.showCategoryCounts) {
+      this.createCategoryCountHeaderCells(tableComponents.categoryCountsHeaderRow);      
+      this.dataTableReference.on("search", (e, settings) => { 
+        this._handleColumnUniqueValueCounts(settings);
+      })
+      //Trigger initial count update after table is initialized and data is loaded
+      this.dataLoadedCallBacks.push(() => { this._handleColumnUniqueValueCounts(this.dataTableReference.settings()[0]); });
+    }
+        
     this.populateFilterHeaders(tableComponents.filterHeaderRow);
 
     //We need to wait until the document is fully loaded before initializing any filter interface plugins (e.g. select2) to ensure the relevant DOM elements are available
@@ -107,6 +121,92 @@ class TableManager {
       this.documentReadyCallBacks.forEach((callBack) => callBack());
     });
 
+  }
+
+  async _handleColumnUniqueValueCounts(settings){
+    let storedCounts = await this.cache.get(settings.aoPreSearchCols)
+    if (this.dataTableReference.settings()[0].oFeatures.bServerSide === true){
+      if (!storedCounts) {
+        let counts = await this._fetchColumnUniqueValueCountsServerSide(settings, this.dataTableReference)
+        // Store counts for this search configurations in the cache this is an aync function 
+        // because of it uses the crypto library for hashing
+        await this.cache.push(settings.aoPreSearchCols, counts) 
+      }
+      this.eventPubSub.publish("CategoryCountRequiresUpdate", settings)        
+      } else {
+        if (!storedCounts) {
+          let counts = this._fetchColumnUniqueValueCountsClientSide(settings, this.dataTableReference)
+          await this.cache.push(settings.aoPreSearchCols, counts)
+        }
+        this.eventPubSub.publish("CategoryCountRequiresUpdate", settings)
+      }
+    }
+  
+  _fetchColumnUniqueValueCountsClientSide(settings, dataTableReference) {
+    const table = dataTableReference
+
+    // Get all rows (base dataset) and filtered rows
+    const baseRows = table.rows().data().toArray()
+    const filteredRows = table.rows({search: 'applied'}).data().toArray()
+
+    // Get column information
+    const columnSettings = table.settings()[0].aoColumns
+
+    // Helper function to count unique values in a column across rows
+    const countUniqueInColumn = (rows, columnInfo) => {
+        const uniqueValues = new Set()
+
+        rows.forEach((rowData) => {
+            let value
+
+            // Handle different data structures: object vs array
+            if (typeof rowData === 'object' && !Array.isArray(rowData)) {
+                value = rowData[columnInfo.data] || rowData[columnInfo.name]
+            } else if (Array.isArray(rowData)) {
+                value = rowData[columnInfo.index] || rowData[columnInfo.columnIndex]
+            }
+
+            // Only count non-empty values
+            if (value !== null && value !== undefined && value !== '') {
+                uniqueValues.add(String(value))
+            }
+        })
+
+        return uniqueValues.size
+    }
+
+    // Calculate unique counts for each column in both base and filtered datasets
+    const uniqueValuesByColumn = {
+        'base': {},
+        'filtered': {}
+    }
+
+    columnSettings.forEach((colInfo) => {
+        const columnName = colInfo.data || colInfo.name || colInfo.title
+
+        if (columnName) {
+            uniqueValuesByColumn.base[columnName] = countUniqueInColumn(baseRows, colInfo)
+            uniqueValuesByColumn.filtered[columnName] = countUniqueInColumn(filteredRows, colInfo)
+        }
+    })
+
+    return uniqueValuesByColumn
+  }
+
+  async _fetchColumnUniqueValueCountsServerSide(dt_settings, dataTableReference) {
+    const dataEndpoint = dataTableReference.ajax.url()
+    
+    let queryString = DataTablesParameterBuilder.buildServerSideParams(dt_settings, 0, 0, 0).queryString
+    
+    const distinctValuesEndpoint = dataEndpoint + "/countdistinct" + "?" + queryString
+    
+    return fetch(distinctValuesEndpoint)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error when fetching options for column ${ColumnJsonId}! Status: ${response.status}`);
+        }
+        return response.json();
+      })
   }
 
 /**
@@ -145,14 +245,22 @@ class TableManager {
   /**
    * Creates the secondary table structure by adding super-headers and filter headers to the table.
    * @param {Object} TableComponents - A dictionary-like object containing references to the table, table header, primary header row, and table body HTML elements.
+   * @param {Object} dataTableOptions - The options for the DataTable.
    * @returns {Object} - The updated table components with secondary structure added.
    */
-  createSecondaryTableStructure(TableComponents) {
+  createSecondaryTableStructure(TableComponents, dataTableOptions) {
     let superHeaderRow = null;
     if (this._hasSuperHeaders()) {
       this.superHeaderRowId = this.tableId + "_superHeaders";
       superHeaderRow = this._createSuperHeaderRow(this.superHeaderRowId);
       TableComponents.tableHead.prepend(superHeaderRow);
+    }
+
+    let categoryCountsHeaderRow = null;
+    if (dataTableOptions.showCategoryCounts) {
+      this.categoryCountHeaderRowId = this.tableId + "_categoryCounts";
+      categoryCountsHeaderRow = this._createCategoryCountHeaderRow(this.categoryCountHeaderRowId);
+      TableComponents.tableHead.append(categoryCountsHeaderRow);
     }
 
     let filterHeaderRow = null;
@@ -165,6 +273,7 @@ class TableManager {
     return {
       ...TableComponents,
       superHeaderRow: superHeaderRow,
+      categoryCountsHeaderRow: categoryCountsHeaderRow,
       filterHeaderRow: filterHeaderRow,
     };
   }
@@ -330,6 +439,65 @@ class TableManager {
     });
   }
 
+  //----------------------/
+  //  Category count row  /
+  //----------------------/
+
+  /**
+   * Creates a category count header row element with the specified ID and returns it.
+   * @param {string} categoryCountHeaderRowId - The ID for the category count header row.
+   * @returns {HTMLElement} The created category count header row element.
+   */
+  _createCategoryCountHeaderRow(categoryCountHeaderRowId) {
+    const categoryCountHeaderRow = document.createElement("tr");
+    categoryCountHeaderRow.id = categoryCountHeaderRowId;
+    return categoryCountHeaderRow;
+  }
+  
+  /**
+   * Populates the category count header row with category count cells.
+   * @param {HTMLElement} categoryCountHeaderRow - The <tr> element representing the category count header row.
+   */
+  createCategoryCountHeaderCells(categoryCountHeaderRow) {
+    this.columns.forEach((col) => {
+      const categoryCountTh = document.createElement("th");
+      categoryCountTh.id = "th_categoryCount_" + col.json_id;
+      categoryCountHeaderRow.append(categoryCountTh);
+
+      // Subscribe an update handler for the cell 
+      // to an event broadcast that will be
+      // triggered by datatables search 
+      this.eventPubSub.subscribe(
+        "CategoryCountRequiresUpdate", 
+        (settings) => { 
+          //Retrieve cached counts for this search configuration and update the cell
+          // Note: this.cache.get is an async function that returns a promise, 
+          // so we need to use .then() to handle the resolved value
+          this.cache.get(settings.aoPreSearchCols).then(           
+              (cachedCounts) => {
+                this._updateCategoryCountCell(cachedCounts, col, categoryCountTh);
+              }
+            )             
+        });
+    });
+  }
+  
+  _updateCategoryCountCell(cachedCounts, col, categoryCountTh) {
+    try
+    {
+      if(cachedCounts['base'][col.json_id])
+      {
+        //Retrieve values cached during datatables search event prior to publishing the CategoryCountRequiresUpdate event
+        let baseCount = cachedCounts['base'][col.json_id]
+        let filterCount = cachedCounts['filtered'][col.json_id]
+        
+        categoryCountTh.textContent = filterCount + "/" + baseCount;
+      }
+    } catch {
+      console.error("Updating unique value counts failed for column:" + col.json_id)
+    } 
+  }
+
   //------------------------------------/
   //  Column specification validation   /
   //------------------------------------/
@@ -431,7 +599,7 @@ class TableManager {
   */
   columnToDataTableColDef(column) {
     const colDef = { data: column.json_id };
-    colDef.render = (data, type, row, meta) => column.dataTableRenderer(data, type, row, meta);
+    colDef.render = (data, type, row, meta) => column.dataTableRenderer(data, type, row, meta, this);
     colDef.createdCell = (cell, cellData, rowData, rowIndex, colIndex) => column.cellFormatting(cell, cellData, rowData, rowIndex, colIndex, this);
     return colDef;
   }
@@ -515,6 +683,180 @@ class TableManager {
       console.error("Error fetching table configuration:", err);
       throw err;
     }
+  }
+}
+
+class TableEventRegister {
+  constructor() {
+    this.eventHandlers = {};
+  }
+
+  registerEventHandler(eventHandlerName, eventHandlerFunction) {
+    this.eventHandlers[eventHandlerName] = eventHandlerFunction;
+  }
+
+  getEventHandler(eventHandlerName) {
+    return this.eventHandlers[eventHandlerName];
+  }
+}
+
+class EventPubSub{
+    constructor(){
+        this.events = {}
+    }
+    
+    // Subscribe to an event with a handler function
+    subscribe(event, handler){
+        if(!this.events[event]){
+            this.events[event] = []
+        }
+        this.events[event].push(handler)
+    }
+    
+    // Unsubscribe from an event with a handler function
+    unsubscribe(event, handler){
+        if(this.events[event]){
+            const index = this.events[event].findIndex(item => item === handler)
+            this.events[event].splice(index, 1);
+        }
+    }
+    
+    // Publish an event with optional data
+    publish(event, data){
+        if(this.events[event]){
+            this.events[event].forEach(handler => handler(data));
+        }
+    }
+}
+
+class FetchCache {
+  constructor() {
+    this.cache = new Map();
+  }
+
+  async get(keyObject) {
+    const key = await this.createHash(keyObject);
+    return this.cache.get(key);
+  }
+
+  async push(keyObject, value) {
+    const key = await this.createHash(keyObject);
+    this.cache.set(key, value);
+  }
+
+  async createHash(object) {
+    const data = JSON.stringify(this.sortKeys(object));
+    const encoded = new TextEncoder().encode(data);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+    return Array.from(new Uint8Array(hashBuffer))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  sortKeys(obj) {
+  if (Array.isArray(obj)) return obj.map(item => this.sortKeys(item));
+  if (obj !== null && typeof obj === 'object') {
+    return Object.keys(obj)
+      .sort()
+      .reduce((result, key) => {
+        result[key] = this.sortKeys(obj[key]);
+        return result;
+      }, {});
+  }
+  return obj;
+}
+
+  clear() {
+    this.cache.clear();
+  }
+}
+
+
+class DataTablesParameterBuilder {
+  /**
+   * Builds server-side processing parameters in DataTables format
+   * @param {Object} settings - DataTables settings object (oSettings or obtained via dataTable.settings())
+   * @param {number} draw - The draw request number
+   * @param {number} start - Pagination: starting row index
+   * @param {number} length - Pagination: number of rows per page
+   * @returns {Object} Object with queryString and params properties
+   */
+  static buildServerSideParams(settings, draw, start, length) {
+    const params = {};
+
+    // Add draw counter
+    params['draw'] = draw;
+
+    // Add pagination
+    params['start'] = start;
+    params['length'] = length;
+
+    // Add global search
+    if (settings.oPreviousSearch && settings.oPreviousSearch.sSearch) {
+      params['search[value]'] = settings.oPreviousSearch.sSearch;
+      params['search[regex]'] = settings.oPreviousSearch.bRegex ? 'true' : 'false';
+    } else {
+      params['search[value]'] = '';
+      params['search[regex]'] = 'false';
+    }
+
+    // Add column definitions and per-column search
+    if (settings.aoColumns) {
+      settings.aoColumns.forEach((column, index) => {
+        // Column metadata
+        params[`columns[${index}][data]`] = column.data || '';
+        params[`columns[${index}][name]`] = column.sName || '';
+        params[`columns[${index}][searchable]`] = column.bSearchable ? 'true' : 'false';
+        params[`columns[${index}][orderable]`] = column.bSortable ? 'true' : 'false';
+
+        // Per-column search (from aoPreSearchCols)
+        const searchCol = settings.aoPreSearchCols && settings.aoPreSearchCols[index]
+          ? settings.aoPreSearchCols[index]
+          : { search: '', regex: false };
+
+        params[`columns[${index}][search][value]`] = searchCol.search || '';
+        params[`columns[${index}][search][regex]`] = searchCol.regex ? 'true' : 'false';
+      });
+    }
+
+    // Add ordering (sort) information
+    if (settings.aaSorting && settings.aaSorting.length > 0) {
+      settings.aaSorting.forEach((sort, index) => {
+        params[`order[${index}][column]`] = sort[0]; // column index
+        params[`order[${index}][dir]`] = sort[1];    // 'asc' or 'desc'
+      });
+    }
+
+    return {
+      params: params,
+      queryString: this.serializeParams(params)
+    };
+  }
+
+  /**
+   * Converts parameter object to URL query string
+   * @param {Object} params - Parameters object
+   * @returns {string} URL-encoded query string (without leading ?)
+   */
+  static serializeParams(params) {
+    return Object.entries(params)
+      .map(([key, value]) => {
+        return `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+      })
+      .join('&');
+  }
+
+  /**
+   * Converts parameter object to URLSearchParams (modern approach)
+   * @param {Object} params - Parameters object
+   * @returns {URLSearchParams} URLSearchParams object
+   */
+  static toURLSearchParams(params) {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      searchParams.append(key, value);
+    });
+    return searchParams;
   }
 }
 

@@ -8,6 +8,9 @@ from rest_framework import generics, views
 from rest_framework.response import Response
 from rest_framework.pagination import LimitOffsetPagination
 
+#Data processing imports
+import pandas as pd
+
 #Table provider imports
 from table_provider.configuration_provider.configuration_factory import ColumnConfigurationFactory, DataTablesConfigurationFactory
 from table_provider.models import GpcrStructureStatisticsTable, PdbTable
@@ -196,6 +199,43 @@ class PdbStructureSummaryTable(generics.ListCreateAPIView):
             return JsonResponse({'error': f'Invalid column requested: {column}'}, status=400)
 
         return JsonResponse(list(queryset), safe=False)
+
+
+    @staticmethod
+    def get_count_distinct_values(request):
+        effector = request.GET.get('effector', 'no_effector')
+        exclude_non_interacting = True if request.GET.get('exclude_non_interacting') == 'true' else False
+
+        queryset_base = PdbTable.objects.all()
+
+        queryset_base = queryset_base.filter(TextFilter('query_effector', effector).format_query())
+        if exclude_non_interacting:
+            queryset_base = queryset_base.filter(BooleanFilter('is_complex', exclude_non_interacting).format_query())
+
+        url_filters = FilterSet(request, PdbStructureSummarySerializer)
+        queryset_filtered = queryset_base
+        for query_filter in url_filters.get_filters():
+            queryset_filtered = queryset_filtered.filter(query_filter.format_query())
+
+        #Helper to map complex/compund columns back to their json/datatable id
+        def reverse_map(column_name):
+            if (column_name in PdbStructureSummarySerializer.Meta.serializer_method_to_filter_field_map.values()):
+                for key, value in PdbStructureSummarySerializer.Meta.serializer_method_to_filter_field_map.items():
+                    if value == column_name: return key
+            return column_name
+
+        # Convert queryset to pandas DataFrame and extract unique values
+        df = pd.DataFrame.from_records(queryset_base.values())
+        unique_values_by_column_base = {reverse_map(column): len(df[column].dropna().unique().tolist()) for column in df.columns}
+        df = pd.DataFrame.from_records(queryset_filtered.values())
+        unique_values_by_column_filtered = {reverse_map(column): len(df[column].dropna().unique().tolist()) for column in df.columns}
+
+        unique_values_by_column = {
+            'base': unique_values_by_column_base,
+            'filtered': unique_values_by_column_filtered
+        }
+
+        return JsonResponse(unique_values_by_column, safe=False)
 
     @staticmethod
     def get_numeric_range(request, column):
