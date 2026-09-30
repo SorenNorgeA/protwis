@@ -3,7 +3,6 @@ from django.urls import path
 from django.views.decorators.cache import cache_page
 from django.views.generic.base import RedirectView
 from signprot.views import CouplingBrowser, CouplingBrowser_deprecated
-from contactnetwork.views import PdbTableData
 
 urlpatterns = [
     path('', RedirectView.as_view(url='gprotein', permanent=False), name='index'),
@@ -28,7 +27,6 @@ urlpatterns = [
     path('matrix/seqsig/', views.IMSequenceSignature, name='SequenceSignature'),
     path('matrix/sigmat/', views.IMSignatureMatch, name='SignatureMatch'),
     path('matrix/render_sigmat/', views.render_IMSigMat, name='renderSignatureMatch'),
-    path('pdbtabledata', PdbTableData, name='pdbtreedata'),
     path('matrix/AJAX_Interactions/<include_non_gns>', views.AJAX_Interactions, name='ajaxInteractions'),
     path('<slug>/', views.signprotdetail, name='signprotdetail'),
     ### LEGACY LINKS ###

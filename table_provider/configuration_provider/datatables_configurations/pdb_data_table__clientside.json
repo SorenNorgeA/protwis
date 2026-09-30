@@ -1,0 +1,20 @@
+{
+  "serverSide": false,
+  "processing": true,
+  "deferRender": true,
+  "scrollX": true,
+  "layout": {
+    "topEnd": null
+  },
+  "fixedColumns": { "left": 1 },
+  "ajax": {
+    "url": "/table_provider/pdb_data_table_cached",
+    "type": "GET",
+    "cache": false,
+    "dataSrc":  "data"
+  },  
+  "search": {
+    "regex": true
+},
+  "lengthMenu": [ [10, 25, 50], [10, 25, 50] ]
+}

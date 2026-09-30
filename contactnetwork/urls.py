@@ -17,7 +17,6 @@ urlpatterns = [
     url(r'^browserdata', views.InteractionBrowserData, name='interactionsbrowserdata'),
     url(r'^state_contacts[/]?$', views.StateContacts, name='statecontacts'),
     url(r'^pdbtreedata', views.PdbTreeData, name='pdbtreedata'),
-    url(r'^pdbtabledata', views.PdbTableData, name='pdbtabledata'),
     url(r'^pdb/(?P<pdbname>\w+)$', views.ServePDB, name='serve_pdb'),
 
 ]

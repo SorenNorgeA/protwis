@@ -142,26 +142,7 @@ def PdbTableDataSource():
     rcs = {}
     for rc in residue_counts:
         rcs[rc['protein__pk']] = rc['res_count']
-
-
-
-## move to Column configuration
-
-##Superheaders            
-#Checkbox
-#Receptor
-#Species
-#Structure
-#Receptor state <a href=\"https://docs.gpcrdb.org/structures.html#structure-descriptors\" target=\"_blank\"><span class=\"glyphicon glyphicon-info-sign\"></span></a></th> 
-#{signalling_header}
-#Auxiliary protein
-#Ligand
-#if effector=='G alpha': signalling_header = 'G protein'
-#if effector=='A': signalling_header = 'Arrestin'
-#signalling_header = 'Signalling protein'
-#signal_protein_note, truncate with long on mouseover
-    
-   
+  
     result_sets = {}
     identity_lookup = {}
     for effector in query_sets_data.keys():

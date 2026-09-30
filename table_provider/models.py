@@ -1,6 +1,5 @@
 from django.db import models
 from django.contrib.postgres.fields import JSONField
-
 class GpcrStructureStatisticsTable(models.Model):
     """Model representing the structure statistics table for GPCRs generated from the data retrieved by GpcrStructureCoverageStatisticsQuery"""
 
@@ -186,33 +185,33 @@ class GpcrStructureBrowserTable(models.Model):
         ]
 
 class PdbTable (models.Model):
-    uniprot_entry_name = models.CharField(max_length=20, null=False)
-    uniprot_accession = models.CharField(max_length=20, null=False)
-    protein_name_short = models.CharField(max_length=100, null=False)
-    receptor_family_short = models.CharField(max_length=100, null=True)
-    receptor_class_code = models.CharField(max_length=100, null=True)
-    gene_name = models.CharField(max_length=100, null=True)
-    gene_entrez_id = models.CharField(max_length=100, null=True)
+    uniprot_entry_name = models.CharField(max_length=30, null=False)
+    uniprot_accession = models.CharField(max_length=10, null=False)
+    protein_name_short = models.CharField(max_length=30, null=False)
+    receptor_family_short = models.CharField(max_length=50, null=True)
+    receptor_class_code = models.CharField(max_length=15, null=True)
+    gene_name = models.CharField(max_length=30, null=True)
+    gene_entrez_id = models.CharField(max_length=20, null=True)
     fraction_of_wt_seq = models.DecimalField(max_digits=5, decimal_places=2, null=True)
     closest_to_human = models.BooleanField(null=False, default=False)
-    species_common_name = models.CharField(max_length=100, null=True)
+    species_common_name = models.CharField(max_length=50, null=True)
     identity_to_human = models.DecimalField(max_digits=5, decimal_places=2, null=True)
-    structure_type = models.CharField(max_length=100, null=True)
-    pdb_id = models.CharField(max_length=10, null=False)
+    structure_type = models.CharField(max_length=20, null=True)
+    pdb_id = models.CharField(max_length=150, null=False)
     resolution = models.DecimalField(max_digits=5, decimal_places=2, null=True)
-    resolution_best = models.BooleanField(null=False, default=True)
-    state = models.CharField(max_length=100, null=True)
+    resolution_best = models.BooleanField(null=True, default=False)
+    state = models.CharField(max_length=30, null=True)
     gprot_bound_likeness = models.DecimalField(max_digits=5, decimal_places=2, null=True)
     tm6_angle = models.DecimalField(max_digits=5, decimal_places=2, null=True)
-    signal_protein = models.CharField(max_length=100, null=True)
-    signal_protein_subtype = models.CharField(max_length=100, null=True)
+    signal_protein = models.CharField(max_length=20, null=True)
+    signal_protein_subtype = models.CharField(max_length=30, null=True)
     signal_protein_note = models.CharField(max_length=100, null=True)
     signal_protein_pcntseq = models.DecimalField(max_digits=5, decimal_places=2, null=True)
     fusion = models.CharField(max_length=100, null=True)
     antibody = models.CharField(max_length=100, null=True)
-    ligand = models.CharField(max_length=100, null=True)
-    ligand_role = models.CharField(max_length=100, null=True)
-    query_effector = models.CharField(max_length=100, null=True)
+    ligand = models.CharField(max_length=250, null=True)
+    ligand_role = models.CharField(max_length=30, null=True)
+    query_effector = models.CharField(max_length=20, null=True)
     #ligand_type = models.CharField(max_length=100, null=True)
     #distance_representative = models.BooleanField(null=False, default=False)
     #contact_representative = models.BooleanField(null=False, default=False)

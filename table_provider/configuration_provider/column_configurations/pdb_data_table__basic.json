@@ -1,4 +1,14 @@
 [
+    {
+    "column_group": "Receptor",
+    "json_id": "checkbox",
+    "title": "",
+    "data_type": "checkbox",
+    "allow_filter": false,
+    "eventRegister": {
+      "click": {"handler":"checkboxClick", "eventOwner":"row" }
+    }
+  },
   {
     "column_group": "Receptor",
     "json_id": "uniprot",
