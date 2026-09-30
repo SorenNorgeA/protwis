@@ -4,7 +4,7 @@ from django.core.exceptions import FieldError
 from django.db.models import Min, Max
 
 #Rest Framework imports
-from rest_framework import generics
+from rest_framework import generics, views
 from rest_framework.response import Response
 from rest_framework.pagination import LimitOffsetPagination
 
@@ -31,6 +31,7 @@ class GpcrStructureStatisticsSummaryTable(generics.ListCreateAPIView):
     # API setup #
     #############
 
+    schema = None
     serializer_class = GpcrStatisticsSummarySerializer
     pagination_class = DataTablesLimitOffsetPagination
 
@@ -223,11 +224,13 @@ class PdbStructureSummaryTable(generics.ListCreateAPIView):
         PdbTable.objects.bulk_create(pdb_data_model, batch_size=10000)
 
 
-class ConfigurationFactoryView(generics.ListCreateAPIView):
+class ConfigurationFactoryView(views.APIView):
     """Request handler for TableManager configuration factory.
 
     Loads configuration file from disk and returns a JSON response containing the requested configuration for a specific table and variant.
     """
+
+    schema = None
 
     def get(self, request, *args, **kwargs):
         configuration_type = self.kwargs.get('configuration_type')

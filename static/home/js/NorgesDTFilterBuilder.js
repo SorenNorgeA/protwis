@@ -56,7 +56,7 @@ function CreateColumnFilters(datatable_selector,column_number, column_range, fil
         // ## Filter type list of valid inputs ##
         // ######################################
 
-        const Filter_type_list = ['Multi-select-exact','Multi-select-unspecific','Range-float-vertical','Range-float-horizontal','Range-select-vertical','Range-select-horizontal','Multi-select-exact-filter']
+        const Filter_type_list = ['Multi-select-exact','Multi-select-unspecific','Range-float-vertical','Range-float-horizontal','Range-select-vertical','Range-select-horizontal','Multi-select-exact-filter','Multi-select-exact-filter-lines']
         
         // ######################################################################
         // # Check if column_number is an integer in the range of the DataTable #
@@ -225,17 +225,26 @@ function createDropdownFilters(api,column_filters) {
 
         const visibility_state = api.columns().visible().toArray();
 
+        // TEMP DIAGNOSTIC INSTRUMENTATION — remove once the slow-load cause is confirmed.
+        const _fbPerf = { t0: performance.now(), perType: {} };
+
         // ###############################################################################################
         // ##  Set all columns visibility to true and change them back at the end of the Filter builder ##
         // ## ############################################################################################
-        
-        api.columns().visible(true);
+
+        // redraw:false — defer the (expensive, one-per-column) redraw until every
+        // visibility change below is applied, see the single api.draw(false) call
+        // at the end of this function.
+        api.columns().visible(true, false);
+        _fbPerf.tAllVisible = performance.now();
 
         // ####################################################
         // ###     Iterate over all filters and apply       ###
         // ####################################################
 
         for (const column_filter of column_filters) {
+            const _fbTypeStart = performance.now();
+            const _fbType = column_filter[2];
 
             // ###################################
             // ###     Initialize values       ###
@@ -346,7 +355,7 @@ function createDropdownFilters(api,column_filters) {
                 } // End of is searchable
             }); // End of multi-selct filter
 
-            } else if (filter_type === 'Multi-select-exact-filter') {
+            } else if (filter_type === 'Multi-select-exact-filter' || filter_type === 'Multi-select-exact-filter-lines') {
                 api.columns([column_number]).every(function () {
                     if (!this.searchable()) return;
 
@@ -359,19 +368,31 @@ function createDropdownFilters(api,column_filters) {
                     selected_cell.innerHTML = '<select id="'+selectId+'" class="select2" style="width: 80%;"></select>';
 
                     // helpers
+                    //
+                    // decodeHTML/normalizeText strip tags AND decode entities (ligand/protein
+                    // names routinely carry both, e.g. "CXCL12&phi;" or "PGF<sub>2</sub>") via
+                    // the browser's own HTML parser, which is the only correct way to do this
+                    // (a tag-stripping regex alone leaves "&phi;"/"&alpha;" etc. as literal,
+                    // useless filter option text). A naive per-cell `new Element + innerHTML`
+                    // was previously measured at ~0.9-1.3s across ~1716 rows x 7 columns, so
+                    // this reuses a single detached element and memoizes by raw string --
+                    // there are only ever as many distinct raw strings as distinct cell values,
+                    // not one DOM parse per cell.
                     function escapeRegex(s){ return String(s||'').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+                    var _decodeEl = null;
+                    var _decodeCache = new Map();
                     function decodeHTML(s){
-                    const div = document.createElement('div');
-                    div.innerHTML = String(s || '');
-                    return div.textContent || div.innerText || '';
+                    s = String(s || '');
+                    var cached = _decodeCache.get(s);
+                    if (cached !== undefined) return cached;
+                    if (!_decodeEl) _decodeEl = document.createElement('div');
+                    _decodeEl.innerHTML = s;
+                    var out = _decodeEl.textContent || _decodeEl.innerText || '';
+                    _decodeCache.set(s, out);
+                    return out;
                     }
                     function normalizeText(s){
-                    // turn <br> to \n, strip tags, decode entities → plain text
-                    const hasTags = /<[^>]+>/.test(s) || /&[a-z#0-9]+;/.test(s);
-                    if (!hasTags) return String(s || '');
-                    const div = document.createElement('div');
-                    div.innerHTML = String(s || '').replace(/<br\s*\/?>/gi, '\n');
-                    return div.textContent || div.innerText || '';
+                    return decodeHTML(String(s || '').replace(/<br\s*\/?>/gi, '\n'));
                     }
 
                     // ✅ collect tokens from the raw data when it's an array of names (best),
@@ -394,7 +415,12 @@ function createDropdownFilters(api,column_filters) {
                         // fallback: use rendered "filter" text, then split
                         var v = this.render('filter');
                         v = normalizeText(v);
-                        v.split(/\s*(?:\n|,|\|)\s*/g).forEach(function(tok){
+                        // '-lines' variant: items are newline/pipe delimited only; commas belong to the
+                        // name (IUPAC names like "3,3',3''-phosphanetriyltripropanoic acid" stay whole)
+                        var splitRx = (filter_type === 'Multi-select-exact-filter-lines')
+                            ? /\s*(?:\n|\|)\s*/g
+                            : /\s*(?:\n|,|\|)\s*/g;
+                        v.split(splitRx).forEach(function(tok){
                         tok = tok && tok.trim();
                         if (tok) tokenSet.add(tok);
                         });
@@ -599,15 +625,41 @@ function createDropdownFilters(api,column_filters) {
             }); // End of Range filter year
         }
 
+            // TEMP DIAGNOSTIC INSTRUMENTATION — remove once the slow-load cause is confirmed.
+            const _fbTypeMs = performance.now() - _fbTypeStart;
+            _fbPerf.perType[_fbType] = (_fbPerf.perType[_fbType] || 0) + _fbTypeMs;
     }
+
+    // TEMP DIAGNOSTIC INSTRUMENTATION — remove once the slow-load cause is confirmed.
+    _fbPerf.tFiltersBuilt = performance.now();
 
     // ########################################
     // ## reset visability to original state ##
     // ########################################
 
     for (var j = 0; j < visibility_state.length; ++j) {
-        api.column(j).visible(visibility_state[j]);
+        api.column(j).visible(visibility_state[j], false);
     }
+
+    // Single redraw for all 33+ deferred visibility changes above, instead of one
+    // per column (each of which forces a reflow under scrollX). Plain draw(false),
+    // not columns.adjust() — width recalculation is left to the caller if it needs
+    // one (structure_browser_modern.js already does columns.adjust().draw() right
+    // after createFilters()); callers that don't (e.g. venn_diagrams.html) still
+    // get correct visibility/search state from this alone.
+    api.draw(false);
+
+    // TEMP DIAGNOSTIC INSTRUMENTATION — remove once the slow-load cause is confirmed.
+    _fbPerf.tRestored = performance.now();
+    console.log('[NorgesDTFilterBuilder perf, ms]', {
+        'set-all-columns-visible':                    Math.round(_fbPerf.tAllVisible   - _fbPerf.t0),
+        'build filter dropdowns (by filter_type)':    Object.fromEntries(
+            Object.entries(_fbPerf.perType).map(([k, v]) => [k, Math.round(v)])
+        ),
+        ['restore column visibility (' + visibility_state.length + ' toggles, one at a time)']:
+                                                       Math.round(_fbPerf.tRestored - _fbPerf.tFiltersBuilt),
+        TOTAL:                                        Math.round(_fbPerf.tRestored - _fbPerf.t0),
+    });
 
     }
 }

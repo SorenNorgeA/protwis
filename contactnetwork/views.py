@@ -146,7 +146,7 @@ def ShowDistances(request):
     return render(request, 'contactnetwork/distances.html', template_data)
 
 def PdbTreeData(request):
-    data = Structure.objects.exclude(structure_type__slug__startswith='af-').values(
+    data = Structure.objects.filter(structure_type__origin='experiment').values(
         'representative',
         'pdb_code__index',
         'protein_conformation__protein__parent__family__parent__parent__parent__name',
@@ -668,7 +668,7 @@ def InteractionBrowserData(request):
                 all_interaction_residues.add(i[1])
             all_interaction_residues = sorted(list(all_interaction_residues), key=functools.cmp_to_key(gpcrdb_number_comparator))
 
-            all_pdbs = list(Structure.objects.all().exclude(structure_type__slug__startswith='af-').values_list('pdb_code__index', flat=True))
+            all_pdbs = list(Structure.objects.filter(structure_type__origin='experiment').values_list('pdb_code__index', flat=True))
             all_pdbs = [x.lower() for x in all_pdbs]
             #generic_number__label__in=all_interaction_residues)
             residues = Residue.objects.filter(protein_conformation__protein__entry_name__in=all_pdbs).exclude(generic_number=None).values(
@@ -2526,7 +2526,7 @@ def ClusteringData(request):
                     signaling_proteins[ps["structure__pdb_code__index"]] = ps['display_name']
 
         # Check for GRK complexes
-        grk_complexes = list(Structure.objects.filter(stabilizing_agents__name__contains="GRK").exclude(structure_type__slug__startswith='af-').values_list("pdb_code__index", flat = True))
+        grk_complexes = list(Structure.objects.filter(stabilizing_agents__name__contains="GRK", structure_type__origin='experiment').values_list("pdb_code__index", flat = True))
         for pdb in grk_complexes:
             if not pdb in signaling_proteins:
                 signaling_proteins[pdb] = "GRK"

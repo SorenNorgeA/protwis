@@ -1,8 +1,10 @@
-﻿from django.conf.urls import include, url,handler404, handler500
+from django.conf.urls import include, url,handler404, handler500
 from django.contrib import admin
 from django.conf import settings
 from protwis import views
 from django.views.generic import TemplateView
+
+from classification import views as classification_views
 
 
 urlpatterns = [
@@ -26,9 +28,11 @@ urlpatterns = [
     url(r'^construct/',include('construct.urls')),
     url(r'^sitesearch/',include('sitesearch.urls')),
     url(r'^drugs/',include('drugs.urls')),
+    url(r'^allgpcrs[/]?$', classification_views.GPCRList.as_view(), name='classification-gpcr-list'),
+    url(r'^classification/', include('classification.urls')),
     url(r'^signprot/',include('signprot.urls')),
-    url(r'^ligand/',include('ligand.urls')),
     url(r'^biased_signalling/', include('ligand.urls')), # Remapping this url to the ligand
+    url(r'^ligand/',include('ligand.urls')),
     url(r'^mutational_landscape/',include('mutational_landscape.urls')),
     url(r'^contactnetwork/', include('contactnetwork.urls')),
     url(r'^structure_comparison/', include('contactnetwork.urls')), # Remapping this url to the contact network

@@ -9,6 +9,7 @@ from rest_framework_swagger.renderers import OpenAPIRenderer, SwaggerUIRenderer
 
 from django.template.loader import render_to_string
 from django.db.models import Prefetch, Q, Min, Count
+from django.http import HttpResponse
 
 from interaction.models import ResidueFragmentInteraction
 from mutation.models import MutationRaw
@@ -30,7 +31,9 @@ from common.definitions import AMINO_ACIDS, AMINO_ACID_GROUPS
 from drugs.models import Drugs
 from contactnetwork.models import InteractionPeptide, Interaction, InteractingPeptideResiduePair
 
-from io import StringIO
+from io import StringIO, BytesIO
+import csv
+import xlsxwriter
 import numpy as np
 from Bio.PDB import PDBIO, PDBParser, parse_pdb_header
 from collections import OrderedDict
@@ -487,13 +490,13 @@ class StructureList(views.APIView):
             structures = Structure.objects.filter(pdb_code__index=pdb_code)
         elif entry_name and representative:
             structures = Structure.objects.filter(protein_conformation__protein__parent__entry_name=entry_name,
-                representative=True).exclude(structure_type__slug__startswith='af-')
+                representative=True, structure_type__origin='experiment')
         elif entry_name:
-            structures = Structure.objects.filter(protein_conformation__protein__parent__entry_name=entry_name).exclude(structure_type__slug__startswith='af-')
+            structures = Structure.objects.filter(protein_conformation__protein__parent__entry_name=entry_name, structure_type__origin='experiment')
         elif representative:
-            structures = Structure.objects.filter(representative=True).exclude(structure_type__slug__startswith='af-')
+            structures = Structure.objects.filter(representative=True, structure_type__origin='experiment')
         else:
-            structures = Structure.objects.all().exclude(structure_type__slug__startswith='af-')
+            structures = Structure.objects.all().filter(structure_type__origin='experiment')
 
         structures = structures.prefetch_related('protein_conformation__protein__parent__species', 'pdb_code',
             'protein_conformation__protein__parent__family', 'protein_conformation__protein__parent__species',
@@ -559,7 +562,8 @@ class StructureList(views.APIView):
             # signalling protein
             if structure.signprot_complex:
                 sign_prot = {'type': 'G protein', 'data': {}}
-                sign_prot['data']['entity1'] = {'entry_name':structure.signprot_complex.protein.entry_name, 'chain':structure.signprot_complex.alpha}
+                if structure.signprot_complex.protein:
+                    sign_prot['data']['entity1'] = {'entry_name':structure.signprot_complex.protein.entry_name, 'chain':structure.signprot_complex.alpha}
                 if structure.signprot_complex.beta_protein:
                     sign_prot['data']['entity2'] = {'entry_name':structure.signprot_complex.beta_protein.entry_name, 'chain':structure.signprot_complex.beta_chain}
                 if structure.signprot_complex.gamma_protein:
@@ -578,7 +582,7 @@ class StructureList(views.APIView):
         return Response(s)
 
     def get_structures(self, pdb_code=None, representative=None):
-        return Structure.objects.all().exclude(structure_type__slug__startswith='af-')
+        return Structure.objects.filter(structure_type__origin='experiment')
 
 class RepresentativeStructureList(StructureList):
 
@@ -622,8 +626,11 @@ class StructureAccessionHuman(views.APIView):
     """
 
     def get(self, request):
-        unique_slugs = list(Structure.objects.filter(protein_conformation__protein__family__slug__startswith="0").exclude(structure_type__slug__startswith='af-')\
-            .order_by('protein_conformation__protein__family__slug').values_list('protein_conformation__protein__family__slug', flat=True).distinct())
+        unique_slugs = list(Structure.objects.filter(protein_conformation__protein__family__slug__startswith="0", 
+                                                     structure_type__origin='experiment') \
+                                             .order_by('protein_conformation__protein__family__slug') \
+                                             .values_list('protein_conformation__protein__family__slug', flat=True) \
+                                             .distinct())
         accession_codes = list(Protein.objects.filter(family__slug__in=unique_slugs, sequence_type__slug='wt', species__latin_name='Homo sapiens')\
                             .values_list('entry_name', flat=True))
         accessions = [x.split("_")[0].upper() for x in accession_codes]
@@ -881,8 +888,11 @@ class ProteinSimilaritySearchAlignment(views.APIView):
                         a.proteins[num].similarity = 100
                     # order dict after custom list
                     keyorder = ["similarity","identity","AA"]
-                    ali_dict[k] = {"AA": row, "identity": int(str(a.proteins[num].identity).replace(" ","")),
-                    "similarity": int(str(a.proteins[num].similarity).replace(" ",""))}
+                    identity = float(str(a.proteins[num].identity).replace(" ",""))
+                    similarity = float(str(a.proteins[num].similarity).replace(" ",""))
+                    identity = int(identity) if identity.is_integer() else round(identity, 1)
+                    similarity = int(similarity) if similarity.is_integer() else round(similarity, 1)
+                    ali_dict[k] = {"AA": row, "identity": identity, "similarity": similarity}
                     ali_dict[k] = OrderedDict(sorted(ali_dict[k].items(), key=lambda t: keyorder.index(t[0])))
                     num+=1
                     k = False
@@ -1264,6 +1274,71 @@ class DrugList(views.APIView):
                              'novelty': novelty})
 
         return Response(druglist)
+
+class DrugDataDownload(views.APIView):
+
+    """
+    Get the complete dataset of drugs/ligands targeting human GPCRs.
+    \n/drugs/download/
+    \nReturns JSON by default; pass ?format=csv, ?format=tsv or ?format=xlsx for a downloadable file.
+    """
+
+    FIELDNAMES = ['drug_name', 'ligand_type', 'gpcr_target', 'gpcr_target_entry_name', 'gpcr_target_uniprot_id',
+                  'fda_approval_status', 'smiles', 'inchikey', 'helm', 'gpcrdb_ligand_id',
+                  'drug_target_relationship']
+
+    def get(self, request):
+        file_format = request.query_params.get('format', 'json').lower()
+
+        drugs = Drugs.objects.filter(target__species__common_name='Human') \
+                              .exclude(ligand__isnull=True) \
+                              .exclude(target__isnull=True) \
+                              .select_related('ligand', 'ligand__ligand_type', 'target', 'moa') \
+                              .order_by('ligand', 'target', 'moa') \
+                              .distinct('ligand', 'target', 'moa')
+
+        rows = []
+        for drug in drugs:
+            rows.append({
+                'drug_name': drug.ligand.name,
+                'ligand_type': drug.ligand.ligand_type.name if drug.ligand.ligand_type_id else '',
+                'gpcr_target': drug.target.name,
+                'gpcr_target_entry_name': drug.target.entry_name,
+                'gpcr_target_uniprot_id': drug.target.accession,
+                'fda_approval_status': drug.drug_status,
+                'smiles': drug.ligand.smiles,
+                'inchikey': drug.ligand.inchikey,
+                'helm': drug.ligand.helm,
+                'gpcrdb_ligand_id': drug.ligand.gpcrdb_id,
+                'drug_target_relationship': drug.moa.name if drug.moa_id else '',
+            })
+
+        if file_format == 'json':
+            return Response(rows)
+        elif file_format in ('csv', 'tsv'):
+            delimiter = ',' if file_format == 'csv' else '\t'
+            outstream = StringIO()
+            writer = csv.DictWriter(outstream, fieldnames=self.FIELDNAMES, delimiter=delimiter)
+            writer.writeheader()
+            writer.writerows(rows)
+            content_type = 'text/csv' if file_format == 'csv' else 'text/tab-separated-values'
+            response = HttpResponse(outstream.getvalue(), content_type=content_type)
+            response['Content-Disposition'] = "attachment; filename=gpcrdb_gpcr_drugs.{}".format(file_format)
+            return response
+        elif file_format == 'xlsx':
+            outstream = BytesIO()
+            wb = xlsxwriter.Workbook(outstream, {'in_memory': True})
+            worksheet = wb.add_worksheet()
+            worksheet.write_row(0, 0, self.FIELDNAMES)
+            for row_count, row in enumerate(rows, start=1):
+                worksheet.write_row(row_count, 0, [row[field] for field in self.FIELDNAMES])
+            wb.close()
+            outstream.seek(0)
+            response = HttpResponse(outstream.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            response['Content-Disposition'] = "attachment; filename=gpcrdb_gpcr_drugs.xlsx"
+            return response
+        else:
+            return Response({'error': "Unsupported format '{}'. Use one of: json, csv, tsv, xlsx.".format(file_format)}, status=400)
 
 class LigandList(views.APIView):
 

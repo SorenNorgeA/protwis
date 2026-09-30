@@ -804,7 +804,7 @@ class DruggedGPCRome(TemplateView):
                 #     print(len(unique_entries),sorted(unique_entries))
                 drug_dict[target][key] = len(unique_entries)  # Replace the list with the count
 
-        tree, tree_options, circles, receptors, genes = DataMapperHome.generate_tree_plot(drug_dict)
+        tree, tree_options, circles, receptors, genes = DataMapperHome.GenerateClassificationTreeData(drug_dict)
         #Remove 0 circles
         for key, outer_dict in circles.items():
             circles[key] = {k: v for k, v in outer_dict.items() if v != 0}
@@ -846,7 +846,7 @@ class DruggedGPCRome(TemplateView):
                 else:
                     drug_dict[drug[1]]['Outer1'] += 1
 
-        repurposed_tree, repurposed_tree_options, repurposed_circles, repurposed_receptors, repurposed_genes = DataMapperHome.generate_tree_plot(drug_dict)
+        repurposed_tree, repurposed_tree_options, repurposed_circles, repurposed_receptors, repurposed_genes = DataMapperHome.GenerateClassificationTreeData(drug_dict)
         #Remove 0 circles
         for key, outer_dict in repurposed_circles.items():
             repurposed_circles[key] = {k: v for k, v in outer_dict.items() if v != 0}
@@ -1155,7 +1155,7 @@ class DiseaseOverview(TemplateView):
                if indi.title not in indication_data[lvl0].keys():
                    indication_data[lvl0][indi.title] = {'red': 0, 'purple': 0, 'blue': 0}
                    listdata[lvl0].append(indi.title)
-                   listplot_data_variables[indi.title] = {'Value1': 'Circle', 'Value2': 0, 'Value3': 'Circle', 'Value4': 0, 'Value5': 'Circle','Value6': 0}
+                   listplot_data_variables[indi.title] = {'Value1': 0, 'Value2': 0, 'Value3': 0}
                    Label_Conversion[indi.title] = indi.title
         #with master dict set, now we add data from drugs
         drug_data = Drugs.objects.all().prefetch_related('ligand', 'indication', 'indication__parent',
@@ -1181,11 +1181,11 @@ class DiseaseOverview(TemplateView):
             indications = list(drug_dict[drug].keys())[1:]
             for ind in indications:
                 if max_phase < 4 and drug_dict[drug][ind][0] < 4:
-                    listplot_data_variables[ind]['Value2'] += 1
+                    listplot_data_variables[ind]['Value1'] += 1
                 elif max_phase == 4 and drug_dict[drug][ind][0] < 4:
-                    listplot_data_variables[ind]['Value4'] += 1
+                    listplot_data_variables[ind]['Value2'] += 1
                 elif max_phase == 4 and drug_dict[drug][ind][0] == 4:
-                    listplot_data_variables[ind]['Value6'] += 1
+                    listplot_data_variables[ind]['Value3'] += 1
 
         counter = 1
         labeled_listdata = {}
@@ -1429,16 +1429,15 @@ class TargetSelectionTool(TemplateView):
         target_ids = df['Target ID'].unique()
 
         # Fetch only relevant `Structure` data for matching `target_ids`
-        structure_data = Structure.objects.filter(
-            protein_conformation__protein__parent__id__in=target_ids
-        ).exclude(structure_type__slug__startswith='af-').values(
-            'protein_conformation__protein__parent__id'
-        ).annotate(
-            Inactive=Count(Case(When(state_id=1, then=1), output_field=IntegerField())),
-            Active=Count(Case(When(state_id=2, then=1), output_field=IntegerField())),
-            Intermediate=Count(Case(When(state_id=3, then=1), output_field=IntegerField())),
-            Total=Count('id')
-        ).order_by('protein_conformation__protein__parent__id')
+        structure_data = Structure.objects \
+            .filter(protein_conformation__protein__parent__id__in=target_ids,
+                    structure_type__origin='experiment') \
+            .values('protein_conformation__protein__parent__id') \
+            .annotate(Inactive=Count(Case(When(state_id=1, then=1), output_field=IntegerField())),
+                      Active=Count(Case(When(state_id=2, then=1), output_field=IntegerField())),
+                      Intermediate=Count(Case(When(state_id=3, then=1), output_field=IntegerField())),
+                      Total=Count('id')) \
+            .order_by('protein_conformation__protein__parent__id')
 
         # Convert structure data to a DataFrame
         structure_df = pd.DataFrame(list(structure_data))
@@ -2065,7 +2064,7 @@ def drugmapping(request):
     n = 0
     for c,c_v in coverage.items():
         c_v['name'] = c_v['name'].split("(")[0]
-        if c_v['name'].strip() == 'Other GPCRs':
+        if c_v['name'].strip() == 'Unclassified':
             # i += 1
             continue
             # pass
@@ -2148,7 +2147,7 @@ def indication_detail(request, code):
         level_0_node = next((item['node'] for item in sankey['nodes'] if item['name'] == indication_0), None)
 
         if [ligand_name, ligand_id] not in caches['ligands']:
-            sankey['nodes'].append({"node": node_counter, "name": ligand_name, "url":'/ligand/'+str(ligand_id)+'/info',"column":"x2"})
+            sankey['nodes'].append({"node": node_counter, "name": ligand_name, "url":'/ligand/'+str(ligand_id)+'/group',"column":"x2"})
             node_counter += 1
             caches['ligands'].append([ligand_name, ligand_id])
         lig_node = next((item['node'] for item in sankey['nodes'] if item['name'] == ligand_name), None)
@@ -2369,7 +2368,7 @@ def get_sankey_indi_data(code):
         level_0_node = next((item['node'] for item in sankey['nodes'] if item['name'] == indication_0), None)
 
         if [ligand_name, ligand_id] not in caches['ligands']:
-            sankey['nodes'].append({"node": node_counter, "name": ligand_name, "url":'/ligand/'+str(ligand_id)+'/info',"column":"x2"})
+            sankey['nodes'].append({"node": node_counter, "name": ligand_name, "url":'/ligand/'+str(ligand_id)+'/group',"column":"x2"})
             node_counter += 1
             caches['ligands'].append([ligand_name, ligand_id])
         lig_node = next((item['node'] for item in sankey['nodes'] if item['name'] == ligand_name), None)

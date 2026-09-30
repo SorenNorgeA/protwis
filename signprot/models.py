@@ -17,7 +17,7 @@ class SignprotStructure(models.Model):
     def __str__(self):
         return self.pdb_code.index
 
-    def get_cleaned_pdb(self, pref_chain=True, remove_waters=True, ligands_to_keep=None, remove_aux=False, aux_range=5.0):
+    def get_cleaned_pdb(self, pref_chain=True, remove_waters=True, ligands_to_keep=None, remove_aux=False, aux_range=5.0, residues_to_keep=None, chains_to_keep=None):
 
         tmp = []
         for line in self.pdb_data.pdb.split('\n'):
@@ -27,19 +27,30 @@ class SignprotStructure(models.Model):
                     save_line = True
             else:
                 save_line = True
+            if chains_to_keep and (line.startswith('ATOM') or line.startswith('HET')) and line[21] in chains_to_keep:
+                save_line = True
             if remove_waters and line.startswith('HET') and line[17:20] == 'HOH':
                 save_line = False
             if ligands_to_keep and line.startswith('HET'):
                 if pref_chain:
-                    if line[17:20] != 'HOH' and line[17:20] in ligands_to_keep and line[21] == self.preferred_chain[0]:
+                    if line[17:20] != 'HOH' and line[17:20].strip() in ligands_to_keep and line[21] == self.preferred_chain[0]:
                         save_line = True
                     elif line[17:20] != 'HOH':
                         save_line=False
                 else:
-                    if line[17:20] != 'HOH' and line[17:20] in ligands_to_keep:
+                    if line[17:20] != 'HOH' and line[17:20].strip() in ligands_to_keep:
                         save_line = True
                     elif line[17:20] != 'HOH':
                         save_line=False
+            if residues_to_keep and line.startswith('HET'):
+                try:
+                    resnum = int(line[22:26])
+                except ValueError:
+                    resnum = None
+                if line[17:20] != 'HOH' and (line[21], resnum) in residues_to_keep:
+                    save_line = True
+                elif line[17:20] != 'HOH':
+                    save_line = False
             if save_line:
                 tmp.append(line)
 
@@ -80,16 +91,17 @@ class SignprotBarcode(models.Model):
 
 
 class SignprotComplex(models.Model):
-    protein = models.ForeignKey('protein.Protein', on_delete=models.CASCADE)
+    protein = models.ForeignKey('protein.Protein', on_delete=models.CASCADE, null=True)
     structure = models.ForeignKey('structure.Structure', on_delete=models.CASCADE)
-    alpha = models.CharField(max_length=1)
+    alpha = models.CharField(max_length=1, null=True)
     beta_chain = models.CharField(max_length=1, null=True)
     beta_protein = models.ForeignKey('protein.Protein', related_name='beta_protein', on_delete=models.CASCADE, null=True)
     gamma_chain = models.CharField(max_length=1, null=True)
     gamma_protein = models.ForeignKey('protein.Protein', related_name='gamma_protein', on_delete=models.CASCADE, null=True)
+    alpha_backbone = models.ForeignKey('protein.Protein', related_name='alpha_backbone_complex', on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
-        return '<SignprotComplex: {} {}>'.format(self.protein.entry_name, self.structure.pdb_code.index)
+        return '<SignprotComplex: {} {}>'.format(self.protein, self.structure.pdb_code.index)
 
     class Meta():
         db_table = 'signprot_complex'

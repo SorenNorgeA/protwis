@@ -177,8 +177,8 @@ class Command(BaseBuild):
 
                         # parse uniprot file for this protein
                         self.logger.info('Parsing uniprot file for protein ' + protein_name)
-                        up = parse_uniprot_file(accession= protein_accession, logger=self.logger, 
-                                                local_uniprot_dir=self.local_uniprot_dir, excel_sequences=self.excel_sequences)
+                        up = parse_uniprot_file(accession= protein_accession, logger=self.logger,
+                                                local_uniprot_dir=self.local_uniprot_dir, excel_sequences=self.excel_sequences, entrez_lookup=self.entrez_lookup)
                         if not up:
                             self.logger.error('Failed parsing uniprot file for protein ' + protein_name + ', skipping')
                             continue
@@ -263,23 +263,23 @@ class Command(BaseBuild):
                 self.logger.error('Failed creating protein alias ' + a.name + ' for protein ' + p.name)
 
         # genes
-        #There should generally be one gene name and one entrez gene id per protein, 
+        #There should generally be one gene name and one entrez gene id per protein,
         #but edge cases exist where there are multiple gene names and/or entrez ids.
         for i, gene in enumerate(uniprot['genes']):
             g = False
-                        
+
             try:
                 entrez_geneid = select_entrez_id(i, uniprot, self.entrez_lookup)
-                
+
                 if entrez_geneid is not None:
                     resource = WebResource.objects.get(slug='entrez_gene')
                     entrez_link, created = WebLink.objects.get_or_create(web_resource=resource, index=entrez_geneid)
                 else:
                     entrez_link = None
 
-                g, created = Gene.objects.get_or_create(name=gene, species=species, position=i, 
-                                                        entrez_id=entrez_geneid, entrez_weblink=entrez_link)                    
-                
+                g, created = Gene.objects.get_or_create(name=gene, species=species, position=i,
+                                                        entrez_id=entrez_geneid, entrez_weblink=entrez_link)
+
                 if created:
                     self.logger.info('Created gene ' + g.name + ' for protein ' + p.name)
             except IntegrityError:
@@ -335,4 +335,3 @@ class Command(BaseBuild):
             'level_family_counter': level_family_counter,
         }
 
-    

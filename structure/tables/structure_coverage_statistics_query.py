@@ -3,7 +3,7 @@ from django.db.models import Count, Q, IntegerField, F, Value, Subquery, OuterRe
 from django.db.models.functions import Coalesce, Replace
 
 #GPCRdb imports
-from structure.models import Structure, StructureExtraProteins, StructureType
+from structure.models import Structure, StructureExtraProteins
 from interaction.models import StructureLigandInteraction
 from protein.models import Protein, Gene
 
@@ -15,13 +15,12 @@ from protein.models import Protein, Gene
 STIMULATORY_ROLES  = ['Agonist', 'Partial agonist', 'PAM']
 INHIBITORY_ROLES   = ['Allosteric antagonist', 'Antagonist', 'Inverse agonist', 'NAM']
 
-LABORATORY_STRUCTURE_SOURCE = list(StructureType.objects.filter(~Q(slug__startswith='af-')).values_list('slug', flat=True))
-
 # ── subquery: count structures per primary/parent protein entity ──────────
 def _struct_count(state_slug=None, extra_q=None):
     qs = Structure.objects.filter(
+        ~Q(structure_type__slug__startswith='af-'),
         protein_conformation__protein__parent=OuterRef('pk'),
-        structure_type__slug__in=LABORATORY_STRUCTURE_SOURCE,
+        structure_type__origin='experiment',
     )
     if state_slug:
         qs = qs.filter(state__slug=state_slug)
@@ -36,9 +35,10 @@ def _struct_count(state_slug=None, extra_q=None):
 # ── subquery: best (min) resolution per state ─────────────────────
 def _best_resolution(state_slug=None):
     qs = Structure.objects.filter(
+        ~Q(structure_type__slug__startswith='af-'),
         protein_conformation__protein__parent=OuterRef('pk'),
         resolution__isnull=False,
-        structure_type__slug__in=LABORATORY_STRUCTURE_SOURCE,
+        structure_type__origin='experiment',
     )
     if state_slug:
         qs = qs.filter(state__slug=state_slug)
@@ -51,9 +51,10 @@ def _best_resolution(state_slug=None):
 # ── subquery: count structures with a given extra-protein type ────
 def _transducer_count(category, family_slug_prefix=None):
     qs = StructureExtraProteins.objects.filter(
+        ~Q(structure__structure_type__slug__startswith='af-'),
         structure__protein_conformation__protein__parent=OuterRef('pk'),
         category=category,
-        structure__structure_type__slug__in=LABORATORY_STRUCTURE_SOURCE,
+        structure__structure_type__origin='experiment',
     )
     if family_slug_prefix:
         qs = qs.filter(wt_protein__family__slug__startswith=family_slug_prefix)
@@ -67,9 +68,10 @@ def _transducer_count(category, family_slug_prefix=None):
 def _grk_count():
     return (
         Structure.objects.filter(
+            ~Q(structure_type__slug__startswith='af-'),
             protein_conformation__protein__parent=OuterRef('pk'),
             stabilizing_agents__name__icontains='GRK',
-            structure_type__slug__in=LABORATORY_STRUCTURE_SOURCE,
+            structure_type__origin='experiment',
         )
             .values('protein_conformation__protein__parent')
             .annotate(c=Count('id', distinct=True))
@@ -80,10 +82,11 @@ def _grk_count():
 def _ligand_type_count(type_slugs):
     return (
         StructureLigandInteraction.objects.filter(
+            ~Q(structure__structure_type__slug__startswith='af-'),
             structure__protein_conformation__protein__parent=OuterRef('pk'),
             annotated=True,
             ligand__ligand_type__slug__in=type_slugs,
-            structure__structure_type__slug__in=LABORATORY_STRUCTURE_SOURCE,
+            structure__structure_type__origin='experiment',
         )
             .values('structure__protein_conformation__protein__parent')
             .annotate(c=Count('id'))
@@ -103,7 +106,7 @@ def _role_count(role_names, invert=False):
         qry = qry.filter(~Q(ligand_role__name__in=role_names))
 
     return (qry
-            .filter(structure__structure_type__slug__in=LABORATORY_STRUCTURE_SOURCE)
+            .filter(structure__structure_type__origin='experiment')
             .values('structure__protein_conformation__protein__parent')
             .annotate(c=Count('id'))
             .values('c')

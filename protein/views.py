@@ -83,7 +83,7 @@ def detail(request, slug):
         alt_genes = genes[1:]
 
     # get structures of this protein
-    structures = Structure.objects.filter(protein_conformation__protein__parent=p).exclude(structure_type__slug__startswith='af-')
+    structures = Structure.objects.filter(protein_conformation__protein__parent=p, structure_type__origin='experiment')
 
     # get residues
     residues = Residue.objects.filter(protein_conformation=pc).order_by('sequence_number').prefetch_related(
@@ -190,7 +190,7 @@ def get_sankey_data(entry_name):
         level_0_node = next((item['node'] for item in sankey['nodes'] if item['name'] == indication_0), None)
 
         if [ligand_name, ligand_id] not in caches['ligands']:
-            sankey['nodes'].append({"node": node_counter, "name": ligand_name, "url": '/ligand/'+str(ligand_id)+'/info',"column":"x2"})
+            sankey['nodes'].append({"node": node_counter, "name": ligand_name, "url": '/ligand/'+str(ligand_id)+'/group',"column":"x2"})
             node_counter += 1
             caches['ligands'].append([ligand_name, ligand_id])
         lig_node = next((item['node'] for item in sankey['nodes'] if item['name'] == ligand_name), None)
@@ -390,9 +390,9 @@ def SelectionAutocomplete(request):
 
             cache_key = 'SelectionAutocompleteLigandsFields'
             if not(cache.has_key(cache_key)):
-                q = LigandID.objects.distinct('web_resource_id').values('web_resource_id','web_resource__slug','web_resource__name')
+                lid_qs = LigandID.objects.distinct('web_resource_id').values('web_resource_id','web_resource__slug','web_resource__name')
                 web_resource_slug_2_id = {}
-                for lid in q:
+                for lid in lid_qs:
                     web_resource_slug_2_id[lid['web_resource__slug']] = lid['web_resource_id']
                 cache.set(cache_key, web_resource_slug_2_id, 60*60*24*7)
             else:
@@ -402,9 +402,9 @@ def SelectionAutocomplete(request):
             for field in field_list:
                 if field == 'name':
                     if qsl is None:
-                        qsl = Q(name__icontains=q)
+                        qsl = Q(name__icontains=q, parent__isnull=False)
                     else:
-                        qsl = qsl | Q(name__icontains=q)
+                        qsl = qsl | Q(name__icontains=q, parent__isnull=False)
                 elif field == 'gpcrdb_id':
                     if qsl is None:
                         qsl = Q(id=q)
@@ -479,7 +479,7 @@ def SelectionAutocomplete(request):
             for p in ps:
                 p_json = {}
                 p_json['id'] = p.id
-                p_json['label'] = p.name
+                p_json['label'] = p.name + " [" + str(p.gpcrdb_id) + "]"
                 p_json['type'] = 'ligand'
                 p_json['category'] = gpcrdb_category_name
                 results.append(p_json)
@@ -656,7 +656,7 @@ def isoforms(request):
     n = 0
     for c,c_v in coverage.items():
         c_v['name'] = c_v['name'].split("(")[0]
-        if c_v['name'].strip() in ['Other GPCRs']:
+        if c_v['name'].strip() in ['Unclassified']:
             continue
         children = []
         for lt,lt_v in c_v['children'].items():
@@ -729,7 +729,7 @@ def AlignIsoformWildtype(request):
     from common.tools import fetch_from_web_api
     from Bio import pairwise2
     from Bio.pairwise2 import format_alignment
-    from Bio.SubsMat import MatrixInfo as matlist
+    from Bio.Align import substitution_matrices as matlist
     from Bio.Align.Applications import ClustalOmegaCommandline
     from Bio import AlignIO
     cache_dir = ['ensembl', 'isoform']
