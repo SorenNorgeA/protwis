@@ -7,8 +7,9 @@ from django.db.models import Q
  specified serializer's field mappings and data types. The module also includes specific filter classes for text and numeric range filtering,
  allowing for flexible and dynamic filtering of data based on user input.
 """
-
 class FilterSet:
+    ignored_datatypes = ['checkbox']
+
     def __init__(self, request, SerializerClass):
         """Initializes a FilterSet instance."""
         self._filters = []
@@ -49,6 +50,9 @@ class FilterSet:
                 raise ValueError(f"No datatype mapping found for field '{data_field}' in serializer. " + \
                                  "Ensure you have declared all fields that require filtering under datatypes in meta data")
 
+            if field_type in self.ignored_datatypes:
+                continue
+
             if search_value:
                 if field_type == 'text':
                     filter_req = TextFilter(self.field_mappings.get(data_field), search_value)
@@ -73,6 +77,9 @@ class FilterSet:
         for order_column in self.query_parameters['order']:
             column_idx = int(order_column['column'])
             json_name = self.query_parameters['columns'][column_idx]['data']
+            field_type = self.SerializerClass.Meta.datatypes.get(json_name)
+            if field_type in self.ignored_datatypes:
+                continue
             db_name = self.field_mappings.get(json_name)
             order_direction = '' if order_column['dir'] == 'asc' else '-'
             order_array.append(f"{order_direction}{db_name}")

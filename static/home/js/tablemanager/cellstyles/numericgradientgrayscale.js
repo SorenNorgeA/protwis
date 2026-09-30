@@ -34,7 +34,6 @@ class NumericGradientGrayscale {
         //If the min and max values are not stored and nobody has requested them, we need to fetch them from the server. 
         if ((storedMin == undefined || storedMax == undefined) & requested == undefined) {                     
             globalThis["requested_max_min_" + this.json_id] = true;
-            console.log("Requesting min and max values for gradient greyscale from server for column: " + this.json_id);
             let range = await this._get_min_max_serverside(conditionSource, tableManagerReference.dataTableReference)
             globalThis["min_" + this.json_id] = range.min;
             globalThis["max_" + this.json_id] = range.max;            

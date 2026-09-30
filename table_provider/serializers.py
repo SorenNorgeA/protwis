@@ -157,6 +157,7 @@ class PdbStructureSummarySerializer(serializers.Serializer):
     _entrez_resource = None
     _pdb_resource = None
 
+    checkbox = serializers.SerializerMethodField() 
     uniprot = serializers.SerializerMethodField()
     protein_name_short = serializers.CharField(read_only=True)
     receptor_family_short = serializers.ReadOnlyField()
@@ -199,7 +200,7 @@ class PdbStructureSummarySerializer(serializers.Serializer):
         """
 
         datatypes = {
-            'uniprot': 'text', 'protein_name_short': 'text', 'receptor_family_short': 'text', 'receptor_class_code': 'text', 'gene': 'text',
+            'checkbox':'checkbox', 'uniprot': 'text', 'protein_name_short': 'text', 'receptor_family_short': 'text', 'receptor_class_code': 'text', 'gene': 'text',
             'fraction_of_wt_seq': 'numeric', 'closest_to_human': 'text', 'species_common_name': 'text',
             'identity_to_human': 'numeric', 'structure_type': 'text', 'pdb_id': 'text', 'resolution': 'numeric', 'resolution_best': 'text',
             'state': 'text', 'query_effector': 'text', 'gprot_bound_likeness': 'numeric', 'tm6_angle': 'numeric',
@@ -208,12 +209,19 @@ class PdbStructureSummarySerializer(serializers.Serializer):
         }
         #Mapping for fields that use a SerializerMethodField to a single source field in the database. This is used for filtering and sorting.
         serializer_method_to_filter_field_map = {
-            'uniprot': 'uniprot_entry_name', 'gene': 'gene_name', 'pdb_id': 'pdb_id', 'resolution': 'resolution',
+           'checkbox':'checkbox', 'uniprot': 'uniprot_entry_name', 'gene': 'gene_name', 'pdb_id': 'pdb_id', 'resolution': 'resolution',
         }
 
     @staticmethod
     def _format_resolution(value):
         return value if value is not None else "-"
+
+    def get_checkbox(self, obj):
+        checkbox = {}
+        checkbox['id'] = obj.id
+        checkbox['data'] = {} 
+        checkbox['data']['pdbid'] = obj.pdb_id
+        return checkbox
 
     def get_resolution(self, obj):
         return self._format_resolution(getattr(obj, 'resolution', None))
