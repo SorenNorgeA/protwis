@@ -47,9 +47,6 @@ class GpcrStructureStatisticsSummaryTable(generics.ListCreateAPIView):
 
         table_qs = GpcrStructureStatisticsTable.objects.all()
         
-        if not table_qs.exists():
-            self.build_statistics_summary_table()
-        
         unfilteredCount = table_qs.count()
 
         queryset = self.get_queryset()
@@ -124,6 +121,7 @@ class PdbStructureSummaryTable(generics.ListCreateAPIView):
     pagination_class = DataTablesLimitOffsetPagination
 
     def get_queryset(self):
+        """Fetches the PDB structure summary table queryset based on the request parameters and applied filters."""
         effector = self.request.GET.get('effector', 'no_effector')
         exclude_non_interacting = True if self.request.GET.get('exclude_non_interacting') == 'true' else False
 
@@ -135,14 +133,24 @@ class PdbStructureSummaryTable(generics.ListCreateAPIView):
         queryset = self.pdb_structure_table_fetch(filters)
         return queryset
 
+    def get_queryset_base(self):
+        """Returns the unfiltered queryset count for the PDB structure summary table, based on the effector and exclude_non_interacting parameters."""
+        effector = self.request.GET.get('effector', 'no_effector')
+        exclude_non_interacting = True if self.request.GET.get('exclude_non_interacting') == 'true' else False
+
+        filters = FilterSet(None, PdbStructureSummarySerializer) #Pass None for request to avoid parsing filters from query parameters
+        filters.add_filter(TextFilter('query_effector', effector))
+        if exclude_non_interacting:
+            filters.add_filter(BooleanFilter('is_complex', exclude_non_interacting))
+
+        queryset = self.pdb_structure_table_fetch(filters)
+        return queryset
+
     def list(self, request, *args, **kwargs):
 
         table_qs = PdbTable.objects.all()
 
-        if not table_qs.exists():
-            self.build_pdb_structure_table()
-
-        unfilteredCount = table_qs.count()
+        unfilteredCount = self.get_queryset_base().count()
 
         queryset = self.get_queryset()
         url_params = DatatablesQueryStringProcessor(self.request).query_set
@@ -189,12 +197,21 @@ class PdbStructureSummaryTable(generics.ListCreateAPIView):
 
     @staticmethod
     def get_select_options(request, column):
+        effector = request.GET.get('effector', 'no_effector')
+        exclude_non_interacting = True if request.GET.get('exclude_non_interacting') == 'true' else False
+        
         #Map any complex table columns back to their primary data column for the query (e.g. weblinks with custom renderers)
         if column in PdbStructureSummarySerializer.Meta.serializer_method_to_filter_field_map:
             column = PdbStructureSummarySerializer.Meta.serializer_method_to_filter_field_map[column]
 
-        try:
-            queryset = PdbTable.objects.values_list(column, flat=True).distinct().order_by(column)
+        try:    
+            queryset_base = PdbTable.objects.all()
+    
+            queryset_base = queryset_base.filter(TextFilter('query_effector', effector).format_query())
+            if exclude_non_interacting:
+                queryset_base = queryset_base.filter(BooleanFilter('is_complex', exclude_non_interacting).format_query())
+
+            queryset = queryset_base.values_list(column, flat=True).distinct().order_by(column)
         except FieldError:
             return JsonResponse({'error': f'Invalid column requested: {column}'}, status=400)
 

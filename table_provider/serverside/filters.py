@@ -17,9 +17,10 @@ class FilterSet:
         self.request = request
         self.SerializerClass = SerializerClass
         self.field_mappings = SerializerClass.source_mapping()
-        self.query_parameters = DatatablesQueryStringProcessor(self.request).query_set
-        self.parse_filters()
-        self.parse_ordering()
+        if request is not None:
+            self.query_parameters = DatatablesQueryStringProcessor(self.request).query_set
+            self.parse_filters()
+            self.parse_ordering()
 
     def __iter__(self):
         return iter(self._filters)
@@ -135,7 +136,7 @@ class TextFilter(FilterRequirement):
             query &= Q(**{f"{self.db_field_name}__in": self.standard_filters})
 
         for tag_filter in self.tag_filters:
-            query |= Q(**{f"{self.db_field_name}__regex": rf"{tag_filter}"})
+            query |= Q(**{f"{self.db_field_name}__iregex": rf"{tag_filter}"})
 
         return query
 
