@@ -39,7 +39,8 @@ function tree_hash_color(key) {
 
 function tree_class_color(label) {
     var key = tree_class_key(label);
-    return TREE_CLASS_COLORS[key] || tree_hash_color(key);
+    // DB class names can carry a numeric suffix the class code doesn't ("Class V1" -> code "V").
+    return TREE_CLASS_COLORS[key] || TREE_CLASS_COLORS[key.replace(/\d+$/, '')] || tree_hash_color(key);
 }
 
 function ensure_tree_colors(data, depth) {

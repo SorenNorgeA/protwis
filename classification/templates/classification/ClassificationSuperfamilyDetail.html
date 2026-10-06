@@ -89,6 +89,19 @@
   display: inline-block;
   text-align: left;
 }
+
+/* Experimental receptor-level cluster tab (iframe to StructureSim) */
+.cv-detail-frame {
+  width: 100%;
+  border: 0;
+  background: #fff;
+  display: block;
+  overflow: hidden;
+}
+
+.cv-detail-frame--cluster {
+  height: 640px;
+}
 </style>
 {% endblock %}
 
@@ -108,6 +121,10 @@
         </li>
         <li role="presentation">
           <a href="#cv-list-tab" aria-controls="cv-list-tab" role="tab" data-toggle="tab">List</a>
+        </li>
+        <!-- Experimental receptor-level cluster — remove this <li>, its tab pane and its script to drop the tab -->
+        <li role="presentation">
+          <a href="#cv-superfamily-receptor-cluster-tab" aria-controls="cv-superfamily-receptor-cluster-tab" role="tab" data-toggle="tab">Cluster - receptor level</a>
         </li>
       </ul>
       <div class="cv-detail-title-inline">{{ page_title }}</div>
@@ -365,11 +382,11 @@
                     </div>
 
                     <button type="button" class="btn btn-primary btn-block"
-                            onclick="DataTablesSVG.export('#ccsTable','ccs-table',{ filename:'GPCRdb_CrossClass_TableOnly.svg' })">
+                            onclick="CCSMatrixExport.download('svg', false)">
                       SVG
                     </button>
                     <button type="button" class="btn btn-primary btn-block"
-                            onclick="DataTablesImage.export('#ccsTable','ccs-table',{ format:'png', scale:3, filename:'GPCRdb_CrossClass_TableOnly.png' })">
+                            onclick="CCSMatrixExport.download('png', false)">
                       PNG
                     </button>
 
@@ -382,11 +399,11 @@
                     </div>
 
                     <button type="button" class="btn btn-primary btn-block"
-                            onclick="DataTablesSVG.exportWithBadges('.ccs-axis-wrap', '#ccsTable', 'ccs-heatmap', { padTop:60, padLeft:60, gapX:8, gapY:10, badgeTighten:40, background:null, filename:'GPCRdb_CrossClass_WithBadges.svg' })">
+                            onclick="CCSMatrixExport.download('svg', true)">
                       SVG
                     </button>
                     <button type="button" class="btn btn-primary btn-block"
-                            onclick="CCSDownload.withBadges('png', { scale:3, padTop:60, padLeft:60, tableBackground:'#ffffff', background:null, filename:'GPCRdb_CrossClass_WithBadges.png' })">
+                            onclick="CCSMatrixExport.download('png', true)">
                       PNG
                     </button>
                   </div>
@@ -496,6 +513,19 @@
         <div id="classification_list_plot" class="cl-plot-scroll"></div>
       </div>
 
+      <!-- Experimental receptor-level cluster (all classes, StructureSim global scope) -->
+      <div role="tabpanel" class="tab-pane" id="cv-superfamily-receptor-cluster-tab">
+        <iframe
+          id="cvReceptorClusterFrame"
+          class="cv-detail-frame cv-detail-frame--cluster"
+          src="{{ receptor_cluster_url }}"
+          title="GPCR superfamily receptor-level cluster"
+          data-initial-height="640"
+          scrolling="no"
+          loading="lazy"
+        ></iframe>
+      </div>
+
     </div>
   </div>
 </div>
@@ -514,7 +544,6 @@
 <script src="{% static 'home/js/jspdf.umd.min.js' %}"></script>
 <script src="{% static 'home/js/DataTablesImage.js' %}"></script>
 <script src="{% static 'home/js/CSSDataTablesSVG.js' %}"></script>
-<script src="{% static 'home/js/CCSDownloadCompose.js' %}"></script>
 <script src="{% static 'home/js/plotly_v1_58_5.js' %}"></script>
 
 <script>
@@ -562,6 +591,42 @@
   $('a[href="#cv-superfamily-matrix-tab"]').on('shown.bs.tab', function () {
     refreshMatrixLayout();
     window.requestAnimationFrame(refreshMatrixLayout);
+  });
+})();
+
+// Experimental receptor-level cluster tab: size the StructureSim iframe to its content
+// (same approach as ClassificationVisualizationDetail.html's Cluster tab).
+(function() {
+  const frame = document.getElementById("cvReceptorClusterFrame");
+  if (!frame) return;
+
+  function resizeFrame() {
+    if (!frame.contentWindow || !frame.contentWindow.document) return;
+    const initialHeight = Number(frame.getAttribute("data-initial-height") || 720) || 720;
+    try {
+      const doc = frame.contentWindow.document;
+      const body = doc.body;
+      const html = doc.documentElement;
+      const nextHeight = Math.max(
+        body ? body.scrollHeight : 0,
+        html ? html.scrollHeight : 0,
+        initialHeight
+      );
+      frame.style.height = (nextHeight + 24) + "px";
+    } catch (err) {
+      frame.style.height = initialHeight + "px";
+    }
+  }
+
+  frame.addEventListener("load", function() {
+    resizeFrame();
+    window.setTimeout(resizeFrame, 300);
+    window.setTimeout(resizeFrame, 1000);
+  });
+
+  $('a[href="#cv-superfamily-receptor-cluster-tab"]').on('shown.bs.tab', function () {
+    resizeFrame();
+    window.setTimeout(resizeFrame, 300);
   });
 })();
 </script>

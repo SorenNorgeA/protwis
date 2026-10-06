@@ -89,17 +89,20 @@ class DataMapperHome(TemplateView):
         ("Circle_3", range(10, 15)),
     )
 
-    _GPCROME_CLASS_RENAME_MAP = {
-        "Class A (Rhodopsin)": "A",
-        "Class B1 (Secretin)": "B1",
-        "Class B2 (Adhesion)": "B2",
-        "Class C (Glutamate)": "C",
-        "Class F (Frizzled)": "F",
-        "Class O1 (Olfactory/extra-nasal 1)": "O1",
-        "Class O2 (Olfactory/extra-nasal 2)": "O2",
-        "Class T2 (Taste 2)": "T2",
-        "Class V (Vomeronasal)": "V",
-        "Unclassified": "U",
+    # Keyed by class slug, never by display name: class names get renamed between data releases
+    # (e.g. "Class V (Vomeronasal)" -> "Class V1 (Vomeronasal)"), which used to silently drop the
+    # whole class from the wheel. The name -> code map is built from the live families instead.
+    _GPCROME_CLASS_CODE_BY_SLUG = {
+        "001": "A",
+        "002": "B1",
+        "003": "B2",
+        "004": "C",
+        "006": "F",
+        "007": "O1",
+        "008": "O2",
+        "009": "T2",
+        "010": "V",
+        "011": "U",
     }
 
     @staticmethod
@@ -202,7 +205,7 @@ class DataMapperHome(TemplateView):
         for Class, ligand_types in GPCRomeStructureDict.items():
             renamed_class = class_rename_map.get(Class, Class)
 
-            if Class == "Class A (Rhodopsin)":
+            if renamed_class == "A":
                 sorted_receptor_families = []
 
                 for Ligand_type, receptor_families in ligand_types.items():
@@ -237,13 +240,13 @@ class DataMapperHome(TemplateView):
                 if "Orphan receptors" in orphans:
                     GPCRome_dict["Circle_2"].setdefault(renamed_class, {}).setdefault("Orphan receptors", {})["Class A orphans"] = orphans["Orphan receptors"]
 
-            elif Class in ["Class B1 (Secretin)", "Class B2 (Adhesion)"]:
+            elif renamed_class in ("B1", "B2"):
                 GPCRome_dict["Circle_3"].setdefault(renamed_class, {}).update(ligand_types)
 
-            elif Class in ["Class C (Glutamate)", "Class F (Frizzled)"]:
+            elif renamed_class in ("C", "F"):
                 GPCRome_dict["Circle_4"].setdefault(renamed_class, {}).update(ligand_types)
 
-            elif Class in ["Class T2 (Taste 2)", "Class V (Vomeronasal)", "Unclassified"]:
+            elif renamed_class in ("T2", "V", "U"):
                 GPCRome_dict["Circle_5"].setdefault(renamed_class, {}).update(ligand_types)
 
         # Remove the ligand type layer
@@ -275,7 +278,7 @@ class DataMapperHome(TemplateView):
         for Class, ligand_types in GPCRomeStructureDict.items():
             renamed_class = class_rename_map.get(Class, Class)
 
-            if Class == "Class O2 (Olfactory/extra-nasal 2)":
+            if renamed_class == "O2":
                 sorted_families = []
 
                 for Ligand_type, receptor_families in ligand_types.items():
@@ -302,7 +305,7 @@ class DataMapperHome(TemplateView):
 
                     GPCRome_dict.setdefault(circle, {}).setdefault(renamed_class, {}).setdefault(Ligand_type, {})[renamed_family] = receptors
 
-            elif Class == "Class O1 (Olfactory/extra-nasal 1)":
+            elif renamed_class == "O1":
                 renamed_ligand_types = {}
 
                 for Ligand_type, receptor_families in ligand_types.items():
@@ -341,7 +344,7 @@ class DataMapperHome(TemplateView):
         # e.g. Classic + Odorant back-to-back) -- a week-long cache is the same low-ceremony pattern
         # already used elsewhere in this codebase for slow-changing reference lookups. Bump the
         # "v1" suffix if the skeleton shape ever changes, as a manual invalidation lever.
-        cache_key = f"gpcrome_data_structure_v2_{data_type}"
+        cache_key = f"gpcrome_data_structure_v3_{data_type}"
         cached = cache.get(cache_key)
         if cached is not None:
             return deepcopy(cached)  # callers mutate the returned dict in place -- never hand out the cached object itself
@@ -358,10 +361,15 @@ class DataMapperHome(TemplateView):
         if not GPCRomeStructureDict:
             return None
 
+        class_rename_map = {
+            fam.name: DataMapperHome._GPCROME_CLASS_CODE_BY_SLUG[fam.slug]
+            for fam in families
+            if fam.slug in DataMapperHome._GPCROME_CLASS_CODE_BY_SLUG
+        }
         if data_type == "Classic":
-            result = DataMapperHome._bucket_classic_circles(GPCRomeStructureDict, DataMapperHome._GPCROME_CLASS_RENAME_MAP)
+            result = DataMapperHome._bucket_classic_circles(GPCRomeStructureDict, class_rename_map)
         else:
-            result = DataMapperHome._bucket_odorant_circles(GPCRomeStructureDict, DataMapperHome._GPCROME_CLASS_RENAME_MAP)
+            result = DataMapperHome._bucket_odorant_circles(GPCRomeStructureDict, class_rename_map)
 
         cache.set(cache_key, result, 60 * 60 * 24 * 7)
         return deepcopy(result)

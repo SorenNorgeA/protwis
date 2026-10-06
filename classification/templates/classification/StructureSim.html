@@ -22,9 +22,6 @@
         <li><strong>Human only</strong>: this view contains <strong>human receptors only</strong>.</li>
         <li><strong>Structure datasets</strong>: include <strong>representative structures only</strong> (active/inactive sets).</li>
         <li><strong>Colour by</strong>: recolours points by Class/Chemotype/Receptor family/Modality/Sense.</li>
-        {% if not structuresim_scope_class %}
-        <li><strong>Shape by</strong>: toggles marker shapes (None/Class), and the shape legend can be used to hide or isolate classes.</li>
-        {% endif %}
         <li><strong>Click</strong> any point to see details in the left-side panel.</li>
         <li><strong>Legend</strong>: click legend items to exclude/include groups in the plot.</li>
       </ul>
@@ -92,19 +89,6 @@
         <div id="ss-color-pickers"></div>
       </div>
     </div>
-
-    {% if not structuresim_scope_class %}
-      <!-- Shape by -->
-      <div class="dropdown">
-        <button id="ssShapeDropdownBtn" class="btn btn-primary btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
-          Shape by <span class="caret"></span>
-        </button>
-        <div class="dropdown-menu" style="min-width: 180px;">
-          <button type="button" class="btn btn-primary btn-block ss-shapeby-opt" data-key="None">None</button>
-          <button type="button" class="btn btn-outline-primary btn-block ss-shapeby-opt" data-key="Class">Class</button>
-        </div>
-      </div>
-    {% endif %}
 
     <!-- Download (Wheel-like) -->
     <div class="dropdown">
@@ -290,9 +274,6 @@
 }
 .ss-toolbar #ssColorDropdownBtn{
   width: 175px;                 /* ~20% less than 240 */
-}
-.ss-toolbar #ssShapeDropdownBtn{
-  width: 130px;                 /* ~50% of 240 */
 }
 .ss-toolbar #ssCustomizeColorsBtn{
   width: 135px;
@@ -1060,6 +1041,7 @@ body > #content.container > #gpcrdb_alert_placeholder {
     if (s.includes('CLASS O1')) return 'O1';
     if (s.includes('CLASS O2')) return 'O2';
     if (s.includes('CLASS T2')) return 'T2';
+    if (s.includes('CLASS V'))  return 'V';   // DB name is "Class V1 (Vomeronasal)"; code is V
     if (s.includes('CLASS C'))  return 'C';
     if (s.includes('CLASS F'))  return 'F';
     if (s.includes('CLASS A'))  return 'A';
@@ -1648,7 +1630,9 @@ body > #content.container > #gpcrdb_alert_placeholder {
   let currentDataset = 'sequence';
   let plotType = 'tsne';
   let colorKey = 'Class';
-  let shapeKey = 'Class';
+  // Markers are always plain circles (colour still follows "Color by"); the old
+  // "Shape by: Class" option was removed, so shapeKey stays 'None'.
+  const shapeKey = 'None';
   let frozenPointId = null;
   let frozenNeighborIds = new Set();
   let selectedPointData = null;
@@ -2476,53 +2460,6 @@ body > #content.container > #gpcrdb_alert_placeholder {
       .toLowerCase();
   }
 
-  function legendCssForExport() {
-    // Minimal CSS so the legend renders inside SVG foreignObject.
-    return `
-      .ss-legend{ font-family:'Source Code Pro', monospace; font-size:12px; color:#111; }
-      .ss-legend-grid{ display:grid; gap:14px; }
-      .ss-legend-list{
-        border:1px solid #e6e6e6; border-radius:8px; padding:8px;
-        background:#fff; box-sizing:border-box;
-      }
-      .ss-legend-list.ss-legend-list--disabled{ background:#fafafa; }
-      .ss-legend-list.ss-legend-list--shapes{ padding-right:0; }
-      .ss-legend-item{ display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:6px; }
-      .ss-legend-item.is-off{ opacity:0.35; }
-      .ss-legend-swatch{ width:22px; height:8px; border:1px solid #000; border-radius:2px; flex:0 0 22px; }
-      .ss-legend-note{ color:#666; font-size:11px; margin-top:6px; }
-      .ss-freeze-scale{ margin-top:10px; }
-      .ss-freeze-scale-title{ font-weight:700; margin:0 0 6px 0; }
-      .ss-freeze-scale-bar{ height:12px; border:1px solid #b9b9b9; border-radius:999px; background:linear-gradient(90deg, #1f4fff 0%, #7a2cff 50%, #ff1a1a 100%); }
-      .ss-freeze-scale-labels{ display:flex; justify-content:space-between; gap:10px; margin-top:4px; color:#555; font-size:11px; }
-      .ss-class-legend-plot .legend{ transform: translateX(-6px); transform-origin: top left; }
-      .ss-class-legend-plot .legend text{ font-family:'Source Code Pro', monospace !important; font-size:12px !important; fill:#111 !important; transform: translateY(-1.2px); }
-    `;
-  }
-
-  function serializeLegendHtmlForExport(widthPx, heightPx) {
-    const body = document.getElementById('ss-legend-body');
-    if (!body) return '';
-    const wrap = document.createElement('div');
-    wrap.className = 'ss-legend';
-    wrap.style.width = widthPx + 'px';
-    wrap.style.height = heightPx + 'px';
-    wrap.style.boxSizing = 'border-box';
-    wrap.innerHTML = body.innerHTML;
-
-    // Export only the COLOR legend column; shape legend is exported as SVG separately.
-    try {
-      const grid = wrap.querySelector('.ss-legend-grid');
-      if (grid && grid.children && grid.children.length >= 2) {
-        // Remove the left-hand column (shape legend) and keep the color legend nearest the plot.
-        grid.removeChild(grid.children[0]);
-        grid.style.gridTemplateColumns = widthPx + 'px';
-      }
-    } catch (e) {}
-
-    return wrap.outerHTML;
-  }
-
   function extractSvgMarkup(svgData) {
     const s = String(svgData || '').trim();
     if (!s) return '';
@@ -2570,60 +2507,6 @@ body > #content.container > #gpcrdb_alert_placeholder {
     return noXml;
   }
 
-  function stripXmlHeader(s) {
-    return String(s || '').replace(/^<\?xml[^>]*>\s*/i, '').trim();
-  }
-
-  function buildCompositeSvg({
-    plotSvgString,
-    plotW,
-    plotH,
-    leftLegendW,
-    shapeLegendW,
-    gapW,
-    leftLegendH,
-    leftLegendY,
-    shapeLegendH,
-    shapeLegendY,
-    shapeLegendSvgString
-  }) {
-    const plotSvg = normalizePlotSvg(plotSvgString, plotW, plotH);
-    const legendHtml = serializeLegendHtmlForExport(leftLegendW, leftLegendH);
-    const css = legendCssForExport();
-    const totalW = plotW + leftLegendW + (shapeLegendW ? (gapW + shapeLegendW) : 0);
-    const totalH = Math.max(plotH, leftLegendH || 0, shapeLegendH || 0);
-    const shapeSvgMarkup = shapeLegendSvgString ? normalizePlotSvg(shapeLegendSvgString, shapeLegendW, shapeLegendH) : '';
-    const yLeft = Math.max(0, Number(leftLegendY || 0));
-    const yShape = Math.max(0, Number(shapeLegendY || 0));
-    const shapeX = plotW + leftLegendW + gapW;
-    const shapeClipId = 'ssShapeLegendClip_' + Math.floor(Math.random() * 1e9);
-
-    // NOTE: foreignObject requires XHTML namespace.
-    return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${totalH}" viewBox="0 0 ${totalW} ${totalH}">
-  ${shapeSvgMarkup ? `
-  <defs>
-    <clipPath id="${shapeClipId}">
-      <rect x="0" y="0" width="${shapeLegendW}" height="${shapeLegendH}" rx="8" ry="8"/>
-    </clipPath>
-  </defs>` : ''}
-  <rect x="0" y="0" width="${totalW}" height="${totalH}" fill="#ffffff"/>
-  ${plotSvg ? `<svg x="0" y="0" width="${plotW}" height="${plotH}" viewBox="0 0 ${plotW} ${plotH}">${stripOuterSvg(plotSvg)}</svg>` : ''}
-  <foreignObject x="${plotW}" y="${yLeft}" width="${leftLegendW}" height="${leftLegendH}">
-    <div xmlns="http://www.w3.org/1999/xhtml" style="width:${leftLegendW}px;height:${leftLegendH}px;box-sizing:border-box;">
-      <style>${css}</style>
-      ${legendHtml}
-    </div>
-  </foreignObject>
-  ${shapeSvgMarkup ? `
-  <g transform="translate(${shapeX},${yShape})" clip-path="url(#${shapeClipId})">
-    <rect x="0.5" y="0.5" width="${Math.max(0, shapeLegendW - 1)}" height="${Math.max(0, shapeLegendH - 1)}" rx="8" ry="8"
-          fill="#ffffff" stroke="#e6e6e6" stroke-width="1" shape-rendering="crispEdges"/>
-    ${stripXmlHeader(shapeSvgMarkup)}
-  </g>` : ''}
-</svg>`;
-  }
-
   function loadImage(src) {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -2634,96 +2517,6 @@ body > #content.container > #gpcrdb_alert_placeholder {
     });
   }
 
-  function deepCloneJson(obj) {
-    return JSON.parse(JSON.stringify(obj || null));
-  }
-
-  function scalePlotlyForExport(data, layout, factor) {
-    const f = Number(factor || 1);
-    const outData = (data || []).map(t => {
-      const tr = Object.assign({}, t);
-      if (tr.marker) {
-        tr.marker = Object.assign({}, tr.marker);
-        if (typeof tr.marker.size === 'number') tr.marker.size = tr.marker.size * f;
-        if (tr.marker.line) {
-          tr.marker.line = Object.assign({}, tr.marker.line);
-          if (typeof tr.marker.line.width === 'number') tr.marker.line.width = tr.marker.line.width * f;
-        }
-      }
-      return tr;
-    });
-
-    const outLayout = Object.assign({}, layout || {});
-    if (outLayout.margin) {
-      outLayout.margin = Object.assign({}, outLayout.margin);
-      ['l', 'r', 't', 'b', 'pad'].forEach(k => {
-        if (typeof outLayout.margin[k] === 'number') outLayout.margin[k] = outLayout.margin[k] * f;
-      });
-    }
-    if (outLayout.font) {
-      outLayout.font = Object.assign({}, outLayout.font);
-      if (typeof outLayout.font.size === 'number') outLayout.font.size = outLayout.font.size * f;
-    }
-    if (outLayout.legend) {
-      outLayout.legend = Object.assign({}, outLayout.legend);
-      if (outLayout.legend.font) {
-        outLayout.legend.font = Object.assign({}, outLayout.legend.font);
-        if (typeof outLayout.legend.font.size === 'number') outLayout.legend.font.size = outLayout.legend.font.size * f;
-      }
-      if (typeof outLayout.legend.tracegroupgap === 'number') outLayout.legend.tracegroupgap = outLayout.legend.tracegroupgap * f;
-    }
-    return { data: outData, layout: outLayout };
-  }
-
-  async function plotlyToPngScaled(sourceDiv, widthPx, heightPx, scaleFactor) {
-    // Render in a hidden div to avoid mutating the interactive plot.
-    const w = Math.round(Number(widthPx || 0));
-    const h = Math.round(Number(heightPx || 0));
-    if (!w || !h) throw new Error('Invalid export size');
-
-    const srcData = deepCloneJson(sourceDiv && sourceDiv.data ? sourceDiv.data : []);
-    const srcLayout = deepCloneJson(sourceDiv && sourceDiv.layout ? sourceDiv.layout : {});
-    const scaled = scalePlotlyForExport(srcData, srcLayout, scaleFactor);
-    scaled.layout.width = w;
-    scaled.layout.height = h;
-
-    const host = document.createElement('div');
-    host.style.position = 'fixed';
-    host.style.left = '-10000px';
-    host.style.top = '-10000px';
-    host.style.width = w + 'px';
-    host.style.height = h + 'px';
-    host.style.background = '#fff';
-    document.body.appendChild(host);
-
-    try {
-      await Plotly.newPlot(host, scaled.data, scaled.layout, { displayModeBar: false, responsive: false, staticPlot: true });
-      return await Plotly.toImage(host, { format: 'png', width: w, height: h, scale: 1 });
-    } finally {
-      try { Plotly.purge(host); } catch (e) {}
-      try { document.body.removeChild(host); } catch (e) {}
-    }
-  }
-
-  async function plotlyToPngHiDpi(sourceDiv, widthPx, heightPx, scaleFactor) {
-    const w = Math.round(Number(widthPx || 0));
-    const h = Math.round(Number(heightPx || 0));
-    const s = Number(scaleFactor || 1);
-    if (!w || !h) throw new Error('Invalid export size');
-    return await Plotly.toImage(sourceDiv, { format: 'png', width: w, height: h, scale: s });
-  }
-
-  function drawRoundedRect(ctx, x, y, w, h, r) {
-    const rr = Math.max(0, Math.min(r, w / 2, h / 2));
-    ctx.beginPath();
-    ctx.moveTo(x + rr, y);
-    ctx.arcTo(x + w, y, x + w, y + h, rr);
-    ctx.arcTo(x + w, y + h, x, y + h, rr);
-    ctx.arcTo(x, y + h, x, y, rr);
-    ctx.arcTo(x, y, x + w, y, rr);
-    ctx.closePath();
-  }
-
   function buildExportColorLegendItemsFromPlot() {
     // Pull categories/colors from the current Plotly traces.
     const catToColor = new Map();
@@ -2731,7 +2524,9 @@ body > #content.container > #gpcrdb_alert_placeholder {
     (data || []).forEach(t => {
       const cat = t && t._colorCat;
       if (!cat || catToColor.has(cat)) return;
-      const c = (t.marker && t.marker.color) ? t.marker.color : '#999';
+      // marker.color is a per-point array on these traces; one category per trace, so take the first.
+      const mc = t.marker && t.marker.color;
+      const c = (Array.isArray(mc) ? mc[0] : mc) || '#999';
       catToColor.set(cat, c);
     });
     const cats = Array.from(catToColor.keys()).sort((a, b) => String(a).localeCompare(String(b)));
@@ -2749,55 +2544,126 @@ body > #content.container > #gpcrdb_alert_placeholder {
     return Math.max(44, (pad * 2) + (n * itemH) + 2);
   }
 
-  function drawLegendBox(ctx, x, y, w, h) {
-    ctx.save();
-    ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = '#e6e6e6';
-    ctx.lineWidth = 1;
-    drawRoundedRect(ctx, x, y, w, h, 8);
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
+  function escapeXml(raw) {
+    return String(raw == null ? '' : raw)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
   }
 
-  function drawColorLegendOnCanvas(ctx, x, y, w, h, items) {
-    const pad = 8;
-    const itemPadY = 4;
-    const itemH = 16 + (itemPadY * 2); // roughly matches `.ss-legend-item`
-    const swW = 22;
-    const swH = 8;
-    const gap = 8;
-    const textX = x + pad + swW + gap;
-    const swX = x + pad;
-    let yy = y + pad + itemH / 2;
+  // Export legend metrics -- mirror .ss-legend-list / .ss-legend-item on the page.
+  const EXPORT_LEGEND = {
+    pad: 8,         // .ss-legend-list padding
+    itemPadX: 6,    // .ss-legend-item horizontal padding
+    itemH: 24,      // same row height computeLegendBoxHeight() assumes
+    swW: 22,
+    swH: 8,
+    gap: 8,
+    font: "12px 'Source Code Pro', monospace",
+    fontFamily: "'Source Code Pro', monospace",
+  };
+  const FROZEN_LEGEND_NOTE = 'Color legend disabled while frozen.';
 
-    drawLegendBox(ctx, x, y, w, h);
+  let legendMeasureCtx = null;
+  function measureLegendText(text) {
+    try {
+      if (!legendMeasureCtx) legendMeasureCtx = document.createElement('canvas').getContext('2d');
+      legendMeasureCtx.font = EXPORT_LEGEND.font;
+      return legendMeasureCtx.measureText(String(text || '')).width;
+    } catch (e) {
+      return String(text || '').length * 7.2;
+    }
+  }
 
-    const rows = items || buildExportColorLegendItemsFromPlot();
-    ctx.save();
-    ctx.font = '12px "Source Code Pro", monospace';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#111';
-    rows.forEach(it => {
-      if (yy + itemH / 2 > y + h - pad) return;
-      const alpha = it.off ? 0.35 : 1;
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      // swatch
-      ctx.fillStyle = String(it.color || '#999');
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.rect(swX, yy - (swH / 2), swW, swH);
-      ctx.fill();
-      ctx.stroke();
-      // text
-      ctx.fillStyle = '#111';
-      ctx.fillText(String(it.label || ''), textX, yy);
-      ctx.restore();
-      yy += itemH;
+  // Legend size comes from its content (longest label / item count), so long Receptor family
+  // or Chemotype names are never clipped and long lists are never cut off.
+  function exportLegendModel() {
+    const L = EXPORT_LEGEND;
+    if (hasFrozenSelection()) {
+      return {
+        note: FROZEN_LEGEND_NOTE,
+        items: [],
+        w: Math.ceil(measureLegendText(FROZEN_LEGEND_NOTE)) + (L.pad + L.itemPadX) * 2,
+        h: computeLegendBoxHeight(1),
+      };
+    }
+    const items = buildExportColorLegendItemsFromPlot();
+    const textW = items.reduce((m, it) => Math.max(m, measureLegendText(it.label)), 0);
+    return {
+      note: '',
+      items: items,
+      w: Math.ceil((L.pad + L.itemPadX) * 2 + L.swW + L.gap + textW),
+      h: computeLegendBoxHeight(items.length),
+    };
+  }
+
+  // Native SVG (no foreignObject), so it renders in Illustrator/Inkscape/PowerPoint and can be
+  // rasterized onto a canvas for the PNG.
+  function buildLegendSvg(model, x, y) {
+    const L = EXPORT_LEGEND;
+    const parts = [
+      `<g transform="translate(${x},${y})" font-family="${L.fontFamily}" font-size="12">`,
+      `<rect x="0.5" y="0.5" width="${model.w - 1}" height="${model.h - 1}" rx="8" ry="8" fill="${model.note ? '#fafafa' : '#ffffff'}" stroke="#e6e6e6" stroke-width="1"/>`,
+    ];
+    if (model.note) {
+      parts.push(`<text x="${L.pad + L.itemPadX}" y="${model.h / 2}" dy="0.35em" font-size="11" fill="#666">${escapeXml(model.note)}</text>`);
+    }
+    const swX = L.pad + L.itemPadX;
+    model.items.forEach((it, i) => {
+      const cy = L.pad + 1 + (i * L.itemH) + (L.itemH / 2);
+      parts.push(
+        `<g${it.off ? ' opacity="0.35"' : ''}>` +
+          `<rect x="${swX}" y="${cy - L.swH / 2}" width="${L.swW}" height="${L.swH}" rx="2" ry="2" fill="${escapeXml(it.color)}" stroke="#000" stroke-width="1"/>` +
+          `<text x="${swX + L.swW + L.gap}" y="${cy}" dy="0.35em" fill="#111">${escapeXml(it.label)}</text>` +
+        `</g>`
+      );
     });
-    ctx.restore();
+    parts.push('</g>');
+    return parts.join('');
+  }
+
+  // One composite SVG (plot + legend) that both downloads use: the SVG file is this string, and
+  // the PNG is this same string rasterized -- the approach the wheel/tree exports use
+  // (gpcrome_svg_export.js), so the two files always match.
+  async function buildExportSvgString() {
+    const plotW = 1200;
+    const plotH = 800;
+    const gapW = 16;
+    const padR = 10;
+    const legend = exportLegendModel();
+    const totalW = plotW + gapW + legend.w + padR;
+    const totalH = Math.max(plotH, legend.h + 20);
+    const plotY = Math.round((totalH - plotH) / 2);
+    const legendY = Math.round((totalH - legend.h) / 2);
+
+    const plotSvg = normalizePlotSvg(
+      await Plotly.toImage(plotDiv, { format: 'svg', width: plotW, height: plotH }),
+      plotW,
+      plotH
+    );
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${totalW}" height="${totalH}" viewBox="0 0 ${totalW} ${totalH}">
+  <rect x="0" y="0" width="${totalW}" height="${totalH}" fill="#ffffff"/>
+  ${plotSvg ? `<svg x="0" y="${plotY}" width="${plotW}" height="${plotH}" viewBox="0 0 ${plotW} ${plotH}">${stripOuterSvg(plotSvg)}</svg>` : ''}
+  ${buildLegendSvg(legend, plotW + gapW, legendY)}
+</svg>`;
+    return { svg: svg, width: totalW, height: totalH };
+  }
+
+  async function svgStringToPngBlob(svg, widthPx, heightPx, scale) {
+    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
+    try {
+      const img = await loadImage(url);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(widthPx * scale);
+      canvas.height = Math.round(heightPx * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      return await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 
   async function downloadComposite(format) {
@@ -2810,104 +2676,16 @@ body > #content.container > #gpcrdb_alert_placeholder {
     if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; }
 
     try {
-      // Render size (plot only) - legend width is taken from current UI.
-      const plotW = 1200;
-      const plotH = 800;
-      const legendH = plotH;
-      const baseW = 320;
-      const legendWidths = {
-        "Class": Math.round(baseW * 0.25),
-        "Chemotype":  Math.round(baseW * 0.50),
-        "Receptor family": Math.round(baseW * 0.6),
-        "Modality": Math.round(baseW * 0.45),
-        "Sense": Math.round(baseW * 0.40),
-      };
-      const leftLegendW = legendWidths[colorKey] || baseW;
-      const shapeLegendW = (shapeKey === 'Class') ? 80 : 0;
-      const gapW = 12;
-      const colorItems = buildExportColorLegendItemsFromPlot();
-      const classCount = (() => {
-        if (!shapeLegendW) return 0;
-        const pts = datasets[currentDataset] || [];
-        return Array.from(new Set(pts.map(p => normClassCodeFromString(p.Class || '')))).filter(Boolean).length;
-      })();
-      const colorBoxH = computeLegendBoxHeight(colorItems.length);
-      const shapeBoxH = computeLegendBoxHeight(classCount);
-      const colorY = Math.max(0, Math.round((plotH - colorBoxH) / 2));
-      const shapeY = Math.max(0, Math.round((plotH - shapeBoxH) / 2));
-
+      const out = await buildExportSvgString();
       const base = toBaseName();
-
       if (format === 'svg') {
-        const plotSvgString = await Plotly.toImage(plotDiv, { format: 'svg', width: plotW, height: plotH });
-        let shapeLegendSvgString = '';
-        if (shapeLegendW && shapeLegendPlotDivForExport && shapeLegendPlotDivForExport.data) {
-          try {
-            shapeLegendSvgString = await Plotly.toImage(shapeLegendPlotDivForExport, { format: 'svg', width: shapeLegendW, height: shapeBoxH });
-          } catch (e) {
-            // Don't fail the whole SVG export if the shape legend export fails.
-            // (e.g., transient Plotly state while switching options)
-            console.warn('Shape legend SVG export failed; continuing without shape legend.', e);
-            shapeLegendSvgString = '';
-          }
-        }
-        const compositeSvg = buildCompositeSvg({
-          plotSvgString,
-          plotW,
-          plotH,
-          leftLegendW,
-          shapeLegendW,
-          gapW,
-          leftLegendH: colorBoxH,
-          leftLegendY: colorY,
-          shapeLegendH: shapeBoxH,
-          shapeLegendY: shapeY,
-          shapeLegendSvgString
-        });
-        downloadBlob(new Blob([compositeSvg], { type: 'image/svg+xml;charset=utf-8' }), base + '.svg');
+        downloadBlob(new Blob([out.svg], { type: 'image/svg+xml;charset=utf-8' }), base + '.svg');
         return;
       }
-
-      // PNG export: compose without foreignObject (more reliable).
-      // Render a *larger* PNG (more pixels) so zooming in stays crisp.
-      // This is the only way to reduce graininess; "DPI" metadata alone doesn't add detail.
-      const EXPORT_SCALE = 4;
-      const RIGHT_PAD = 10; // tiny whitespace after legends
-      const outW = plotW + leftLegendW + (shapeLegendW ? (gapW + shapeLegendW) : 0) + RIGHT_PAD;
-      const outH = plotH;
-      const canvas = document.createElement('canvas');
-      canvas.width = outW * EXPORT_SCALE;
-      canvas.height = outH * EXPORT_SCALE;
-      const ctx = canvas.getContext('2d');
-      // Draw in "logical" coordinates, scaled up for export pixels.
-      ctx.setTransform(EXPORT_SCALE, 0, 0, EXPORT_SCALE, 0, 0);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, outW, outH);
-
-      // Plot image
-      const plotPngUrl = await plotlyToPngScaled(plotDiv, plotW * EXPORT_SCALE, plotH * EXPORT_SCALE, EXPORT_SCALE);
-      const plotImg = await loadImage(plotPngUrl);
-      ctx.drawImage(plotImg, 0, 0, plotW, plotH);
-
-      // Color legend (left)
-      drawColorLegendOnCanvas(ctx, plotW, colorY, leftLegendW, colorBoxH, colorItems);
-
-      // Shape legend (right) as Plotly-rendered PNG
-      if (shapeLegendW && shapeLegendPlotDivForExport && shapeLegendPlotDivForExport.data) {
-        drawLegendBox(ctx, plotW + leftLegendW + gapW, shapeY, shapeLegendW, shapeBoxH);
-        // For the shape legend, rely on Plotly's built-in HiDPI scaling to keep
-        // the legend's spacing/font exactly the same as on the page.
-        try {
-          const shapePngUrl = await plotlyToPngHiDpi(shapeLegendPlotDivForExport, shapeLegendW, shapeBoxH, EXPORT_SCALE);
-          const shapeImg = await loadImage(shapePngUrl);
-          ctx.drawImage(shapeImg, plotW + leftLegendW + gapW, shapeY, shapeLegendW, shapeBoxH);
-        } catch (e) {
-          console.warn('Shape legend PNG export failed; continuing without shape legend.', e);
-        }
-      }
-
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-      if (blob) downloadBlob(blob, base + '.png');
+      // 4x pixels so zooming in stays crisp ("DPI" metadata alone doesn't add detail).
+      const blob = await svgStringToPngBlob(out.svg, out.width, out.height, 4);
+      if (!blob) throw new Error('PNG encoding failed.');
+      downloadBlob(blob, base + '.png');
     } catch (e) {
       console.error('Export failed', e);
       alert('Export failed: ' + (e && e.message ? e.message : String(e)));
@@ -3159,33 +2937,9 @@ body > #content.container > #gpcrdb_alert_placeholder {
     });
   });
 
-  // Shape-by (dropdown options)
-  const shapeDropBtn = document.getElementById('ssShapeDropdownBtn');
-  document.querySelectorAll('.ss-shapeby-opt').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const key = btn.getAttribute('data-key') || 'None';
-      if (key === shapeKey) return;
-      clearFrozenSelection();
-      document.querySelectorAll('.ss-shapeby-opt').forEach(b => {
-        b.classList.remove('btn-primary');
-        b.classList.add('btn-outline-primary');
-      });
-      btn.classList.remove('btn-outline-primary');
-      btn.classList.add('btn-primary');
-      shapeKey = key;
-      if (shapeDropBtn) shapeDropBtn.childNodes[0].nodeValue = 'Shape by: ' + shapeKey + ' ';
-      if (shapeKey !== 'Class') {
-        clearAllClassHidden(currentDataset);
-      }
-      render();
-      // Keep Shape dropdown open; user closes manually.
-    });
-  });
-
   // Initialize dropdown button labels to current state
   if (datasetDropBtn) datasetDropBtn.childNodes[0].nodeValue = 'Source: ' + datasetButtonLabel(currentDataset) + ' ';
   if (colorDropBtn) colorDropBtn.childNodes[0].nodeValue = 'Color by: ' + colorKey + ' ';
-  if (shapeDropBtn) shapeDropBtn.childNodes[0].nodeValue = 'Shape by: ' + shapeKey + ' ';
   updateCustomizeHeader();
   buildColorPickerUI();
 

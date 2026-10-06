@@ -995,6 +995,12 @@ class GPCRSuperfamilyVisualizationDetail(ClassificationVisualizationMixin, Templ
         ctx.update(NewClassClusterTree.build_cluster_tree_context(self.request))
         ctx.update(CrossClassSimilarity().get_context_data())
         ctx.update(self.build_list_context(allow_grouping=True))
+        # Experimental "Cluster - receptor level" tab: StructureSim without ?class= is the
+        # all-classes (group_key="global") receptor t-SNE.
+        ctx["receptor_cluster_url"] = "{}?{}".format(
+            reverse("classification-structuresim"),
+            urlencode({"embed": "1"}),
+        )
         return ctx
 
 class Classification(ClassificationVisualizationMixin, TemplateView):
@@ -1479,6 +1485,7 @@ class ClassSimilarityDataMixin:
         "Class O1 (fish-like)",
         "Class O2 (tetrapod specific)",
         "Class T2 (Taste 2)",
+        "Class V (Vomeronasal)",
         "Unclassified",
     ]
 
@@ -1492,6 +1499,7 @@ class ClassSimilarityDataMixin:
         "Class O1 (fish-like)": "007",
         "Class O2 (tetrapod specific)": "008",
         "Class T2 (Taste 2)": "009",
+        "Class V (Vomeronasal)": "010",
         "Unclassified": "011",
     }
 
@@ -1504,6 +1512,7 @@ class ClassSimilarityDataMixin:
         "Class O1 (fish-like)": "O1",
         "Class O2 (tetrapod specific)": "O2",
         "Class T2 (Taste 2)": "T2",
+        "Class V (Vomeronasal)": "V",
         "Unclassified": "U",
     }
 
@@ -1516,10 +1525,11 @@ class ClassSimilarityDataMixin:
         "O1": "#17becf",
         "O2": "#bc80bd",
         "T2": "#F7B6D2",
+        "V": "#B8860B",
         "U": "#9e9e9e",
     }
 
-    CLASS_CLUSTER_PAYLOAD_CACHE_KEY = "classclustertree:payload:v10"
+    CLASS_CLUSTER_PAYLOAD_CACHE_KEY = "classclustertree:payload:v11"
     CLASS_CLUSTER_PAYLOAD_CACHE_TIMEOUT = 60 * 60 * 24
     CLASS_CLUSTER_PAYLOAD_VERSION = 3
     CLASS_CLUSTER_DATASET_KEY = "superfamily"
@@ -2267,7 +2277,15 @@ class ReceptorFamilyVisualizationDetail(ClassificationVisualizationMixin, ClassS
         if not name:
             return {"key": None, "label": "Unclassified", "color": "#708090"}
         config_map = self.CLASS_VISUALIZATION_CONFIG
-        reverse_map = {cfg["title"]: key for key, cfg in config_map.items()}
+        reverse_map = getattr(self, "_class_name_to_key", None)
+        if reverse_map is None:
+            reverse_map = {cfg["title"]: key for key, cfg in config_map.items()}
+            # Also match the live DB class names (looked up by slug), since display names get renamed
+            # between data releases (e.g. "Class V1 (Vomeronasal)") and wouldn't match the config titles.
+            slug_to_key = {cfg["slug"]: key for key, cfg in config_map.items()}
+            for slug, db_name in ProteinFamily.objects.filter(slug__in=list(slug_to_key)).values_list("slug", "name"):
+                reverse_map[db_name] = slug_to_key[slug]
+            self._class_name_to_key = reverse_map
         key = reverse_map.get(name)
         if key:
             cfg = config_map[key]

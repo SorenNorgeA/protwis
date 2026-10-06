@@ -549,6 +549,13 @@
     return;
   }
 
+  // Upper triangle = identity, lower = similarity; both stored once under (min,max)/(max,min).
+  function lookupCell(origI, origJ, isUpper){
+    var lookI = isUpper ? Math.min(origI, origJ) : Math.max(origI, origJ);
+    var lookJ = isUpper ? Math.max(origI, origJ) : Math.min(origI, origJ);
+    return (matrix[lookI] && matrix[lookI][lookJ]) || {};
+  }
+
   function renderTable(indices){
     clearTable();
     hideFlyout();
@@ -596,10 +603,7 @@
           td.textContent = '';
         } else {
           var isUpper = rIdx < cIdx;
-          var lookI   = isUpper ? Math.min(origI, origJ) : Math.max(origI, origJ);
-          var lookJ   = isUpper ? Math.max(origI, origJ) : Math.min(origI, origJ);
-
-          var cell = (matrix[lookI] && matrix[lookI][lookJ]) || {};
+          var cell = lookupCell(origI, origJ, isUpper);
           var val  = cell.value;
 
           if (val == null){
@@ -677,6 +681,209 @@
       if (e.key === 'Escape' && howToModal && howToModal.style.display === 'block') closeHowTo();
     });
 
+
+  /* ========= Heatmap download (SVG + PNG) =========
+   * Built from the matrix data (not scraped from the table DOM), so the file shows exactly the
+   * heatmap -- no extra corner label or header borders. The PNG is this same SVG rasterized
+   * (the approach the wheel/tree/cluster exports use), so SVG and PNG always match, badges
+   * included. */
+  var EXPORT_BG = '#ffffff';
+  var EXPORT_GRID = '#dddddd';
+  var EXPORT_DIAGONAL = '#eeeeee';
+  var EXPORT_PAD = 16;
+  var EXPORT_PNG_SCALE = 3;
+  var EXPORT_BADGE = { fontSize: 18, padX: 10, padY: 6, radius: 12, stroke: '#bbbbbb', gapX: 8, gapY: 10 };
+
+  function xmlEsc(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+  }
+
+  // shade() returns hsl(); hex keeps the SVG portable to editors that don't parse hsl().
+  function hslToHex(hsl){
+    var m = /hsl\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*\)/i.exec(String(hsl || ''));
+    if (!m) return hsl;
+    var h = Number(m[1]) / 360, s = Number(m[2]) / 100, l = Number(m[3]) / 100;
+    function hue2rgb(p, q, t){
+      if (t < 0) t += 1; if (t > 1) t -= 1;
+      if (t < 1/6) return p + (q - p) * 6 * t;
+      if (t < 1/2) return q;
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      return p;
+    }
+    var q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+    return '#' + [h + 1/3, h, h - 1/3].map(function(t){
+      return ('0' + Math.round(hue2rgb(p, q, t) * 255).toString(16)).slice(-2);
+    }).join('');
+  }
+
+  var exportMeasureCtx = null;
+  function measureText(str, font){
+    try {
+      if (!exportMeasureCtx) exportMeasureCtx = document.createElement('canvas').getContext('2d');
+      exportMeasureCtx.font = font;
+      return exportMeasureCtx.measureText(String(str || '')).width;
+    } catch (e) {
+      return String(str || '').length * 12;
+    }
+  }
+
+  function readPxVar(el, name, fallback){
+    var v = parseFloat(getComputedStyle(el).getPropertyValue(name));
+    return isFinite(v) && v > 0 ? v : fallback;
+  }
+
+  function buildMatrixSvg(withBadges){
+    var indices = indicesForScope(currentScope);
+    var ranges = computeHeatRanges(indices);
+    var n = indices.length;
+
+    var cell = readPxVar(axisWrap, '--ccs-cell', 50);
+    var numFs = readPxVar(axisWrap, '--ccs-num-fs', 20);
+    var headFs = readPxVar(axisWrap, '--ccs-head1-fs', 20);
+    var numFw = getComputedStyle(axisWrap).getPropertyValue('--ccs-num-fw').trim() || '550';
+    var fontFamily = getComputedStyle(table).fontFamily || 'Helvetica, Arial, sans-serif';
+    var headFont = '700 ' + headFs + 'px ' + fontFamily;
+
+    var labels = indices.map(function(i){ return twoLineLabel(classes[i]); });
+    var maxLabelW = labels.reduce(function(m, l){ return Math.max(m, measureText(l, headFont)); }, 0);
+    // Same rule the page applies: column labels too wide for a cell are rotated to vertical.
+    var rotateCols = maxLabelW > cell - 6;
+    var rowHeaderW = Math.max(cell, Math.ceil(maxLabelW) + 8);
+    var colHeaderH = rotateCols ? Math.max(cell, Math.ceil(maxLabelW) + 14) : cell;
+
+    var badgeFont = '400 ' + EXPORT_BADGE.fontSize + 'px ' + fontFamily;
+    var badgeH = Math.round(EXPORT_BADGE.fontSize * 1.1 + EXPORT_BADGE.padY * 2 + 2);
+    function badgeModel(sel){
+      var el = axisWrap.querySelector(sel);
+      if (!el) return null;
+      var txt = (el.textContent || '').trim();
+      return {
+        text: txt,
+        fill: getComputedStyle(el).backgroundColor || '#ffffff',
+        w: Math.ceil(measureText(txt, badgeFont)) + EXPORT_BADGE.padX * 2 + 2,
+      };
+    }
+    var xb = withBadges ? badgeModel('.axis-label-x .ccs-axis-badge') : null;
+    var yb = withBadges ? badgeModel('.axis-label-y .ccs-axis-badge') : null;
+
+    var gridW = n * cell, gridH = n * cell;
+    var x0 = EXPORT_PAD + (yb ? badgeH + EXPORT_BADGE.gapY : 0) + rowHeaderW;
+    var y0 = EXPORT_PAD + (xb ? badgeH + EXPORT_BADGE.gapX : 0) + colHeaderH;
+    var W = Math.ceil(x0 + gridW + EXPORT_PAD);
+    var H = Math.ceil(y0 + gridH + EXPORT_PAD);
+
+    var out = [];
+    out.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" font-family="' + xmlEsc(fontFamily) + '">');
+    out.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="' + EXPORT_BG + '"/>');
+
+    // Cells
+    indices.forEach(function(origI, r){
+      indices.forEach(function(origJ, c){
+        var x = x0 + c * cell, y = y0 + r * cell;
+        var fill = EXPORT_BG, label = '', color = '#000000';
+        if (r === c) {
+          fill = EXPORT_DIAGONAL;
+        } else {
+          var isUpper = r < c;
+          var val = lookupCell(origI, origJ, isUpper).value;
+          if (val == null) {
+            if (showDashInBlanks) { label = '—'; color = '#888888'; }
+          } else {
+            label = String(val);
+            fill = hslToHex(shade(val, isUpper ? ranges.id : ranges.sim, isUpper ? 'id' : 'sim')) || EXPORT_BG;
+          }
+        }
+        out.push('<rect x="' + x + '" y="' + y + '" width="' + cell + '" height="' + cell + '" fill="' + fill + '"/>');
+        if (label) {
+          out.push('<text x="' + (x + cell / 2) + '" y="' + (y + cell / 2) + '" dy="0.35em" text-anchor="middle" font-size="' + numFs + '" font-weight="' + xmlEsc(numFw) + '" fill="' + color + '">' + xmlEsc(label) + '</text>');
+        }
+      });
+    });
+
+    // Grid: one 1px line between cells (the page's separate-border table doubles them up).
+    var grid = [];
+    for (var k = 0; k <= n; k++) {
+      grid.push('M' + x0 + ' ' + (y0 + k * cell + 0.5) + 'H' + (x0 + gridW));
+      grid.push('M' + (x0 + k * cell + 0.5) + ' ' + y0 + 'V' + (y0 + gridH));
+    }
+    out.push('<path d="' + grid.join('') + '" stroke="' + EXPORT_GRID + '" stroke-width="1" fill="none" shape-rendering="crispEdges"/>');
+
+    // Row headers (right-aligned, like the page) and column headers (bottom-aligned / rotated).
+    out.push('<g font-size="' + headFs + '" font-weight="700" fill="#000000">');
+    labels.forEach(function(lab, k){
+      out.push('<text x="' + (x0 - 4) + '" y="' + (y0 + k * cell + cell / 2) + '" dy="0.35em" text-anchor="end">' + xmlEsc(lab) + '</text>');
+      var cx = x0 + k * cell + cell / 2;
+      if (rotateCols) {
+        out.push('<text transform="translate(' + cx + ',' + (y0 - 8) + ') rotate(-90)" dy="0.35em" text-anchor="start">' + xmlEsc(lab) + '</text>');
+      } else {
+        out.push('<text x="' + cx + '" y="' + (y0 - 8) + '" text-anchor="middle">' + xmlEsc(lab) + '</text>');
+      }
+    });
+    out.push('</g>');
+
+    // Axis badges: Identity above the grid, Similarity rotated left of the row labels.
+    function badgeSvg(b, cx, cy, rotate){
+      var t = 'translate(' + cx + ',' + cy + ')' + (rotate ? ' rotate(-90)' : '');
+      return '<g transform="' + t + '">' +
+        '<rect x="' + (-b.w / 2) + '" y="' + (-badgeH / 2) + '" width="' + b.w + '" height="' + badgeH + '" rx="' + EXPORT_BADGE.radius + '" ry="' + EXPORT_BADGE.radius + '" fill="' + xmlEsc(b.fill) + '" stroke="' + EXPORT_BADGE.stroke + '" stroke-width="1"/>' +
+        '<text x="0" y="0" dy="0.35em" text-anchor="middle" font-size="' + EXPORT_BADGE.fontSize + '" fill="#000000">' + xmlEsc(b.text) + '</text>' +
+        '</g>';
+    }
+    if (xb) out.push(badgeSvg(xb, x0 + gridW / 2, EXPORT_PAD + badgeH / 2, false));
+    if (yb) out.push(badgeSvg(yb, EXPORT_PAD + badgeH / 2, y0 + gridH / 2, true));
+
+    out.push('</svg>');
+    return { svg: out.join(''), width: W, height: H };
+  }
+
+  function downloadBlobAs(blob, filename){
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+  }
+
+  function svgToPngBlob(svg, w, h, scale){
+    return new Promise(function(resolve, reject){
+      var url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
+      var img = new Image();
+      img.onload = function(){
+        var canvas = document.createElement('canvas');
+        canvas.width = Math.round(w * scale);
+        canvas.height = Math.round(h * scale);
+        var ctx = canvas.getContext('2d');
+        ctx.fillStyle = EXPORT_BG;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(resolve, 'image/png');
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error('Could not render the SVG to PNG.')); };
+      img.src = url;
+    });
+  }
+
+  // format: 'svg' | 'png'; withBadges: include the Identity/Similarity axis badges.
+  async function downloadMatrix(format, withBadges){
+    try {
+      var out = buildMatrixSvg(!!withBadges);
+      var base = 'GPCRdb_CrossClass_' + (withBadges ? 'WithBadges' : 'TableOnly');
+      if (format === 'svg') {
+        downloadBlobAs(new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n' + out.svg], { type: 'image/svg+xml;charset=utf-8' }), base + '.svg');
+      } else {
+        var blob = await svgToPngBlob(out.svg, out.width, out.height, EXPORT_PNG_SCALE);
+        if (!blob) throw new Error('PNG encoding failed.');
+        downloadBlobAs(blob, base + '.png');
+      }
+    } catch (e) {
+      console.error('Matrix export failed', e);
+      alert('Export failed: ' + (e && e.message ? e.message : String(e)));
+    }
+  }
+  window.CCSMatrixExport = { download: downloadMatrix };
 
   /* ========= Initial render ========= */
   applyScopeWidth(currentScope);

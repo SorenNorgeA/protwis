@@ -1343,6 +1343,15 @@ function custom_changeLeavesLabels(location, value, dict, styling_dict) {
 // === Initialize data  ===
 // ========================
 const { normKey, fnv1a32, stableColorForKey, CLASS_COLORS, CHEMOTYPE_COLORS, CHEMOTYPE_FALLBACK_PALETTE } = window.ClassificationCore;
+
+// Class color from a class display name ("Class A (Rhodopsin)", "Class V1 (Vomeronasal)", ...).
+// DB names can carry a numeric suffix the class code doesn't (DB "Class V1" -> code "V"), so
+// fall back to the code with trailing digits stripped when the exact code isn't a known class.
+function classColorFromName(name) {
+    let key = String(name || "").trim().replace(/^Class\s+/i, '');
+    key = (key.match(/^[A-Za-z0-9]+/) || [""])[0];
+    return CLASS_COLORS[key] || CLASS_COLORS[key.replace(/\d+$/, '')] || "#333";
+}
 const custom_norm_key = normKey;
 const custom_hash32 = fnv1a32;
 function custom_get_chemotype_color(name) {
@@ -1703,10 +1712,7 @@ function applyTreeColors(root, stacked_meta, options) {
         if (stacked_meta && stacked_meta.length) {
             const hit = stacked_meta.find(x => (x.label || '').toLowerCase() === 'class');
             if (hit && hit.value) {
-                let key = String(hit.value).trim();
-                key = key.replace(/^Class\s+/i, '');
-                key = (key.match(/^[A-Za-z0-9]+/) || [""])[0];
-                const c = CLASS_COLORS[key] || "#333";
+                const c = classColorFromName(hit.value);
                 (function walk(n) {
                     if (!n) return;
                     n.color = c;
@@ -1718,10 +1724,7 @@ function applyTreeColors(root, stacked_meta, options) {
         // Color by class (depth 1 nodes).
         if (root && root.children && root.children.length) {
             root.children.forEach(function (clsNode) {
-                let key = String(clsNode.name || "").trim();
-                key = key.replace(/^Class\s+/i, '');
-                key = (key.match(/^[A-Za-z0-9]+/) || [""])[0];
-                const c = CLASS_COLORS[key] || "#333";
+                const c = classColorFromName(clsNode.name);
                 (function walk(n) {
                     if (!n) return;
                     n.color = c;
@@ -1869,10 +1872,9 @@ function renderCurrent() {
         // above, so applyTreeColors's stacked_meta/depth-1 lookups never see it -- resolve the
         // single class color here instead, from the label custom_lift_class_layer handed back.
         if (tree_options.colorMode === "class") {
-            const classKey = centerLabel.replace(/^Class\s+/i, '').trim();
             tree_options = Object.assign({}, tree_options, {
                 colorMode: "fixed",
-                fixedColor: CLASS_COLORS[classKey] || "#333",
+                fixedColor: classColorFromName(centerLabel),
             });
         }
     }
