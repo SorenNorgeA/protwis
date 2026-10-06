@@ -27,6 +27,10 @@ class Command(BaseBuild):
 
     logger = logging.getLogger(__name__)
 
+    # Fixed seed so rebuilds on the same data + sklearn version give identical plots.
+    TSNE_RANDOM_STATE = 42
+    TSNE_LEARNING_RATE = "auto"
+
     GLOBAL_GROUP_KEY = "global"
     CLASS_SLUG_BY_KEY = {
         "A": "001",
@@ -106,17 +110,16 @@ class Command(BaseBuild):
             return np.zeros((n, 2), dtype=float)
         perplexity = cls._resolve_perplexity(n, perplexity=perplexity)
 
-        base_kwargs = dict(
+        # sklearn squares precomputed distances itself (the old square_distances
+        # flag is gone), and "auto" sets learning_rate = max(n / 48, 50).
+        tsne = TSNE(
             n_components=2,
             metric="precomputed",
             perplexity=perplexity,
-            random_state=42,
+            random_state=cls.TSNE_RANDOM_STATE,
             init="random",
+            learning_rate=cls.TSNE_LEARNING_RATE,
         )
-        try:
-            tsne = TSNE(learning_rate="auto", square_distances=True, **base_kwargs)
-        except TypeError:
-            tsne = TSNE(learning_rate=200.0, **base_kwargs)
         return tsne.fit_transform(D)
 
     def _persist_coords(

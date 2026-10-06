@@ -147,7 +147,7 @@ const MODALITY_COLORS_FIXED = {
 const SENSE_COLORS_FIXED = {
   "Vision": "#ff7f00",
   "Taste": "#377eb8",
-  "Odorant": "#4daf4a",
+  "Olfaction": "#4daf4a",
   "Non-sensory": "#33a02c",
   "Unknown": "#cccccc",
 };
@@ -183,13 +183,13 @@ const coloringSchemes = {
   "Sense": buildSenseScheme(CLASSIC_SENSES),
 };
 
-// Add odorant-specific mappings
-const ODORANT_RECEPTOR_FAMILIES = [
-  "Odorant family 1", "Odorant family 2", "Odorant family 3", "Odorant family 4",
-  "Odorant family 5", "Odorant family 6", "Odorant family 7", "Odorant family 8",
-  "Odorant family 9", "Odorant family 10", "Odorant family 11", "Odorant family 12",
-  "Odorant family 13", "Odorant family 14", "Odorant family 51", "Odorant family 52", "Odorant family 56"
-];
+// Add olfactory-specific mappings
+// Derived from the wheel data itself (e.g. "Olfactory family 1" ... "Olfactory family 56"),
+// sorted by trailing number so the hue order is 1, 2, ..., 14, 51, 52, 56. A hardcoded list
+// silently stops coloring anything when the DB renames families ("Odorant family N" ->
+// "Olfactory family N" already happened once).
+const ODORANT_RECEPTOR_FAMILIES = ODORANT_RECEPTOR_FAMILIES_DYNAMIC.slice()
+  .sort(new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }).compare);
 
 const coloringSchemesOdorant = {
   "Class": {

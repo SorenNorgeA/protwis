@@ -125,6 +125,41 @@ class ClassificationVisualizationMixin:
         """ProteinFamily class slug ('001') -> visualization key ('A')."""
         return {cfg["slug"]: key for key, cfg in cls.CLASS_VISUALIZATION_CONFIG.items()}
 
+    def build_list_context(self, row_filter=None, allow_grouping=False):
+        """Payload for the List tab (static/home/js/classification/list.js).
+
+        One row per receptor (primary classification row), so dual-chemotype receptors appear once.
+        `row_filter` receives the payload row dict. Class is always the list's top level; only
+        pages passing `allow_grouping=True` (the superfamily page) get the optional
+        Chemotype/Modality middle layer.
+        """
+        slug_to_key = self.class_slug_to_key_map()
+        class_order = list(self.CLASS_VISUALIZATION_CONFIG.keys())
+        rows = []
+        for row in classification_db.get_primary_classification_rows():
+            class_key = slug_to_key.get(row["class_slug"]) or "U"
+            item = {
+                "uniprot": row["uniprot"],
+                "protein": row["protein_name"] or row["uniprot"],
+                "gene": row["gene"] or "",
+                "class_key": class_key,
+                "class_title": self.CLASS_VISUALIZATION_CONFIG[class_key]["title"],
+                "chemotype": (row["chemotype"] or "").strip() or "Unknown",
+                "modality": self._group_modality_label(row["modality"]),
+                "family": (row["receptor_family"] or "").strip() or "Other",
+            }
+            if row_filter is not None and not row_filter(item):
+                continue
+            rows.append(item)
+        rows.sort(key=lambda r: (class_order.index(r["class_key"]), str(r["uniprot"])))
+        return {
+            "list_payload_json": json.dumps({
+                "rows": rows,
+                "classOrder": class_order,
+                "allowGrouping": bool(allow_grouping),
+            }),
+        }
+
     def _group_modality_label(self, modality):
         key = str(modality or "").strip().lower()
         if key in self.ORPHAN_MODALITY_KEYS:
@@ -883,6 +918,7 @@ class ClassificationVisualizationDetail(ClassificationVisualizationMixin, Templa
             ctx["tree_note"] = (
                 "Due to the unclassified nature of these receptors, a classification tree is unavailable."
             )
+        ctx.update(self.build_list_context(row_filter=lambda r: r["class_key"] == class_key))
         return ctx
 
 
@@ -943,11 +979,13 @@ class ClassificationTreeVisualizationDetail(ClassificationVisualizationMixin, Te
         ctx["cluster_url"] = cluster_url
         ctx["cluster_note"] = cluster_note
         ctx["matrix_payload_json"] = json.dumps(self.build_tree_selection_matrix_payload(selection_info))
+        selected_receptors = set(selection_info["receptor_labels"])
+        ctx.update(self.build_list_context(row_filter=lambda r: r["uniprot"] in selected_receptors))
         return ctx
 
 
 
-class GPCRSuperfamilyVisualizationDetail(TemplateView):
+class GPCRSuperfamilyVisualizationDetail(ClassificationVisualizationMixin, TemplateView):
     template_name = "classification/ClassificationSuperfamilyDetail.html"
 
     def get_context_data(self, **kwargs):
@@ -956,6 +994,7 @@ class GPCRSuperfamilyVisualizationDetail(TemplateView):
         ctx.update(ClassificationWheel.build_wheel_context())
         ctx.update(NewClassClusterTree.build_cluster_tree_context(self.request))
         ctx.update(CrossClassSimilarity().get_context_data())
+        ctx.update(self.build_list_context(allow_grouping=True))
         return ctx
 
 class Classification(ClassificationVisualizationMixin, TemplateView):
@@ -2485,6 +2524,8 @@ class ReceptorFamilyVisualizationDetail(ClassificationVisualizationMixin, ClassS
         ctx["family_tree_payload_json"] = json.dumps(tree_payload)
         ctx["family_cluster_payload_json"] = json.dumps(cluster_payload)
         ctx["family_tree_has_payload"] = bool(tree_payload.get("tree"))
+        family_receptors = set(self.family_entry.get("receptor_labels") or [])
+        ctx.update(self.build_list_context(row_filter=lambda r: r["uniprot"] in family_receptors))
         return ctx
 
 

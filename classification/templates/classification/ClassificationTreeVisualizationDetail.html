@@ -362,6 +362,28 @@
   font-size: 17px;
   color: #1f3347;
 }
+/* List tab (static/home/js/classification/list.js) */
+.cl-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0 16px;
+}
+.cl-toolbar .dropdown-menu {
+  padding: 6px;
+  min-width: 170px;
+}
+.cl-plot-scroll {
+  overflow-x: auto;
+  text-align: center;
+  margin-bottom: 30px;
+}
+.cl-plot-scroll svg {
+  display: inline-block;
+  text-align: left;
+}
 </style>
 {% endblock %}
 
@@ -386,6 +408,9 @@
             <span role="tab" aria-disabled="true" aria-label="{{ cluster_note }}" data-tooltip="{{ cluster_note }}">Cluster</span>
           </li>
         {% endif %}
+        <li role="presentation">
+          <a href="#cv-list-tab" aria-controls="cv-list-tab" role="tab" data-toggle="tab">List</a>
+        </li>
       </ul>
       <div class="cv-detail-title-inline">{{ page_title }}</div>
     </div>
@@ -523,6 +548,59 @@
           <div id="cvMatrixHover" class="cv-matrix-hover" aria-hidden="true"></div>
         </div>
       </div>
+
+      <!-- List (static/home/js/classification/list.js) -->
+      <div role="tabpanel" class="tab-pane" id="cv-list-tab" data-file-base="{% firstof class_label|slugify page_title|slugify 'gpcr' %}-list">
+        <div class="cl-toolbar">
+          <div class="dropdown">
+            <button id="clLabelDropdownBtn" class="btn btn-primary btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+              Receptor names: Protein <span class="caret"></span>
+            </button>
+            <div class="dropdown-menu">
+              <button type="button" class="btn btn-primary active btn-block mb-1 cl-label-btn" data-value="Protein">Protein</button>
+              <button type="button" class="btn btn-outline-primary btn-block mb-1 cl-label-btn" data-value="Gene">Gene</button>
+              <button type="button" class="btn btn-outline-primary btn-block cl-label-btn" data-value="UniProt">UniProt</button>
+            </div>
+          </div>
+          <div class="dropdown">
+            <button id="clColumnsDropdownBtn" class="btn btn-primary btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+              Columns: Auto <span class="caret"></span>
+            </button>
+            <div class="dropdown-menu">
+              <button type="button" class="btn btn-primary active btn-block mb-1 cl-columns-btn" data-value="Auto">Auto</button>
+              <button type="button" class="btn btn-outline-primary btn-block mb-1 cl-columns-btn" data-value="1">1</button>
+              <button type="button" class="btn btn-outline-primary btn-block mb-1 cl-columns-btn" data-value="2">2</button>
+              <button type="button" class="btn btn-outline-primary btn-block mb-1 cl-columns-btn" data-value="3">3</button>
+              <button type="button" class="btn btn-outline-primary btn-block mb-1 cl-columns-btn" data-value="4">4</button>
+              <button type="button" class="btn btn-outline-primary btn-block mb-1 cl-columns-btn" data-value="5">5</button>
+              <button type="button" class="btn btn-outline-primary btn-block cl-columns-btn" data-value="6">6</button>
+            </div>
+          </div>
+          <div class="dropdown">
+            <button id="clFoldDropdownBtn" class="btn btn-primary btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+              Expand / collapse <span class="caret"></span>
+            </button>
+            <div class="dropdown-menu">
+              <button type="button" class="btn btn-primary btn-block mb-1 cl-fold-btn" data-fold="expand">Expand all</button>
+              <button type="button" class="btn btn-primary btn-block mb-1 cl-fold-btn" data-fold="families">Collapse families</button>
+              <button type="button" class="btn btn-primary btn-block cl-fold-btn" data-fold="all">Collapse all</button>
+            </div>
+          </div>
+          <button id="clColorToggle" type="button" class="btn btn-success btn-sm" aria-pressed="true">Colored headers</button>
+          <button id="clBulletToggle" type="button" class="btn btn-danger btn-sm" aria-pressed="false">Bullets</button>
+          <div class="dropdown">
+            <button id="clDownloadDropdownBtn" class="btn btn-primary btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+              <span class="glyphicon glyphicon-download"></span> Download <span class="caret"></span>
+            </button>
+            <div class="dropdown-menu">
+              <button type="button" class="btn btn-primary btn-block cl-download-btn" data-format="svg">SVG</button>
+              <button type="button" class="btn btn-primary btn-block cl-download-btn" data-format="png">PNG</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="classification_list_plot" class="cl-plot-scroll"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -546,6 +624,11 @@
 
 <script src="{% static 'home/js/classification/core.js' %}"></script>
 <script src="{% static 'home/js/classification/tree.js' %}"></script>
+<script src="{% static 'home/js/gpcrome_svg_export.js' %}"></script>
+<script>
+  window.CLASSIFICATION_LIST_DATA = JSON.parse('{{ list_payload_json|escapejs }}');
+</script>
+<script src="{% static 'home/js/classification/list.js' %}"></script>
 
 <script>
   var matrixPayload = JSON.parse('{{ matrix_payload_json|escapejs }}');
