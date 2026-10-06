@@ -1502,7 +1502,7 @@ let TREE_UI = {
     type: "Class",
     selectionKey: "A",
     layout: "Tree - Circular",
-    leafPills: false,
+    leafPills: true,
     leafLabelType: "Protein",
 };
 
