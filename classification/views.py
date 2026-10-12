@@ -9,6 +9,7 @@ from django.views.generic import TemplateView
 
 from classification import classification_db
 from classification.models import ClusterCoord, ReceptorSimilarity, StructureSimilarity, TreeNetwork
+from common.class_colors import GPCR_CLASS_COLORS
 from common.models import WebLink
 from mapper.views import DataMapperHome
 from protein.models import Gene, Protein, ProteinFamily, ProteinState
@@ -1516,20 +1517,9 @@ class ClassSimilarityDataMixin:
         "Unclassified": "U",
     }
 
-    CLASS_COLOR_BY_SYMBOL = {
-        "A": "#1f78b4",
-        "B1": "#33a02c",
-        "B2": "#6A3D9A",
-        "C": "#d62728",
-        "F": "#FF7F0E",
-        "O1": "#17becf",
-        "O2": "#bc80bd",
-        "T2": "#F7B6D2",
-        "V": "#B8860B",
-        "U": "#9e9e9e",
-    }
+    CLASS_COLOR_BY_SYMBOL = GPCR_CLASS_COLORS
 
-    CLASS_CLUSTER_PAYLOAD_CACHE_KEY = "classclustertree:payload:v11"
+    CLASS_CLUSTER_PAYLOAD_CACHE_KEY = "classclustertree:payload:v12"
     CLASS_CLUSTER_PAYLOAD_CACHE_TIMEOUT = 60 * 60 * 24
     CLASS_CLUSTER_PAYLOAD_VERSION = 3
     CLASS_CLUSTER_DATASET_KEY = "superfamily"

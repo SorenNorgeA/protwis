@@ -132,6 +132,7 @@ TEMPLATES = [
                 'protwis.context_processors.canonical_tag',
                 'protwis.context_processors.documentation_url',
                 'protwis.context_processors.google_analytics',
+                'protwis.context_processors.gpcr_class_colors',
                 'protwis.context_processors.site_title'
             ],
         },

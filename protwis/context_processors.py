@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.cache import cache
 
+from common.class_colors import GPCR_CLASS_CODE_BY_SLUG_JSON, GPCR_CLASS_COLORS_JSON
 from common.models import Citation
 
 def current_site(request):
@@ -53,6 +54,12 @@ def canonical_tag(request):
 def documentation_url(request):
     return {
         'documentation_url': settings.DOCUMENTATION_URL
+    }
+
+def gpcr_class_colors(request):
+    return {
+        'gpcr_class_colors_json': GPCR_CLASS_COLORS_JSON,
+        'gpcr_class_code_by_slug_json': GPCR_CLASS_CODE_BY_SLUG_JSON,
     }
 
 def google_analytics(request):

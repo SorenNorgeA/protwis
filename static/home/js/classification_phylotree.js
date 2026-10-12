@@ -5,16 +5,8 @@
   var showInternalNodes = window.classificationPhyloTreeShowInternalNodes === true;
   var showDistanceRings = window.classificationPhyloTreeShowDistanceRings !== false;
   var showRootCap = window.classificationPhyloTreeShowRootCap !== false;
-  var defaultFillBySymbol = {
-    "A": "#1f78b4",
-    "B1": "#33a02c",
-    "B2": "#6A3D9A",
-    "C": "#d62728",
-    "F": "#FF7F0E",
-    "O1": "#17becf",
-    "O2": "#bc80bd",
-    "T2": "#F7B6D2"
-  };
+  // Defined once in common/class_colors.py, exposed by home/base.html.
+  var defaultFillBySymbol = window.GPCR_CLASS_COLORS || {};
   var entityKind = String(window.classificationPhyloTreeEntityKind || "class").toLowerCase();
   var panelTitle = String(window.classificationPhyloTreePanelTitle || "Distances");
   var outerLabelToggleEnabled = window.classificationPhyloTreeEnableOuterLabelToggle === true;

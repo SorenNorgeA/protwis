@@ -98,6 +98,8 @@
       <div class="dropdown-menu" style="min-width: 160px;">
         <button id="ssDownloadSvgBtn" type="button" class="btn btn-primary btn-block">SVG</button>
         <button id="ssDownloadPngBtn" type="button" class="btn btn-primary btn-block">PNG</button>
+        <!-- TEMPORARY: 400x450 plot-only SVG export (handler: downloadSlimSvg). Remove after use. -->
+        <button id="ssDownloadSvgSlimBtn" type="button" class="btn btn-primary btn-block">SVG (slim)</button>
       </div>
     </div>
 
@@ -723,6 +725,7 @@ body > #content.container > #gpcrdb_alert_placeholder {
   const legendEl    = document.getElementById('ss-legend-body');
   const downloadPngBtn = document.getElementById('ssDownloadPngBtn');
   const downloadSvgBtn = document.getElementById('ssDownloadSvgBtn');
+  const downloadSvgSlimBtn = document.getElementById('ssDownloadSvgSlimBtn'); // TEMPORARY
   // const downloadBtn = document.getElementById('download-btn');   // NEW (temporarily disabled)
   const hoverPanelEl = document.createElement('div');
   hoverPanelEl.className = 'ss-hover-panel';
@@ -738,25 +741,12 @@ body > #content.container > #gpcrdb_alert_placeholder {
 
   /* ---------- colour constants ---------- */
 
-  // Keep these in sync with:
-  // - `classification/templates/classification/ClassificationWheel.html`
-  // - `classification/templates/classification/Classification_tree.html`
-  const CLASS_COLORS_TREE = {
-    "A":  "#1f78b4",
-    "B1": "#33a02c",
-    "B2": "#6A3D9A",
-    "C":  "#d62728",
-    "F":  "#FF7F0E",
-    "T2": "#F7B6D2",
-    "V":  "#B8860B",
-    "Unclassified": "#9e9e9e",
-    // Classification_tree.html uses "Cl" for unclassified.
-    "Cl": "#9e9e9e",
-    "U": "#9e9e9e",
-    // Odorant classes used by wheel
-    "O1": "#9D4EDD",
-    "O2": "#2A9D8F"
-  };
+  // Class colours are defined once in common/class_colors.py (exposed by home/base.html).
+  // "Unclassified" and "Cl" are aliases some category strings use for U.
+  const CLASS_COLORS_TREE = Object.assign({}, window.GPCR_CLASS_COLORS, {
+    "Unclassified": (window.GPCR_CLASS_COLORS || {}).U,
+    "Cl": (window.GPCR_CLASS_COLORS || {}).U
+  });
 
   const CHEMOTYPE_COLORS_TREE = {
     "Adhesion receptors": "#1F77B4",
@@ -2694,6 +2684,26 @@ body > #content.container > #gpcrdb_alert_placeholder {
     }
   }
 
+  // TEMPORARY: "SVG (slim)" -- the plot alone (no legend) squeezed onto a 400x450 canvas.
+  // Remove together with #ssDownloadSvgSlimBtn after use.
+  async function downloadSlimSvg() {
+    if (!plotDiv || !plotDiv.data || !plotDiv.data.length) {
+      alert('No plot to download yet.');
+      return;
+    }
+    try {
+      const svg = normalizePlotSvg(
+        await Plotly.toImage(plotDiv, { format: 'svg', width: 400, height: 450 }),
+        400,
+        450
+      );
+      downloadBlob(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), toBaseName() + '_400x450.svg');
+    } catch (e) {
+      console.error('Export failed', e);
+      alert('Export failed: ' + (e && e.message ? e.message : String(e)));
+    }
+  }
+
   /* ---------- UI wiring ---------- */
 
   /* ---------- How-to modal ---------- */
@@ -2963,6 +2973,7 @@ body > #content.container > #gpcrdb_alert_placeholder {
 
   if (downloadPngBtn) downloadPngBtn.addEventListener('click', () => downloadComposite('png'));
   if (downloadSvgBtn) downloadSvgBtn.addEventListener('click', () => downloadComposite('svg'));
+  if (downloadSvgSlimBtn) downloadSvgSlimBtn.addEventListener('click', downloadSlimSvg); // TEMPORARY
 
   async function loadData() {
     try {

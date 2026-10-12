@@ -316,6 +316,14 @@
                 <div id="ncct-cluster-plot" class="ncct-plot"></div>
               </div>
               <div id="ncct-cluster-meta" class="ncct-meta"></div>
+              <!-- TEMPORARY: one-off export of the cluster figure without hover highlight.
+                   Handler: downloadPlainClusterSvg() in cluster.js. Comment out / remove after use. -->
+              <button type="button" id="ncct-cluster-download-svg" class="btn btn-default btn-sm" style="margin-top: 8px;">
+                Download SVG (no highlight)
+              </button>
+              <button type="button" id="ncct-cluster-download-svg-400x450" class="btn btn-default btn-sm" style="margin-top: 8px;">
+                Download SVG 400x450 (no highlight)
+              </button>
             </div>
 
             <div class="ncct-superfamily-side">

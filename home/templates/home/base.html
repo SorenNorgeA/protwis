@@ -83,6 +83,14 @@
 <script src="{% static 'flowplayer/flowplayer.overlay.min.js' %}"></script>
 <!-- the bootstrap vendor overlay wrapper -->
 <script src="{% static 'flowplayer/flowplayer.overlay.bootstrap.js' %}"></script>
+<!-- GPCR class colours: single source of truth is common/class_colors.py -->
+<script>
+window.GPCR_CLASS_COLORS = Object.freeze({{ gpcr_class_colors_json|default:'{}'|safe }});
+window.GPCR_CLASS_CODE_BY_SLUG = Object.freeze({{ gpcr_class_code_by_slug_json|default:'{}'|safe }});
+window.gpcrClassColorForSlug = function (slug) {
+  return window.GPCR_CLASS_COLORS[window.GPCR_CLASS_CODE_BY_SLUG[String(slug || '').slice(0, 3)]];
+};
+</script>
 <!-- Comply with GDPR Minified Cookie Consent from https://github.com/osano/cookieconsent -->
 <script src="{% static 'home/js/gpcrdb.js' %}"></script>
 <script src="{% static 'home/js/cookieconsent.min.js' %}"></script>

@@ -4,6 +4,7 @@ Annotates crystalized targets and number of ligands/target available in ChEMBL.
 """
 from django.db.models import Count, Q
 
+from common.class_colors import GPCR_CLASS_COLORS
 from interaction.models import ResidueFragmentInteraction, StructureLigandInteraction
 from ligand.models import AssayExperiment, BiasedData
 from protein.models import Protein, ProteinFamily
@@ -176,7 +177,9 @@ class PhylogeneticTreeGenerator(object):
         ("", "Protein receptors") : 'SteelBlue',
         ("", "Sensory receptors") : 'Indigo',
         ("", "Steroid receptors") : 'Purple',
-        ("Class B2 (Adhesion)", "") : 'LimeGreen',
+        # Class-level override keyed by class slug ("003" = B2): Adhesion has no ligand-type split,
+        # so the whole class takes its class colour from common/class_colors.py.
+        ("003", "") : GPCR_CLASS_COLORS["B2"],
         }
     #List of tree levels that should be sorted alphabetically
     SORTED_BRANCHES = [2,3]
@@ -336,7 +339,7 @@ class PhylogeneticTreeGenerator(object):
     def map_family_colors(self):
 
         for x,y in self.CSS_COLORS.items():
-            lvl1_slug = [slug for slug, fam in self.lookup[1].items() if (x[0] == fam.name or x[0] == '')]
+            lvl1_slug = [slug for slug, fam in self.lookup[1].items() if x[0] in ('', slug, fam.name)]
             lvl2_slug = []
             for slug, fam in self.lookup[2].items():
                 if fam.name.startswith(x[1]) and slug[:3] in lvl1_slug:

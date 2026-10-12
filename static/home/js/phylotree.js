@@ -60,6 +60,14 @@ function renderTree(data) {
     colorClasses[GP_start+1] = colorClasses[GP_start]
     colorClasses[GP_start+2] = colorClasses[GP_start]
 
+    // GPCR class (3): fixed colors from common/class_colors.py, matched via each entry's family slug (4)
+    var classSlugByName = {};
+    for (key in treeAnnotations)
+      classSlugByName[treeAnnotations[key][3]] = treeAnnotations[key][4];
+    colorClasses[3] = dataClasses[3].map(function (name, j) {
+      return (window.gpcrClassColorForSlug && gpcrClassColorForSlug(classSlugByName[name])) || colorClasses[3][j];
+    });
+
     // G-protein coupling
     couplingAnnotations = data["Gprot_coupling"];
 

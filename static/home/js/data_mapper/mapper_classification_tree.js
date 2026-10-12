@@ -137,18 +137,8 @@ function custom_tree_first_ring_radius(maxDepth, options) {
 // Coloring (Class + Chemotype)
 // ------------------------------
 // Class colors (used for the center badge stroke)
-const CLASS_COLORS = {
-    'A':  '#1f78b4',
-    'B1': '#33a02c',
-    'B2': '#6A3D9A',
-    'C':  '#d62728',
-    'F':  '#FF7F0E',
-    'T2': '#F7B6D2',
-    'U':  '#9e9e9e',
-    'O1': '#66CDAA',
-    'O2': '#3CB371',
-    'V':  '#B8860B',
-};
+// Defined once in common/class_colors.py, exposed by home/base.html.
+const CLASS_COLORS = window.GPCR_CLASS_COLORS || {};
 
 // 14-category chemotype colors (based on the legacy set in common/phylogenetic_tree.py)
 // Palette: ColorBrewer Paired (12) + 2 extras.

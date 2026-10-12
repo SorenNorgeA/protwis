@@ -38,19 +38,8 @@
       .replace(/'/g, "&#39;");
   }
 
-  // Class-symbol -> color, same symbol used everywhere else (CLASS_VISUALIZATION_CONFIG, etc.).
-  const CLASS_COLORS = {
-    A: "#1f78b4",
-    B1: "#33a02c",
-    B2: "#6A3D9A",
-    C: "#d62728",
-    F: "#FF7F0E",
-    O1: "#9D4EDD",
-    O2: "#2A9D8F",
-    T2: "#F7B6D2",
-    V: "#B8860B",
-    U: "#9e9e9e",
-  };
+  // Class-symbol -> color. Defined once in common/class_colors.py, exposed by home/base.html.
+  const CLASS_COLORS = window.GPCR_CLASS_COLORS || {};
 
   // 14-category chemotype colors (ColorBrewer Paired 12 + 2 extras). Shared verbatim
   // between the wheel and the classification tree — keep in sync if changed.

@@ -32,6 +32,7 @@ from django_rdkit.models import *
 from django.core.cache import cache
 
 from common.views import AbsReferenceSelectionTable, getReferenceTable, getLigandTable, getLigandCountTable, AbsTargetSelection
+from common.class_colors import class_color_for_slug
 from common.models import ReleaseNotes, WebResource, Publication, WebLink
 from common.phylogenetic_tree import PhylogeneticTreeGenerator
 from common.selection import Selection, SelectionItem
@@ -3044,17 +3045,10 @@ class LigandStatistics(TemplateView):
                 "Protein receptors": 'SteelBlue',
                 "Sensory receptors": 'Indigo',
                 "Steroid receptors": 'Purple',
-                "Class B2 (Adhesion)": 'LawnGreen',
-                "Class B1 (Secretin)": 'MediumBlue',
-                "Class C (Glutamate)": 'DarkGoldenRod',
+                # Orphan ligand-type levels (class colours themselves come from common/class_colors.py)
                 "Class C Orphans": 'DarkGoldenRod',
                 "Class A orphans": 'DarkSalmon',
-                "Class A (Rhodopsin)": 'Violet',
-                "Class F (Frizzled)": 'Teal',
                 "Other GPCR orphans": "Grey",
-                "Class T2 (Taste 2)": 'MediumPurple',
-                "Class O1 (Olfactory/extra-nasal 1)": "Tomato",
-                "Class O2 (Olfactory/extra-nasal 2)": "Peru",
                 "Odorant receptors": "DarkOliveGreen",
                 }
             heatmap_receptors = Protein.objects.filter(family__slug__startswith='0', species_id=1).exclude(
@@ -3074,14 +3068,14 @@ class LigandStatistics(TemplateView):
                     continue
                 if rec.family.parent.name.startswith('Class'):
                     class_name = rec.family.parent.name.split(' (')[0]
-                    class_color = CSS_COLORS.get(rec.family.parent.name, 'Black')
+                    class_color = class_color_for_slug(rec.family.slug, 'Black')
                     lig_type_color = "NA"
                     lig_type_name = "NA"
                     rec_family_color = "NA"
                     rec_family_name = "NA"
                 if rec.family.parent.parent.name.startswith('Class') or rec.family.parent.parent.name.startswith('Orphan'):
                     class_name = rec.family.parent.parent.name.split(' (')[0]
-                    class_color = CSS_COLORS.get(rec.family.parent.parent.name, 'Black')
+                    class_color = class_color_for_slug(rec.family.slug, 'Black')
                     lig_type_color = CSS_COLORS.get(rec.family.parent.name, 'Black')
                     lig_type_name = rec.family.parent.name
                     if rec.family.name not in color_cache:
@@ -3090,7 +3084,7 @@ class LigandStatistics(TemplateView):
                     rec_family_name = rec.family.name
                 if rec.family.parent.parent.parent.name.startswith('Class'):
                     class_name = rec.family.parent.parent.parent.name.split(' (')[0]
-                    class_color = CSS_COLORS.get(rec.family.parent.parent.parent.name, 'Black')
+                    class_color = class_color_for_slug(rec.family.slug, 'Black')
                     lig_type_color = CSS_COLORS.get(rec.family.parent.parent.name, 'Black')
                     lig_type_name = rec.family.parent.parent.name
                     if rec.family.parent.name not in color_cache:

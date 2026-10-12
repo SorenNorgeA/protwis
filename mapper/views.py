@@ -4,6 +4,7 @@ from django.core.cache import cache
 from django.views.generic import TemplateView, View
 from protein.models import Protein, ProteinFamily
 from classification.models import ClusterCoord
+from common.class_colors import class_color_for_slug
 
 import json
 from copy import deepcopy
@@ -1279,5 +1280,12 @@ class MapperClusterView(TemplateView):
         )
         full_matrix = DataMapperHome.generate_full_matrix()
         context['cluster_all_positions_json'] = full_matrix.to_json(orient='records')
+        # Points carry the class display name, so map each live class name to its slug-keyed colour.
+        class_colors = {}
+        for fam in ProteinFamily.objects.filter(slug__regex=r'^[0-9]{3}$'):
+            color = class_color_for_slug(fam.slug)
+            if color:
+                class_colors[fam.name] = color
+        context['cluster_class_colors_json'] = json.dumps(class_colors)
         return context
 

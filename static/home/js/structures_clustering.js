@@ -62,6 +62,13 @@ function renderTree(data) {
           }
         }
     }
+    // GPCR class (5): fixed colors from common/class_colors.py, matched via each entry's family slug (8)
+    var classSlugByName = {};
+    for (key in treeAnnotations)
+      classSlugByName[treeAnnotations[key][5]] = treeAnnotations[key][8];
+    colorClasses[5] = dataClasses[5].map(function (name, j) {
+      return (window.gpcrClassColorForSlug && gpcrClassColorForSlug(classSlugByName[name])) || colorClasses[5][j];
+    });
     colorClasses[7] = ["#0F0", "#0F0", "#0F0", "#0F0", "#F00", "#F00", "#F00", "#F00", "#F80", "#888"]
     colorClasses[9] = colorClasses[8]
     colorClasses[10] = colorClasses[8]

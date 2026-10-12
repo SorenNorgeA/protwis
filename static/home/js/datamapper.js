@@ -6,12 +6,10 @@
 // Python). draw_tree()'s branch lines read d.target.color directly for stroke -- an empty string
 // clears the style, so branch lines would otherwise vanish. These are only a fallback: real colors
 // coming from the backend are never overwritten (see the `if (!n.color)` guards below).
-var TREE_CLASS_COLORS = {
-    'A': 'Red', 'B1': 'Green', 'B2': 'Blue', 'C': 'Purple', 'F': 'Grey',
-    'T2': 'Orange', 'O1': '#66CDAA', 'O2': '#3CB371', 'V': '#B8860B', 'U': 'Gold'
-};
+// Class colors are defined once in common/class_colors.py, exposed by home/base.html.
+var TREE_CLASS_COLORS = window.GPCR_CLASS_COLORS || {};
 // Ligand-type ("chemotype") colors; mirrors CSS_COLORS in common/phylogenetic_tree.py, including
-// its Class B2 blanket override and its 'Black' default for anything unrecognized.
+// its Class B2 blanket override (B2's class color) and its 'Black' default for anything unrecognized.
 var TREE_CHEMOTYPE_COLORS = {
     'Adhesion': 'Crimson', 'Alicarboxylic acid': 'Red', 'Aminergic': 'OrangeRed',
     'Amino acid': 'Orange', 'Ion': 'GoldenRod', 'Lipid': 'Gold', 'Melatonin': 'Yellow',
@@ -50,7 +48,7 @@ function ensure_tree_colors(data, depth) {
         if (!cls.color) { cls.color = tree_class_color(cls.name); }
         (cls.children || []).forEach(function (lt) {
             var chemKey = tree_class_key(lt.name);
-            var chemColor = (classKey === 'B2') ? 'LimeGreen' : (TREE_CHEMOTYPE_COLORS[chemKey] || 'Black');
+            var chemColor = (classKey === 'B2') ? tree_class_color('B2') : (TREE_CHEMOTYPE_COLORS[chemKey] || 'Black');
             (function paint(n) {
                 if (!n.color) { n.color = chemColor; }
                 (n.children || []).forEach(paint);

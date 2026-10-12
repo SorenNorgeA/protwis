@@ -33,7 +33,8 @@ var CLUSTER_GRADIENT_COLORS = { min: '#3c5488', mid: '#ffffff', max: '#e64b35' }
 // Gradient stop count: 1=max-only (white→max), 2=min+max, 3=min+mid+max
 var CLUSTER_GRADIENT_STOPS = 3;
 // Per-label colors for all categorical schemes; key = label text (e.g. 'Cluster 1', 'Class A', 'My group')
-var CLUSTER_LABEL_COLORS = {};
+// Seeded with the GPCR class colors (class display name -> color from common/class_colors.py).
+var CLUSTER_LABEL_COLORS = Object.assign({}, window.MAPPER_CLUSTER_CLASS_COLORS || {});
 var _lastClusterEntries = '';  // fingerprint to detect receptor set changes
 
 var CLUSTER_COLOR_PALETTE = [

@@ -7,6 +7,7 @@
   padding: 22px 0 36px;
   --cv-column-gap: 18px;
   --cv-class-root-width: 40%;
+  --cv-class-tree-root-width: 35%;
   --cv-modality-label-width: 180px;
   --cv-static-box-width: 540px;
   --cv-static-box-padding: 14px;
@@ -269,7 +270,7 @@
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, var(--cv-class-root-width)) minmax(0, calc(100% - var(--cv-class-root-width)));
+  grid-template-columns: minmax(0, var(--cv-class-tree-root-width)) minmax(0, calc(100% - var(--cv-class-tree-root-width)));
   column-gap: var(--cv-column-gap);
   align-items: stretch;
 }
