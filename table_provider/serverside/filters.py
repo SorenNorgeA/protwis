@@ -63,6 +63,13 @@ class FilterSet:
                         filter_req = NumericRangeFilter(self.field_mappings.get(data_field), filter_min, filter_max)
                     else:
                         continue
+                elif field_type == 'boolean':
+                    if search_value.lower() in ['true', '1', 'yes']:
+                        filter_req = BooleanFilter(self.field_mappings.get(data_field), True)
+                    elif search_value.lower() in ['false', '0', 'no']:
+                        filter_req = BooleanFilter(self.field_mappings.get(data_field), False)
+                    else:
+                        continue
                 else:
                     continue
 
