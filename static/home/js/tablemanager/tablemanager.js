@@ -34,6 +34,15 @@ class TableManager {
     // e.g. to populate filter interfaces that require access to the dataset to determine their options (e.g. select dropdowns populated with unique values from the dataset)
     this.dataLoadedCallBacks = []; 
     this.documentReadyCallBacks = []; 
+
+    // A general purpose state object that can be used to store any additional information or state that may be needed by the TableManager or its associated components.
+    this.state = {};
+
+    // If any of the columns are of type "checkbox", initialize a Map to track the active checkboxes and their associated data.
+    if (this.columns.some((col) => col.data_type === "checkbox")) {
+      this.state.activeCheckBoxes = new Map(); // Map of checkboxes that are currently checked, with checkbox id as key and checkbox cell data ({id, data}) as value
+      this.state.currentSearchCheckBoxes = new Map(); // Map of checkboxes that are currently in the search results, with checkbox id as key and checkbox cell data ({id, data}) as value
+    }
   }
 
   /**
@@ -105,7 +114,10 @@ class TableManager {
     // If the showCategoryCounts option is enabled, create the category count header cells 
     // and set up an event listener for DataTables search events to update the counts accordingly.
     if (dataTableOptions.showCategoryCounts) {
-      this.createCategoryCountHeaderCells(tableComponents.categoryCountsHeaderRow);      
+    // If any of the columns are of type "checkbox", subscribe to relevant events to help synchronise checkboxes.
+    if (this.columns.some((col) => col.data_type === "checkbox")) {
+      this.setupCheckboxEventSubscriptions();
+    }
       this.dataTableReference.on("search", (e, settings) => { 
         this._handleColumnUniqueValueCounts(settings);
       })
@@ -121,6 +133,22 @@ class TableManager {
       this.documentReadyCallBacks.forEach((callBack) => callBack());
     });
 
+
+  setupCheckboxEventSubscriptions() {
+      // Subscribe to the DataTableSearch event to update the currentSearchCheckBoxes state whenever a search is performed on the table.
+      this.eventPubSub.subscribe("DataTableSearch", () => this.state.masterCheckbox.updateCheckBoxSearchSet());
+      // Trigger an initial update of the currentSearchCheckBoxes state after the table is initialized and data is loaded, to ensure the state is accurate from the start.
+      this.dataLoadedCallBacks.push( () => this.state.masterCheckbox.updateCheckBoxSearchSet());
+
+      // Subscribe to the DataTableDraw event to synchronise the checkboxes in the rendered rows with the activeCheckBoxes 
+      // state whenever the table is redrawn (e.g. after a search, order, or page change).
+      this.eventPubSub.subscribe("DataTableDraw", () => Checkbox.synchroniseVisibleCheckState(this));
+      this.eventPubSub.subscribe("DataTableDraw", () => this.state.masterCheckbox.synchroniseCheckedState(this));
+      
+      // Subscribe to the checkboxStateChanged event to synchronise the master checkbox state whenever a checkbox is checked or unchecked.
+      // The checkboxStateChanged is published by the default checkbox click handler, 
+      // and should be published by any custom click handler that is registered for the checkbox column.
+      this.eventPubSub.subscribe("checkboxStateChanged", () => this.state.masterCheckbox.synchroniseCheckedState(this));
   }
 
   async _handleColumnUniqueValueCounts(settings){
@@ -385,7 +413,14 @@ class TableManager {
     this.columns.forEach((col) => {
       // add header
       const th = document.createElement("th");
+
+      if (col.data_type === "checkbox") {
+        const masterCheckbox = new MasterCheckbox(col, this);
+        th.appendChild(masterCheckbox.createHtmlElement());
+        this.state.masterCheckbox = masterCheckbox; // Store reference to the master checkbox for later use
+      } else {
       th.textContent = col.title;
+      }
       
       if (col.cssClassHeaderCell) {
         th.classList.add(col.cssClassHeaderCell);

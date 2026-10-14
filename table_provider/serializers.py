@@ -201,8 +201,8 @@ class PdbStructureSummarySerializer(serializers.Serializer):
 
         datatypes = {
             'checkbox':'checkbox', 'uniprot': 'text', 'protein_name_short': 'text', 'receptor_family_short': 'text', 'receptor_class_code': 'text', 'gene': 'text',
-            'fraction_of_wt_seq': 'numeric', 'closest_to_human': 'text', 'species_common_name': 'text',
-            'identity_to_human': 'numeric', 'structure_type': 'text', 'pdb_id': 'text', 'resolution': 'numeric', 'resolution_best': 'text',
+            'fraction_of_wt_seq': 'numeric', 'closest_to_human': 'boolean', 'species_common_name': 'text',
+            'identity_to_human': 'numeric', 'structure_type': 'text', 'pdb_id': 'text', 'resolution': 'numeric', 'resolution_best': 'boolean',
             'state': 'text', 'query_effector': 'text', 'gprot_bound_likeness': 'numeric', 'tm6_angle': 'numeric',
             'signal_protein': 'text', 'signal_protein_subtype': 'text', 'signal_protein_note': 'text', 'signal_protein_pcntseq': 'numeric',
             'fusion': 'text', 'antibody': 'text', 'ligand': 'text', 'ligand_role': 'text',
@@ -212,15 +212,22 @@ class PdbStructureSummarySerializer(serializers.Serializer):
            'checkbox':'checkbox', 'uniprot': 'uniprot_entry_name', 'gene': 'gene_name', 'pdb_id': 'pdb_id', 'resolution': 'resolution',
         }
 
+        #Helper to map complex/compund columns back to their json/datatable id
+        def reverse_map(column_name):
+            if (column_name in PdbStructureSummarySerializer.Meta.serializer_method_to_filter_field_map.values()):
+                for key, value in PdbStructureSummarySerializer.Meta.serializer_method_to_filter_field_map.items():
+                    if value == column_name: return key
+            return column_name
+
     @staticmethod
     def _format_resolution(value):
         return value if value is not None else "-"
 
     def get_checkbox(self, obj):
         checkbox = {}
-        checkbox['id'] = obj.id
+        checkbox['row_id'] = obj.id
         checkbox['data'] = {} 
-        checkbox['data']['pdbid'] = obj.pdb_id
+        checkbox['data']['pdb_id'] = obj.pdb_id
         return checkbox
 
     def get_resolution(self, obj):
@@ -303,3 +310,9 @@ class PdbStructureSummarySerializer(serializers.Serializer):
 
         return mapping
 
+class PdbStructureCheckboxSerializer(PdbStructureSummarySerializer):
+    """Only emits the checkbox column (id + pdb_id) for each row."""
+
+    def get_fields(self):
+        fields = super().get_fields()
+        return {'checkbox': fields['checkbox']}

@@ -1,5 +1,6 @@
 #Django Framework imports
-from django.http import JsonResponse
+from django.db.migrations import serializer
+from django.http import JsonResponse, request
 from django.core.exceptions import FieldError
 from django.db.models import Min, Max
 
@@ -14,7 +15,7 @@ import pandas as pd
 #Table provider imports
 from table_provider.configuration_provider.configuration_factory import ColumnConfigurationFactory, DataTablesConfigurationFactory
 from table_provider.models import GpcrStructureStatisticsTable, PdbTable
-from table_provider.serializers import GpcrStatisticsSummarySerializer, PdbStructureSummarySerializer
+from table_provider.serializers import GpcrStatisticsSummarySerializer, PdbStructureCheckboxSerializer, PdbStructureSummarySerializer
 from table_provider.serverside.filters import FilterSet, TextFilter, BooleanFilter
 from table_provider.serverside.querystringprocessing import DatatablesQueryStringProcessor
 from structure.tables.structure_coverage_statistics_query import GpcrStructureCoverageStatisticsQuery
@@ -122,29 +123,13 @@ class PdbStructureSummaryTable(generics.ListCreateAPIView):
 
     def get_queryset(self):
         """Fetches the PDB structure summary table queryset based on the request parameters and applied filters."""
-        effector = self.request.GET.get('effector', 'no_effector')
-        exclude_non_interacting = True if self.request.GET.get('exclude_non_interacting') == 'true' else False
-
-        filters = FilterSet(self.request, PdbStructureSummarySerializer)
-        filters.add_filter(TextFilter('query_effector', effector))
-        if exclude_non_interacting:
-            filters.add_filter(BooleanFilter('is_complex', exclude_non_interacting))
-
-        queryset = self.pdb_structure_table_fetch(filters)
-        return queryset
+        return self._apply_filterset(
+                self._scoped_queryset(self.request),
+                FilterSet(self.request, PdbStructureSummarySerializer))
 
     def get_queryset_base(self):
         """Returns the unfiltered queryset count for the PDB structure summary table, based on the effector and exclude_non_interacting parameters."""
-        effector = self.request.GET.get('effector', 'no_effector')
-        exclude_non_interacting = True if self.request.GET.get('exclude_non_interacting') == 'true' else False
-
-        filters = FilterSet(None, PdbStructureSummarySerializer) #Pass None for request to avoid parsing filters from query parameters
-        filters.add_filter(TextFilter('query_effector', effector))
-        if exclude_non_interacting:
-            filters.add_filter(BooleanFilter('is_complex', exclude_non_interacting))
-
-        queryset = self.pdb_structure_table_fetch(filters)
-        return queryset
+        return self._scoped_queryset(self.request) 
 
     def list(self, request, *args, **kwargs):
 
@@ -197,55 +182,54 @@ class PdbStructureSummaryTable(generics.ListCreateAPIView):
 
     @staticmethod
     def get_select_options(request, column):
-        effector = request.GET.get('effector', 'no_effector')
-        exclude_non_interacting = True if request.GET.get('exclude_non_interacting') == 'true' else False
-        
+        """Get the unique values for a given column in the PdbTable."""
         #Map any complex table columns back to their primary data column for the query (e.g. weblinks with custom renderers)
         if column in PdbStructureSummarySerializer.Meta.serializer_method_to_filter_field_map:
             column = PdbStructureSummarySerializer.Meta.serializer_method_to_filter_field_map[column]
 
         try:    
-            queryset_base = PdbTable.objects.all()
-    
-            queryset_base = queryset_base.filter(TextFilter('query_effector', effector).format_query())
-            if exclude_non_interacting:
-                queryset_base = queryset_base.filter(BooleanFilter('is_complex', exclude_non_interacting).format_query())
-
-            queryset = queryset_base.values_list(column, flat=True).distinct().order_by(column)
+            base = PdbStructureSummaryTable._scoped_queryset(request)
+            filtered = PdbStructureSummaryTable._apply_filterset(base, FilterSet(request, PdbStructureSummarySerializer))
+            
+            if column == "checkbox":
+                serializer = PdbStructureCheckboxSerializer(filtered.only('id', 'pdb_id'), many=True)
+                return JsonResponse(serializer.data, safe=False)
+            else:
+                queryset = filtered.values_list(column, flat=True).distinct().order_by(column)
+                return JsonResponse(list(queryset), safe=False)
+            
         except FieldError:
             return JsonResponse({'error': f'Invalid column requested: {column}'}, status=400)
 
-        return JsonResponse(list(queryset), safe=False)
+    @staticmethod
+    def _scoped_queryset(request):
+        """PdbTable restricted by effector / exclude_non_interacting only (no user filters)."""
+        effector = request.GET.get('effector', 'no_effector')
+        exclude_non_interacting = request.GET.get('exclude_non_interacting') == 'true'
 
+        queryset = PdbTable.objects.filter(TextFilter('query_effector', effector).format_query())
+        if exclude_non_interacting:
+            queryset = queryset.filter(BooleanFilter('is_complex', True).format_query())
+        return queryset
+
+    @staticmethod
+    def _apply_filterset(queryset, filterset):
+        for query_filter in filterset.get_filters():
+            queryset = queryset.filter(query_filter.format_query())
+        if filterset.get_ordering():
+            queryset = queryset.order_by(*filterset.get_ordering())
+        return queryset
 
     @staticmethod
     def get_count_distinct_values(request):
-        effector = request.GET.get('effector', 'no_effector')
-        exclude_non_interacting = True if request.GET.get('exclude_non_interacting') == 'true' else False
-
-        queryset_base = PdbTable.objects.all()
-
-        queryset_base = queryset_base.filter(TextFilter('query_effector', effector).format_query())
-        if exclude_non_interacting:
-            queryset_base = queryset_base.filter(BooleanFilter('is_complex', exclude_non_interacting).format_query())
-
-        url_filters = FilterSet(request, PdbStructureSummarySerializer)
-        queryset_filtered = queryset_base
-        for query_filter in url_filters.get_filters():
-            queryset_filtered = queryset_filtered.filter(query_filter.format_query())
-
-        #Helper to map complex/compund columns back to their json/datatable id
-        def reverse_map(column_name):
-            if (column_name in PdbStructureSummarySerializer.Meta.serializer_method_to_filter_field_map.values()):
-                for key, value in PdbStructureSummarySerializer.Meta.serializer_method_to_filter_field_map.items():
-                    if value == column_name: return key
-            return column_name
+        base = PdbStructureSummaryTable._scoped_queryset(request)
+        filtered = PdbStructureSummaryTable._apply_filterset(base, FilterSet(request, PdbStructureSummarySerializer))
 
         # Convert queryset to pandas DataFrame and extract unique values
-        df = pd.DataFrame.from_records(queryset_base.values())
-        unique_values_by_column_base = {reverse_map(column): len(df[column].dropna().unique().tolist()) for column in df.columns}
-        df = pd.DataFrame.from_records(queryset_filtered.values())
-        unique_values_by_column_filtered = {reverse_map(column): len(df[column].dropna().unique().tolist()) for column in df.columns}
+        df = pd.DataFrame.from_records(base.values())
+        unique_values_by_column_base = {PdbStructureSummarySerializer.Meta.reverse_map(column): len(df[column].dropna().unique().tolist()) for column in df.columns}
+        df = pd.DataFrame.from_records(filtered.values())
+        unique_values_by_column_filtered = {PdbStructureSummarySerializer.Meta.reverse_map(column): len(df[column].dropna().unique().tolist()) for column in df.columns}
 
         unique_values_by_column = {
             'base': unique_values_by_column_base,
