@@ -5,6 +5,17 @@ import { DataTypeBase } from "./datatypebase.js";
 
 class Text extends DataTypeBase {
 
+    dataTableRenderer(data, type, row, meta) { 
+        if (type === "display" && data) {
+            if(this.max_display_length && data.length > this.max_display_length){
+                let truncatedData = data.substring(0, this.max_display_length) + "...";
+                return `<span title="${data}">${truncatedData}</span>`;
+            }
+            return data;
+        }
+        return data; // Search, order and type return
+    } 
+
     createFilterInterface(tableManagerReference) {
         if (!this.allow_filter) {
             return null;
@@ -114,18 +125,29 @@ class Text extends DataTypeBase {
 
         return { symbolBtn, popup };
     }
+        
+    _stripHtmlTags(str) {
+        return str.replace(/<[^>]*>/g, '');
+    }
 
-    blurHandler = (e, col_idx, tableManagerReference) => {
-        function stripHtmlTags(str) {
-            return str.replace(/<[^>]*>/g, '');
-        }
+    blurHandler = async (e, col_idx, tableManagerReference) => {
+
 
         const currentSearchValue = tableManagerReference.dataTableReference.columns(col_idx).search()[0];
 
         let newSearchValue = e.target.value;
 
-        const dataOptions = tableManagerReference.dataTableReference.column(col_idx).data(0).toArray().map((item) => stripHtmlTags(item));
+        //Get a list of unique values for the column, either from the server or from the client-side data
+        let dataOptions;
+        let jsonId = tableManagerReference.columns[col_idx].json_id;
+        if(tableManagerReference.dataTableReference.settings()[0].oFeatures.bServerSide === true) {
+           dataOptions = await this._fetchColumnValueOptions(jsonId, tableManagerReference);
+        }
+        else {
+            dataOptions = tableManagerReference.dataTableReference.column(col_idx).data(0).toArray().map((item) => this._stripHtmlTags(item));
+        }
 
+        //if the search value is not in the list of unique values, we will use regex search to allow for partial matches
         const useRegex = !dataOptions.includes(newSearchValue)
 
         if (useRegex) {
@@ -136,6 +158,36 @@ class Text extends DataTypeBase {
         if (newSearchValue !== currentSearchValue) {
             tableManagerReference.dataTableReference.columns(col_idx).search(newSearchValue, useRegex).draw();
         }
+    }
+
+    async _fetchColumnValueOptions(ColumnJsonId, tableManagerReference) {
+      const cacheKey = { type: 'columnOptions', columnId: ColumnJsonId };
+
+      // Check cache first
+      const cachedData = await tableManagerReference.cache.get(cacheKey);
+      if (cachedData !== undefined) {
+        return cachedData;
+      }
+
+      // Fetch from endpoint if not in cache
+      const dataEndpoint = tableManagerReference.dataTableReference.ajax.url();
+      const optionsEndpoint = dataEndpoint + "/options/" + ColumnJsonId + "/";
+
+      try {
+        const response = await fetch(optionsEndpoint);
+        if (!response.ok) {
+          throw new Error(`HTTP error when fetching options for column ${ColumnJsonId}! Status: ${response.status}`);
+        }
+        const data = await response.json();
+
+        // Store in cache before returning
+        await tableManagerReference.cache.push(cacheKey, data);
+
+        return data;
+      } catch (error) {
+        console.error(`Error fetching column options for ${ColumnJsonId}:`, error);
+        return [];
+      }
     }
 }
 

@@ -56,7 +56,18 @@ class TextSelect extends DataTypeBase {
     onSelectChangeHandler = (e, col_idx, tableManagerReference) => {
         let currentSearchValue = tableManagerReference.dataTableReference.columns(col_idx).search()[0] || "%";
 
-        let newSearchValues = $('#' + e.target.id).select2('data').map( (o) => o.text)
+        let serverSideProcessing = tableManagerReference.dataTableReference.settings()[0].oFeatures.bServerSide;
+
+        let newSearchValues;
+        if (serverSideProcessing) {
+          // We use the id property of the select2 data object (which actually holds the 'value' property of the select element) rather than the display text, 
+          // as the id/value contains the raw data data for the column, which we will need for matching against the database.
+          newSearchValues = $('#' + e.target.id).select2('data').map( (o) => o.id)
+        } else {
+          // For client-side processing, we use the text property of the select2 data object as the text has been processed for display (e.g., HTML tags have been stripped) and 
+          // will match the internal data (see settings.aoData[rowIndex]._aFilterData[columnIndex]) that datatables automatically keeps for filtering.
+          newSearchValues = $('#' + e.target.id).select2('data').map( (o) => o.text)
+        }
 
         const allOptions = $('#' + e.target.id).find('option').toArray()
 
@@ -72,8 +83,15 @@ class TextSelect extends DataTypeBase {
         if (useRegex) {
           newSearchValues = newSearchValues.map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')); // escape regex special characters
           for (let i = 0; i < newSearchValues.length; i++) {
-            const optIdx = allOptions.map( (o) => o.text).indexOf(newSearchValues[i]);
-            const isTag = tagState[optIdx];
+            let optIdx;
+            if (serverSideProcessing) { // See above for explanation of why we use the id/value for client-side processing and the text for server-side processing
+              optIdx = allOptions.map( (o) => o.value).indexOf(newSearchValues[i]);
+            } else {
+              optIdx = allOptions.map( (o) => o.text).indexOf(newSearchValues[i]);
+            }
+            
+            let isTag = tagState[optIdx];
+            
             if (isTag) {
               newSearchValues[i] = "(.*" + newSearchValues[i] + ".*)"; // wrap tag values with wildcards for "contains" search
             } else {
@@ -105,18 +123,64 @@ class TextSelect extends DataTypeBase {
         return filterInput;
     }
 
-    _populateTextSelectFilterOptionsFromData(data, ColumnJsonId, filterInput, dataTableReference) {
+    _processHTMLForDisplay(value) {
+          if (value === null || value === undefined) return '';
+          let text = String(value);
+          text = text.replace(/<sub>.*?<\/sub>/g, (match) => {
+            return match.replace(/<\/?sub>/g, '');
+          });
+          text = this._decodeHTMLEntities(text);
+          return text;
+        }
+
+    _decodeHTMLEntities(text) {
+      if (text === null || text === undefined) return '';
+
+      const greekLetters = {
+        '&Alpha;': 'Α', '&alpha;': 'α',
+        '&Beta;': 'Β', '&beta;': 'β',
+        '&Gamma;': 'Γ', '&gamma;': 'γ',
+        '&Delta;': 'Δ', '&delta;': 'δ',
+        '&Epsilon;': 'Ε', '&epsilon;': 'ε',
+        '&Zeta;': 'Ζ', '&zeta;': 'ζ',
+        '&Eta;': 'Η', '&eta;': 'η',
+        '&Theta;': 'Θ', '&theta;': 'θ',
+        '&Iota;': 'Ι', '&iota;': 'ι',
+        '&Kappa;': 'Κ', '&kappa;': 'κ',
+        '&Lambda;': 'Λ', '&lambda;': 'λ',
+        '&Mu;': 'Μ', '&mu;': 'μ',
+        '&Nu;': 'Ν', '&nu;': 'ν',
+        '&Xi;': 'Ξ', '&xi;': 'ξ',
+        '&Omicron;': 'Ο', '&omicron;': 'ο',
+        '&Pi;': 'Π', '&pi;': 'π',
+        '&Rho;': 'Ρ', '&rho;': 'ρ',
+        '&Sigma;': 'Σ', '&sigma;': 'σ',
+        '&Tau;': 'Τ', '&tau;': 'τ',
+        '&Upsilon;': 'Υ', '&upsilon;': 'υ',
+        '&Phi;': 'Φ', '&phi;': 'φ',
+        '&Chi;': 'Χ', '&chi;': 'χ',
+        '&Psi;': 'Ψ', '&psi;': 'ψ',
+        '&Omega;': 'Ω', '&omega;': 'ω'
+      };
+
+      let decoded = String(text);
+      for (const [entity, unicode] of Object.entries(greekLetters)) {
+        decoded = decoded.replace(new RegExp(entity.replace(/&/, '\\&'), 'g'), unicode);
+      }
+
+      return decoded;
+    }
+
+    _populateTextSelectFilterOptionsFromData(data, ColumnJsonId, filterInput) {
       
       if (!data || data.length === 0) {
         console.warn("No data available to populate select filter options for column " + ColumnJsonId);
         return;
       }
 
-      const uniqueValues = new Set([...data]);
-      
-      uniqueValues.forEach(value => {
+      data.forEach(value => {
         let option = document.createElement("option");
-        option.textContent = value;
+        option.textContent = this._processHTMLForDisplay(value);
         // set option value to empty string for placeholder option to allow clearing the filter when selected
         option.value = value; 
         filterInput.appendChild(option);
@@ -125,21 +189,12 @@ class TextSelect extends DataTypeBase {
 
     _populateTextSelectFilterOptionsClientSide(ColumnJsonId, columnIdx, filterInput, dataTableReference) {
       const data = dataTableReference.column(columnIdx).data().toArray()
-      if (!data || data.length === 0) {
-        console.warn("No data available to populate select filter options for column " + ColumnJsonId);
-        return;
+      if (data) {
+        const uniqueValues = Array.from(new Set([...data])).sort();      
+        this._populateTextSelectFilterOptionsFromData(uniqueValues, ColumnJsonId, filterInput);
       }
-
-      const uniqueValues = new Set([...data]);
-      
-      uniqueValues.forEach(value => {
-        let option = document.createElement("option");
-        option.textContent = value;
-        // set option value to empty string for placeholder option to allow clearing the filter when selected
-        option.value = value; 
-        filterInput.appendChild(option);
-      });
     }
+
 
     _populateTextSelectFilterOptionsServerSide(ColumnJsonId, columnIdx, filterInput, dataTableReference) {
       const dataEndpoint = dataTableReference.ajax.url()
@@ -153,7 +208,7 @@ class TextSelect extends DataTypeBase {
           return response.json();
         })
         .then(data => {
-          this._populateTextSelectFilterOptionsFromData(data, ColumnJsonId, filterInput, dataTableReference);
+          this._populateTextSelectFilterOptionsFromData(data, ColumnJsonId, filterInput);
         });
 
     }

@@ -17,30 +17,11 @@ class WebLinkText extends Text {
         // Search, order and type return
         return data ? data.anchor_content : ""
     }
-
-    blurHandler = (e, col_idx, tableManagerReference) => {
-        function stripHtmlTags(str) {
-            return str.replace(/<[^>]*>/g, '');
-        }
-
-        const currentSearchValue = tableManagerReference.dataTableReference.columns(col_idx).search()[0];
-        
-        let newSearchValue = e.target.value;
-        
-        const dataOptions = tableManagerReference.dataTableReference.column(col_idx).data(0).toArray().map((item) => stripHtmlTags(item.anchor_content));
-
-        const useRegex = !dataOptions.includes(newSearchValue)
-
-        if (useRegex) {
-              newSearchValue = newSearchValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // escape regex special characters
-              newSearchValue = ".*" + newSearchValue + ".*"; // wrap tag values with wildcards for "contains" search              
-        } 
-
-        if (newSearchValue !== currentSearchValue) {
-            tableManagerReference.dataTableReference.columns(col_idx).search(newSearchValue, useRegex).draw();
-        }
-    }
-    
+ 
+    //override the _stripHtmlTags method to handle the specific structure of the weblink data type used in Text.blurHandler
+    _stripHtmlTags(str) {
+        return str.anchor_content.replace(/<[^>]*>/g, '');
+    }    
 }
 
 export { WebLinkText };
