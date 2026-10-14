@@ -26,6 +26,7 @@
   const MODALITY_COLORS = {
     "Small molecule receptors": "#1f78b4",
     "Polypeptide receptors": "#2CA02C",
+    "Ion receptors": "#D62728",
     "Orphan receptors": "#a0b8ba",
   };
 

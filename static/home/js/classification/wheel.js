@@ -139,8 +139,10 @@ const ODORANT_RECEPTOR_FAMILIES_DYNAMIC = extractUniqueCategories("odorant", "Re
 // Fixed palettes (curated)
 const MODALITY_COLORS_FIXED = {
   "Small molecule receptors": "#1f78b4",
+  "Polypeptide receptors": "#2CA02C",
   "Peptide receptors": "#2CA02C",
   "Protein receptors": "#FF7F0E",
+  "Ion receptors": "#D62728",
   "Orphan receptors": "#a0b8ba",
 };
 
@@ -174,7 +176,7 @@ const coloringSchemes = {
     "C": CLASS_COLORS_TREE["C"],
     "F": CLASS_COLORS_TREE["F"],
     "T2": CLASS_COLORS_TREE["T2"],
-    "V": CLASS_COLORS_TREE["V"],
+    "V1": CLASS_COLORS_TREE["V1"],
     "U": CLASS_COLORS_TREE["U"],
   },
   "Chemotype": buildSchemeFromCategories(CLASSIC_CHEMOTYPES, getChemotypeColor),

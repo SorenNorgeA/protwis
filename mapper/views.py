@@ -102,7 +102,7 @@ class DataMapperHome(TemplateView):
         "007": "O1",
         "008": "O2",
         "009": "T2",
-        "010": "V",
+        "010": "V1",
         "011": "U",
     }
 
@@ -247,7 +247,7 @@ class DataMapperHome(TemplateView):
             elif renamed_class in ("C", "F"):
                 GPCRome_dict["Circle_4"].setdefault(renamed_class, {}).update(ligand_types)
 
-            elif renamed_class in ("T2", "V", "U"):
+            elif renamed_class in ("T2", "V1", "U"):
                 GPCRome_dict["Circle_5"].setdefault(renamed_class, {}).update(ligand_types)
 
         # Remove the ligand type layer
@@ -345,7 +345,7 @@ class DataMapperHome(TemplateView):
         # e.g. Classic + Odorant back-to-back) -- a week-long cache is the same low-ceremony pattern
         # already used elsewhere in this codebase for slow-changing reference lookups. Bump the
         # "v1" suffix if the skeleton shape ever changes, as a manual invalidation lever.
-        cache_key = f"gpcrome_data_structure_v3_{data_type}"
+        cache_key = f"gpcrome_data_structure_v4_{data_type}"
         cached = cache.get(cache_key)
         if cached is not None:
             return deepcopy(cached)  # callers mutate the returned dict in place -- never hand out the cached object itself

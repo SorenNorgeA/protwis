@@ -90,7 +90,7 @@
   text-align: left;
 }
 
-/* Experimental receptor-level cluster tab (iframe to StructureSim) */
+/* Cluster tab, "Receptor level" sub-tab (iframe to StructureSim) */
 .cv-detail-frame {
   width: 100%;
   border: 0;
@@ -121,10 +121,6 @@
         </li>
         <li role="presentation">
           <a href="#cv-list-tab" aria-controls="cv-list-tab" role="tab" data-toggle="tab">List</a>
-        </li>
-        <!-- Experimental receptor-level cluster — remove this <li>, its tab pane and its script to drop the tab -->
-        <li role="presentation">
-          <a href="#cv-superfamily-receptor-cluster-tab" aria-controls="cv-superfamily-receptor-cluster-tab" role="tab" data-toggle="tab">Cluster - receptor level</a>
         </li>
       </ul>
       <div class="cv-detail-title-inline">{{ page_title }}</div>
@@ -303,33 +299,57 @@
       </div>
 
       <div role="tabpanel" class="tab-pane" id="cv-superfamily-cluster-tab">
-        <div class="container-fluid ncct-page">
-          <div id="ncct-status" class="ncct-status"></div>
-          <div class="ncct-superfamily-shell">
-            <div class="ncct-superfamily-side">
-              <div class="ncct-superfamily-side-title">Classes</div>
-              <div id="ncct-superfamily-labels" class="ncct-superfamily-labels"></div>
-            </div>
+        <ul class="nav nav-tabs">
+          <li class="active"><a href="#cv-superfamily-cluster-class-tab" data-toggle="tab">Class level</a></li>
+          <li><a href="#cv-superfamily-cluster-receptor-tab" data-toggle="tab">Receptor level</a></li>
+        </ul>
 
-            <div class="ncct-plot-card ncct-superfamily-plot-card">
-              <div class="ncct-superfamily-plot-wrap">
-                <div id="ncct-cluster-plot" class="ncct-plot"></div>
+        <div class="tab-content">
+          <!-- Class level: one point per GPCR class (cluster.js) -->
+          <div id="cv-superfamily-cluster-class-tab" class="tab-pane fade in active">
+            <div class="container-fluid ncct-page">
+              <div id="ncct-status" class="ncct-status"></div>
+              <div class="ncct-superfamily-shell">
+                <div class="ncct-superfamily-side">
+                  <div class="ncct-superfamily-side-title">Classes</div>
+                  <div id="ncct-superfamily-labels" class="ncct-superfamily-labels"></div>
+                </div>
+
+                <div class="ncct-plot-card ncct-superfamily-plot-card">
+                  <div class="ncct-superfamily-plot-wrap">
+                    <div id="ncct-cluster-plot" class="ncct-plot"></div>
+                  </div>
+                  <div id="ncct-cluster-meta" class="ncct-meta"></div>
+                  <div class="dropdown ncct-cluster-download" style="margin-top: 8px;">
+                    <button id="ncctClusterDownloadBtn" class="btn btn-primary btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+                      <span class="glyphicon glyphicon-download"></span> Download <span class="caret"></span>
+                    </button>
+                    <div class="dropdown-menu">
+                      <button type="button" class="btn btn-primary btn-block ncct-cluster-download-btn" data-format="svg">SVG</button>
+                      <button type="button" class="btn btn-primary btn-block ncct-cluster-download-btn" data-format="png">PNG</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ncct-superfamily-side">
+                  <div id="ncct-superfamily-similarity-title" class="ncct-superfamily-side-title">Similarity</div>
+                  <div id="ncct-superfamily-hover"></div>
+                </div>
               </div>
-              <div id="ncct-cluster-meta" class="ncct-meta"></div>
-              <!-- TEMPORARY: one-off export of the cluster figure without hover highlight.
-                   Handler: downloadPlainClusterSvg() in cluster.js. Comment out / remove after use. -->
-              <button type="button" id="ncct-cluster-download-svg" class="btn btn-default btn-sm" style="margin-top: 8px;">
-                Download SVG (no highlight)
-              </button>
-              <button type="button" id="ncct-cluster-download-svg-400x450" class="btn btn-default btn-sm" style="margin-top: 8px;">
-                Download SVG 400x450 (no highlight)
-              </button>
             </div>
+          </div>
 
-            <div class="ncct-superfamily-side">
-              <div id="ncct-superfamily-similarity-title" class="ncct-superfamily-side-title">Similarity</div>
-              <div id="ncct-superfamily-hover"></div>
-            </div>
+          <!-- Receptor level: one point per receptor, all classes (StructureSim global scope) -->
+          <div id="cv-superfamily-cluster-receptor-tab" class="tab-pane fade">
+            <iframe
+              id="cvReceptorClusterFrame"
+              class="cv-detail-frame cv-detail-frame--cluster"
+              src="{{ receptor_cluster_url }}"
+              title="GPCR superfamily receptor-level cluster"
+              data-initial-height="640"
+              scrolling="no"
+              loading="lazy"
+            ></iframe>
           </div>
         </div>
       </div>
@@ -521,19 +541,6 @@
         <div id="classification_list_plot" class="cl-plot-scroll"></div>
       </div>
 
-      <!-- Experimental receptor-level cluster (all classes, StructureSim global scope) -->
-      <div role="tabpanel" class="tab-pane" id="cv-superfamily-receptor-cluster-tab">
-        <iframe
-          id="cvReceptorClusterFrame"
-          class="cv-detail-frame cv-detail-frame--cluster"
-          src="{{ receptor_cluster_url }}"
-          title="GPCR superfamily receptor-level cluster"
-          data-initial-height="640"
-          scrolling="no"
-          loading="lazy"
-        ></iframe>
-      </div>
-
     </div>
   </div>
 </div>
@@ -602,7 +609,7 @@
   });
 })();
 
-// Experimental receptor-level cluster tab: size the StructureSim iframe to its content
+// Cluster tab, "Receptor level" sub-tab: size the StructureSim iframe to its content
 // (same approach as ClassificationVisualizationDetail.html's Cluster tab).
 (function() {
   const frame = document.getElementById("cvReceptorClusterFrame");
@@ -632,7 +639,9 @@
     window.setTimeout(resizeFrame, 1000);
   });
 
-  $('a[href="#cv-superfamily-receptor-cluster-tab"]').on('shown.bs.tab', function () {
+  // Showing the sub-tab, or the outer Cluster tab while the sub-tab is the active one.
+  $('a[href="#cv-superfamily-cluster-receptor-tab"], a[href="#cv-superfamily-cluster-tab"]').on('shown.bs.tab', function () {
+    if (!$(frame).is(':visible')) return;
     resizeFrame();
     window.setTimeout(resizeFrame, 300);
   });

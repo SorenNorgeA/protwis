@@ -34,10 +34,12 @@ class ClassificationVisualizationMixin:
     GLOBAL_GROUP_KEY = "global"
     CLASS_GROUP_PREFIX = "class:"
     MODALITY_GROUP_LABELS = [
+        "Ion receptors",
         "Orphan receptors",
         "Polypeptide receptors",
         "Small molecule receptors",
     ]
+    ION_MODALITY_KEYS = {"ion receptors"}
     ORPHAN_MODALITY_KEYS = {"orphan receptors"}
     POLYPEPTIDE_MODALITY_KEYS = {"peptide receptors", "protein receptors", "polypeptide receptors"}
     ORPHAN_MODALITY_GROUP_LABEL = "Orphan receptors"
@@ -49,6 +51,7 @@ class ClassificationVisualizationMixin:
         "CLASSLESS": "U",
         "OTHERGPCRS": "U",
         "UNCLASSIFIEDOTHERGPCRS": "U",
+        "V": "V1",
     }
     # Alphabetical by symbol -- the general ordering rule for every class listing/dropdown/table
     # in this app -- with "U" (Unclassified) always forced last, never sorted in alphabetically.
@@ -61,12 +64,12 @@ class ClassificationVisualizationMixin:
         ("O1", {"label": "Class O1", "title": "Class O1 (Olfactory/extra-nasal 1)", "slug": "007"}),
         ("O2", {"label": "Class O2", "title": "Class O2 (Olfactory/extra-nasal 2)", "slug": "008"}),
         ("T2", {"label": "Class T2", "title": "Class T2 (Taste 2)", "slug": "009"}),
-        ("V", {"label": "Class V", "title": "Class V (Vomeronasal)", "slug": "010"}),
+        ("V1", {"label": "Class V1", "title": "Class V1 (Vomeronasal)", "slug": "010"}),
         ("U", {"label": "Unclassified", "title": "Unclassified", "slug": "011"}),
     ])
     TREE_DISABLED_CLASS_KEYS = {"U"}
     # Chemotypes that don't make sense as a standalone Chemotype-tab dataset.
-    TREE_EXCLUDED_CHEMOTYPES = {"odorant receptors", "ion receptors"}
+    TREE_EXCLUDED_CHEMOTYPES = {"odorant receptors"}
     # Editorial exceptions to the generic Class-tab tree shape -- verified against the DB (Class C
     # genuinely has chemotype annotations, so this can't be derived, only curated).
     CLASS_TREE_OVERRIDES = {
@@ -163,6 +166,8 @@ class ClassificationVisualizationMixin:
 
     def _group_modality_label(self, modality):
         key = str(modality or "").strip().lower()
+        if key in self.ION_MODALITY_KEYS:
+            return "Ion receptors"
         if key in self.ORPHAN_MODALITY_KEYS:
             return "Orphan receptors"
         if key in self.POLYPEPTIDE_MODALITY_KEYS:
@@ -996,7 +1001,7 @@ class GPCRSuperfamilyVisualizationDetail(ClassificationVisualizationMixin, Templ
         ctx.update(NewClassClusterTree.build_cluster_tree_context(self.request))
         ctx.update(CrossClassSimilarity().get_context_data())
         ctx.update(self.build_list_context(allow_grouping=True))
-        # Experimental "Cluster - receptor level" tab: StructureSim without ?class= is the
+        # Cluster tab, "Receptor level" sub-tab: StructureSim without ?class= is the
         # all-classes (group_key="global") receptor t-SNE.
         ctx["receptor_cluster_url"] = "{}?{}".format(
             reverse("classification-structuresim"),
@@ -1007,22 +1012,51 @@ class GPCRSuperfamilyVisualizationDetail(ClassificationVisualizationMixin, Templ
 class Classification(ClassificationVisualizationMixin, TemplateView):
     template_name = "classification/Classification.html"
 
-    # Static class information for the Classes table
+    # Static, curated tables (they include non-human classes, so they can't be derived from the
+    # human-only classification rows). Rows are in display order; repeated values in consecutive
+    # rows are merged into one cell by the template (mergeConsecutiveCells).
     CLASSES_TABLE_DATA = [
-        {"code": "A", "name": "Rhodopsin", "species": "Yes", "non_sensory_share": "Majority", "sensory_function": "Vision & light-sensing"},
+        {"code": "A", "name": "Rhodopsin", "species": "Yes", "non_sensory_share": "Majority", "sensory_function": "Vision & light-sensing (opsin receptors)"},
         {"code": "B1", "name": "Secretin", "species": "Yes", "non_sensory_share": "All", "sensory_function": "-"},
-        {"code": "B2", "name": "Adhesion", "species": "Yes", "non_sensory_share": "Majority", "sensory_function": "-"},
-        {"code": "C", "name": "Glutamate", "species": "Yes", "non_sensory_share": "Majority", "sensory_function": "Taste (sweet/umami)"},
+        {"code": "B2", "name": "Adhesion", "species": "Yes", "non_sensory_share": "Majority", "sensory_function": "Hearing and vision development (ADGRV1), Touch (mechanosensation)"},
+        {"code": "C", "name": "Glutamate", "species": "Yes", "non_sensory_share": "Majority", "sensory_function": "Sweet/umami taste (Taste 1 receptors)"},
         {"code": "D1", "name": "Fungal pheromone 1", "species": "Fungi", "non_sensory_share": "-", "sensory_function": "Pheromone-sensing"},
         {"code": "D2", "name": "Fungal pheromone 2", "species": "Fungi", "non_sensory_share": "-", "sensory_function": "Pheromone-sensing"},
         {"code": "E", "name": "Slime mold cAMP", "species": "Slime molds, amoebas", "non_sensory_share": "-", "sensory_function": "Pheromone-sensing (cAMP, in chemotaxis)"},
         {"code": "F", "name": "Frizzled", "species": "Yes", "non_sensory_share": "All", "sensory_function": "-"},
-        {"code": "OP1", "name": "Olfactory-polyfunctional 1", "species": "Yes", "non_sensory_share": "Minority", "sensory_function": "Olfaction"},
-        {"code": "OP2", "name": "Olfactory-polyfunctional 2", "species": "Yes", "non_sensory_share": "Minority", "sensory_function": "Olfaction"},
-        {"code": "T2", "name": "Taste 2", "species": "Yes", "non_sensory_share": "-", "sensory_function": "Taste (bitter)"},
-        {"code": "V1", "name": "Vomeronasal 1", "species": "Amphibia, reptiles & non-primate mammals", "non_sensory_share": "-", "sensory_function": "Pheromone-sensing"},
+        {"code": "O1", "name": "Olfactory/extranasal 1", "species": "Yes", "non_sensory_share": "Minority", "sensory_function": "Olfaction"},
+        {"code": "O2", "name": "Olfactory/extranasal 2", "species": "Yes", "non_sensory_share": "Minority", "sensory_function": "Olfaction"},
+        {"code": "T2", "name": "Taste 2/extraoral", "species": "Yes", "non_sensory_share": "Minority", "sensory_function": "Bitter taste"},
+        {"code": "V1", "name": "Vomeronasal 1", "species": "Yes (five V1 receptors, but no vomeronasal organ in humans)", "non_sensory_share": "TBD", "sensory_function": "Pheromone-sensing"},
         {"code": "V2", "name": "Vomeronasal 2", "species": "Amphibia, reptiles & non-primate mammals", "non_sensory_share": "-", "sensory_function": "Pheromone-sensing"},
         {"code": "U", "name": "Unclassified", "species": "Yes", "non_sensory_share": "Unknown", "sensory_function": "Unknown"},
+    ]
+
+    # Modality -> chemotype -> classes it occurs in (all species).
+    MODALITY_CHEMOTYPE_TABLE_DATA = [
+        {"ligand_group": "Ion receptors", "ligand_type": "Ion receptors", "classes": "A, C"},
+        {"ligand_group": "Polypeptide receptors", "ligand_type": "Peptide receptors", "classes": "A, B1, D1, D2, V2"},
+        {"ligand_group": "Polypeptide receptors", "ligand_type": "Protein receptors", "classes": "A, B2, F, V2"},
+        {"ligand_group": "Small molecule receptors", "ligand_type": "Aminergic receptors", "classes": "A"},
+        {"ligand_group": "Small molecule receptors", "ligand_type": "Lipid receptors", "classes": "A"},
+        {"ligand_group": "Small molecule receptors", "ligand_type": "Alicarboxylic acid receptors", "classes": "A"},
+        {"ligand_group": "Small molecule receptors", "ligand_type": "Amino acid receptors", "classes": "C"},
+        {"ligand_group": "Small molecule receptors", "ligand_type": "Melatonin receptors", "classes": "A"},
+        {"ligand_group": "Small molecule receptors", "ligand_type": "Nucleotide receptors", "classes": "A, E"},
+        {"ligand_group": "Small molecule receptors", "ligand_type": "Odorant receptors", "classes": "O1, O2"},
+        {"ligand_group": "Small molecule receptors", "ligand_type": "Pheromone receptors", "classes": "V1, (V2)"},
+        {"ligand_group": "Small molecule receptors", "ligand_type": "Retinal receptors", "classes": "A"},
+        {"ligand_group": "Small molecule receptors", "ligand_type": "Steroid receptors", "classes": "A"},
+        {"ligand_group": "Small molecule receptors", "ligand_type": "Tastant receptors", "classes": "C, T2"},
+        {"ligand_group": "Orphan receptors", "ligand_type": "Orphan receptors", "classes": "A, B2, C, O1, O2, U"},
+    ]
+
+    SENSE_TABLE_DATA = [
+        {"sense": "Olfaction", "classes": "O1, O2", "families": "-"},
+        {"sense": "Pheromone-sensing", "classes": "D1, D2, E, V1, V2", "families": "-"},
+        {"sense": "Taste", "classes": "T2", "families": "Taste 1 receptors"},
+        {"sense": "Vision", "classes": "-", "families": "Opsin (sight) receptors"},
+        {"sense": "Non-sensory", "classes": "A, B1, B2, C, F", "families": "-"},
     ]
 
 
@@ -1042,28 +1076,7 @@ class Classification(ClassificationVisualizationMixin, TemplateView):
             return sorted(s, key=lambda x: (class_order.index(x)
                                             if x in class_order else 999, x))
 
-        # ---------- 1) Ligand type table ----------
-        # Using Chemotype as ligand_type and Modality as ligand_group
-        lt_agg = {}  # chemotype -> {"group": modality, "classes": set([...])}
-        for row in rows:
-            chemotype = row["chemotype"]
-            if not chemotype:
-                continue
-            modality = row["modality"] or "Other / unknown"
-            entry = lt_agg.setdefault(chemotype, {"group": modality, "classes": set()})
-            entry["classes"].add(row["class_symbol"])
-
-        ligand_type_rows = []
-        for chemotype in sorted(lt_agg.keys(), key=str.lower):
-            entry = lt_agg[chemotype]
-            cls_list = sort_classes(entry["classes"])
-            ligand_type_rows.append({
-                "ligand_type": chemotype,
-                "ligand_group": entry["group"],
-                "classes": ", ".join(cls_list),
-            })
-
-        # ---------- 2) Receptor families: non-sensory vs sensory vs orphan ----------
+        # ---------- Receptor families: non-sensory vs sensory vs orphan ----------
         # Using Sense directly:
         # - "non-sensory" -> non-sensory
         # - "unknown" -> orphan
@@ -1131,37 +1144,10 @@ class Classification(ClassificationVisualizationMixin, TemplateView):
         rf_orphan_rows.sort(key=lambda r: (r["receptor_family"].lower(),
                                            r["ligand_type"].lower()))
 
-        # ---------- 3) Classes table ----------
-        # Use static data for the classes table, pre-sorted by Code
-        classes_rows = self.CLASSES_TABLE_DATA.copy()
-
-        # Custom sort function for Code (A, B1, B2, C, D1, D2, E, F, OP1, OP2, T2, V1, V2, Cl)
-        def sort_code_key(item):
-            code = item["code"]
-            # Extract letter prefix and number suffix
-            match = re.match(r'([A-Za-z]+)(\d*)', code)
-            if match:
-                letter_part = match.group(1)
-                num_part = match.group(2)
-                # Handle special cases
-                if letter_part.upper() == "CL":
-                    return (999, 0)  # Unclassified goes last
-                # Convert letter part to sortable value
-                letter_order = {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 6,
-                               "OP": 7, "O": 7, "T": 8, "V": 9}
-                letter_key = letter_order.get(letter_part.upper(), 999)
-                # Convert number part to integer (empty string = 0)
-                num_key = int(num_part) if num_part else 0
-                return (letter_key, num_key)
-            # Fallback for unexpected formats
-            return (999, 0)
-
-        # Sort by Code
-        classes_rows.sort(key=sort_code_key)
-
         # Serialize to JSON strings for template (using |safe filter)
-        ctx["classes_rows"] = json.dumps(classes_rows)
-        ctx["ligand_type_rows"] = json.dumps(ligand_type_rows)
+        ctx["classes_rows"] = json.dumps(self.CLASSES_TABLE_DATA)
+        ctx["ligand_type_rows"] = json.dumps(self.MODALITY_CHEMOTYPE_TABLE_DATA)
+        ctx["sense_rows"] = json.dumps(self.SENSE_TABLE_DATA)
         ctx["rf_non_rows"] = json.dumps(rf_non_rows)
         ctx["rf_sens_rows"] = json.dumps(rf_sens_rows)
         ctx["rf_orphan_rows"] = json.dumps(rf_orphan_rows)
@@ -1252,7 +1238,7 @@ class Classification_tree(ClassificationVisualizationMixin):
         for class_key in allowed_keys:  # iteration order == CLASS_VISUALIZATION_CONFIG order
             class_rows = by_class.get(class_key)
             if not class_rows:
-                continue  # class has no annotation rows yet (e.g. Class V until it's populated)
+                continue  # class has no annotation rows yet (e.g. Class V1 until it's populated)
 
             config = self.get_visualization_class_config(class_key)
             override = self.CLASS_TREE_OVERRIDES.get(class_key, {})
@@ -1483,10 +1469,10 @@ class ClassSimilarityDataMixin:
         "Class B2 (Adhesion)",
         "Class C (Glutamate)",
         "Class F (Frizzled)",
-        "Class O1 (fish-like)",
-        "Class O2 (tetrapod specific)",
+        "Class O1 (Olfactory/extra-nasal 1)",
+        "Class O2 (Olfactory/extra-nasal 2)",
         "Class T2 (Taste 2)",
-        "Class V (Vomeronasal)",
+        "Class V1 (Vomeronasal)",
         "Unclassified",
     ]
 
@@ -1497,10 +1483,10 @@ class ClassSimilarityDataMixin:
         "Class B2 (Adhesion)": "003",
         "Class C (Glutamate)": "004",
         "Class F (Frizzled)":  "006",
-        "Class O1 (fish-like)": "007",
-        "Class O2 (tetrapod specific)": "008",
+        "Class O1 (Olfactory/extra-nasal 1)": "007",
+        "Class O2 (Olfactory/extra-nasal 2)": "008",
         "Class T2 (Taste 2)": "009",
-        "Class V (Vomeronasal)": "010",
+        "Class V1 (Vomeronasal)": "010",
         "Unclassified": "011",
     }
 
@@ -1510,16 +1496,16 @@ class ClassSimilarityDataMixin:
         "Class B2 (Adhesion)": "B2",
         "Class C (Glutamate)": "C",
         "Class F (Frizzled)": "F",
-        "Class O1 (fish-like)": "O1",
-        "Class O2 (tetrapod specific)": "O2",
+        "Class O1 (Olfactory/extra-nasal 1)": "O1",
+        "Class O2 (Olfactory/extra-nasal 2)": "O2",
         "Class T2 (Taste 2)": "T2",
-        "Class V (Vomeronasal)": "V",
+        "Class V1 (Vomeronasal)": "V1",
         "Unclassified": "U",
     }
 
     CLASS_COLOR_BY_SYMBOL = GPCR_CLASS_COLORS
 
-    CLASS_CLUSTER_PAYLOAD_CACHE_KEY = "classclustertree:payload:v12"
+    CLASS_CLUSTER_PAYLOAD_CACHE_KEY = "classclustertree:payload:v13"
     CLASS_CLUSTER_PAYLOAD_CACHE_TIMEOUT = 60 * 60 * 24
     CLASS_CLUSTER_PAYLOAD_VERSION = 3
     CLASS_CLUSTER_DATASET_KEY = "superfamily"

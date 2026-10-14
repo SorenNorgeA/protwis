@@ -150,7 +150,7 @@ class Command(BaseBuild):
                 if self.debug:
                     print('Introducing mutations at: {}'.format(self.added_mutations))
 
-        GPCR_class_codes = {'A':'001', 'B1':'002', 'B2':'003', 'C':'004', 'D1':'005', 'F':'006', 'O1':'007', 'O2':'008', 'T2':'009', 'V':'010'}
+        GPCR_class_codes = {'A':'001', 'B1':'002', 'B2':'003', 'C':'004', 'D1':'005', 'F':'006', 'O1':'007', 'O2':'008', 'T2':'009', 'V1':'010'}
         self.modeller_iterations = options['i']
         self.build_all = False
 

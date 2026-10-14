@@ -223,7 +223,7 @@ def class_code_to_name(class_code):
         "O1": "Class O1 (Olfactory/extra-nasal 1)",
         "O2": "Class O2 (Olfactory/extra-nasal 2)",
         "T2": "Class T2 (Taste 2)",
-        "V": "Class V (Vomeronasal)",
+        "V1": "Class V1 (Vomeronasal)",
         "U": "Class U (Unclassified)"
     }
     return class_names.get(class_code, "Invalid class code")
@@ -240,7 +240,7 @@ def format_class_header(class_code):
         "Class O1 (Olfactory/extra-nasal 1)": "Class O1<br>(Olfactory/extra-nasal 1)",
         "Class O2 (Olfactory/extra-nasal 2)": "Class O2<br>(Olfactory/extra-nasal 2)",
         "Class T2 (Taste 2)": "Class T2<br>(Taste&nbsp;2)",
-        "Class V (Vomeronasal)": "Class V<br>(Vomeronasal)",
+        "Class V1 (Vomeronasal)": "Class V1<br>(Vomeronasal)",
         "Unclassified": "Class U<br>(Unclassified)"
     }
     return class_names.get(class_code, class_code)

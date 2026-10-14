@@ -37,8 +37,7 @@ function tree_hash_color(key) {
 
 function tree_class_color(label) {
     var key = tree_class_key(label);
-    // DB class names can carry a numeric suffix the class code doesn't ("Class V1" -> code "V").
-    return TREE_CLASS_COLORS[key] || TREE_CLASS_COLORS[key.replace(/\d+$/, '')] || tree_hash_color(key);
+    return TREE_CLASS_COLORS[key] || tree_hash_color(key);
 }
 
 function ensure_tree_colors(data, depth) {
@@ -3943,7 +3942,7 @@ function DrawGPCRomeWheel(Data, location, GPCRome_styling) {
                 if (code === undefined || code === null) return "";
                 const k = String(code).trim();
                 if (!k || k.toLowerCase() === "nan") return "";
-                if (/^(A|B1|B2|C|F|O1|O2|T2|U|V)$/i.test(k)) return k.toUpperCase();
+                if (/^(A|B1|B2|C|F|O1|O2|T2|U|V1)$/i.test(k)) return k.toUpperCase();
                 return k;
             }
 

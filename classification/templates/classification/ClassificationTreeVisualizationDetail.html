@@ -533,6 +533,15 @@
               <button type="button" class="btn btn-outline-primary btn-block" data-label-type="UniProt">UniProt</button>
             </div>
           </div>
+          <div class="dropdown">
+            <button type="button" class="btn btn-primary btn-sm dropdown-toggle" data-toggle="dropdown">
+              <span class="glyphicon glyphicon-download"></span> Download <span class="caret"></span>
+            </button>
+            <div class="dropdown-menu">
+              <button type="button" class="btn btn-primary btn-block rm-download-btn" data-format="svg" data-table="#cvMatrixTable" data-file-base="{{ page_title|slugify|default:'selection' }}-matrix">SVG</button>
+              <button type="button" class="btn btn-primary btn-block rm-download-btn" data-format="png" data-table="#cvMatrixTable" data-file-base="{{ page_title|slugify|default:'selection' }}-matrix">PNG</button>
+            </div>
+          </div>
           <span class="cv-matrix-badge cv-matrix-badge-id">Identity (%)</span>
           <span class="cv-matrix-badge cv-matrix-badge-sim">Similarity (%)</span>
           <span class="text-muted">Upper triangle shows identity; lower triangle shows similarity.</span>
@@ -625,6 +634,7 @@
 <script src="{% static 'home/js/classification/core.js' %}"></script>
 <script src="{% static 'home/js/classification/tree.js' %}"></script>
 <script src="{% static 'home/js/gpcrome_svg_export.js' %}"></script>
+<script src="{% static 'home/js/classification/receptor_matrix_export.js' %}"></script>
 <script>
   window.CLASSIFICATION_LIST_DATA = JSON.parse('{{ list_payload_json|escapejs }}');
 </script>

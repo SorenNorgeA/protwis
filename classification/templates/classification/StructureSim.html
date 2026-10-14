@@ -773,8 +773,10 @@ body > #content.container > #gpcrdb_alert_placeholder {
 
   const MODALITY_COLORS_FIXED = {
     "Small molecule receptors": "#1f78b4",
+    "Polypeptide receptors": "#2CA02C",
     "Peptide receptors": "#2CA02C",
     "Protein receptors": "#FF7F0E",
+    "Ion receptors": "#D62728",
     "Orphan receptors": "#a0b8ba",
   };
 
@@ -786,7 +788,7 @@ body > #content.container > #gpcrdb_alert_placeholder {
     "Unknown": "#cccccc",
   };
 
-  const CLASS_ORDER = ['A','B1','B2','C','F','O1','O2','T2','V','U'];
+  const CLASS_ORDER = ['A','B1','B2','C','F','O1','O2','T2','V1','U'];
 
   function showBusyLoader() {
     if (statusEl) {
@@ -1031,7 +1033,7 @@ body > #content.container > #gpcrdb_alert_placeholder {
     if (s.includes('CLASS O1')) return 'O1';
     if (s.includes('CLASS O2')) return 'O2';
     if (s.includes('CLASS T2')) return 'T2';
-    if (s.includes('CLASS V'))  return 'V';   // DB name is "Class V1 (Vomeronasal)"; code is V
+    if (s.includes('CLASS V1')) return 'V1';
     if (s.includes('CLASS C'))  return 'C';
     if (s.includes('CLASS F'))  return 'F';
     if (s.includes('CLASS A'))  return 'A';

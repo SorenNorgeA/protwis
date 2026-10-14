@@ -301,13 +301,10 @@
     setHoveredClass(hoveredClassId);
   }
 
-  // TEMPORARY: one-off export of the cluster figure with no class highlighted (all markers
-  // and labels at their resting size/opacity). Rendered from a fresh figure object, so the
-  // on-screen plot and its hover state are untouched. Comment out / remove together with
-  // the #ncct-cluster-download-svg button in ClassificationSuperfamilyDetail.html.
-  // Optional fixedSize = {width, height, suffix} exports at that exact canvas size instead
-  // (the "squeezed" variant): marker/label sizes stay in pixels, so points just sit closer.
-  function downloadPlainClusterSvg(fixedSize) {
+  // Download (SVG/PNG) of the cluster figure with no class highlighted (all markers and labels
+  // at their resting size/opacity). Rendered from a fresh figure object, so the on-screen plot
+  // and its hover state are untouched.
+  function downloadClusterImage(format) {
     if (!clusterPlotEl || !clusterPlotEl.data || !clusterPlotEl._fullLayout) return;
     const points = scatterPoints();
     if (!points.length) return;
@@ -319,21 +316,19 @@
     data[1].textfont.size = buildLabelSizes(points, null);
     const layout = JSON.parse(JSON.stringify(clusterPlotEl.layout));
     // Keep the on-screen dimensions so marker/label sizes stay proportional to the canvas.
-    const width = fixedSize ? fixedSize.width : Math.max(clusterPlotEl._fullLayout.width || 0, 800);
-    const height = fixedSize ? fixedSize.height : Math.max(clusterPlotEl._fullLayout.height || 0, 700);
+    const width = Math.max(clusterPlotEl._fullLayout.width || 0, 800);
+    const height = Math.max(clusterPlotEl._fullLayout.height || 0, 700);
     Plotly.downloadImage({ data: data, layout: layout }, {
-      format: 'svg',
+      format: format === 'png' ? 'png' : 'svg',
       width: width,
       height: height,
-      filename: 'gpcr_superfamily_cluster' + (fixedSize ? fixedSize.suffix : ''),
+      scale: format === 'png' ? 2 : 1,
+      filename: 'gpcr_superfamily_cluster',
     });
   }
 
-  const downloadSvgBtn = document.getElementById('ncct-cluster-download-svg');
-  if (downloadSvgBtn) downloadSvgBtn.addEventListener('click', function() { downloadPlainClusterSvg(); });
-  const downloadSvgSmallBtn = document.getElementById('ncct-cluster-download-svg-400x450');
-  if (downloadSvgSmallBtn) downloadSvgSmallBtn.addEventListener('click', function() {
-    downloadPlainClusterSvg({ width: 400, height: 450, suffix: '_400x450' });
+  $(document).on('click', '.ncct-cluster-download-btn', function() {
+    downloadClusterImage($(this).data('format'));
   });
 
   function renderStatus(payload) {

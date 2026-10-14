@@ -1345,12 +1345,10 @@ function custom_changeLeavesLabels(location, value, dict, styling_dict) {
 const { normKey, fnv1a32, stableColorForKey, CLASS_COLORS, CHEMOTYPE_COLORS, CHEMOTYPE_FALLBACK_PALETTE } = window.ClassificationCore;
 
 // Class color from a class display name ("Class A (Rhodopsin)", "Class V1 (Vomeronasal)", ...).
-// DB names can carry a numeric suffix the class code doesn't (DB "Class V1" -> code "V"), so
-// fall back to the code with trailing digits stripped when the exact code isn't a known class.
 function classColorFromName(name) {
     let key = String(name || "").trim().replace(/^Class\s+/i, '');
     key = (key.match(/^[A-Za-z0-9]+/) || [""])[0];
-    return CLASS_COLORS[key] || CLASS_COLORS[key.replace(/\d+$/, '')] || "#333";
+    return CLASS_COLORS[key] || "#333";
 }
 const custom_norm_key = normKey;
 const custom_hash32 = fnv1a32;
@@ -1384,7 +1382,7 @@ var MANUAL_RADIUS_SCALE = {
     "Class:C": 0.55,
     "Class:F": 0.24,
     "Class:T2": 0.35,
-    "Class:V": 0.5,
+    "Class:V1": 0.5,
 
     // Modality:
     "Modality:Orphan receptors": 0.8,
