@@ -1,7 +1,8 @@
 from decimal import Decimal
 
 from django.conf import settings
-from django.db.models import Prefetch, Sum, Case, When, IntegerField, Max, Min, BooleanField
+from django.db.models import Prefetch, ExpressionWrapper, Sum, Case, When, IntegerField, Max, Min, BooleanField, Count, FloatField, Value
+from django.db.models.functions import Cast, Coalesce, Length
 
 from structure.models import Structure, StructureExtraProteins
 from protein.models import Protein, ProteinConformation, ProteinSegment
@@ -31,10 +32,6 @@ def get_best_signal_coverage(signal_ps, mode):
 def PdbTableDataSource():
     effector_list = set(StructureExtraProteins.objects.values_list('category', flat=True))
     complex_structure_ids = SignprotComplex.objects.values_list('structure', flat=True)
-
-    # get a gn residue count for all WT proteins
-    proteins_pks = Structure.objects.all().exclude(structure_type__slug__startswith='af-').values_list("protein_conformation__protein__parent__pk", flat=True).distinct()
-    proteins_af_pks = Structure.objects.all().filter(structure_type__slug__startswith='af-').values_list("protein_conformation__protein__pk", flat=True).distinct()
     
     #Fields used by multiple querysets, to avoid repeating them in each queryset
     common_prefetch = [
@@ -66,13 +63,13 @@ def PdbTableDataSource():
     #Dictionaries to hold query sets for each effector, as well as a dictionary to hold the signal protein coverage for each effector
     query_sets_data = {}
     query_sets_signal = {}
-    query_sets_proteins_pks = {}
     query_sets_resolutions = {}
     query_sets_best_signal_coverage = {}
     extra_proteins_lookup = {}
     bestresolution_lookup = {}
 
     # Loop through all effectors and create a query set for each effector, as well as a query set for the signal protein coverage
+    # Used by arrestin and g-protein databases
     for effector in effector_list:
         temp_data_qs = Structure.objects.all() \
             .prefetch_related(*common_prefetch,
@@ -81,7 +78,16 @@ def PdbTableDataSource():
         temp_data_qs = temp_data_qs.filter(extra_proteins__category__startswith=effector) \
             .prefetch_related('extra_proteins__protein_conformation','extra_proteins__wt_protein') \
             .order_by('extra_proteins__protein_conformation__protein__parent','state') \
-            .annotate(res_count = Sum(Case(When(extra_proteins__structure__protein_conformation__residue__generic_number=None, then=0), default=1, output_field=IntegerField())),
+            .annotate(coverage_pct=ExpressionWrapper(
+                        Cast(Count("protein_conformation__residue", distinct=True),
+                                FloatField()) * 100.0 /
+                        Coalesce(
+                            Length("protein_conformation__protein__parent__sequence"),
+                            Length("protein_conformation__protein__sequence"),
+                            Value(1.0)
+                        ),
+                        output_field=IntegerField(),
+                    ),
                       is_complex=Case(When(id__in=complex_structure_ids, then=True), default=False, output_field=BooleanField()))
 
         temp_signal_qs = StructureExtraProteins.objects.filter(category__startswith=effector) \
@@ -92,8 +98,6 @@ def PdbTableDataSource():
         query_sets_signal[effector] = temp_signal_qs
         extra_proteins_lookup[effector] = {s['structure__pdb_code__index']:s for s in temp_signal_qs}
 
-        query_sets_proteins_pks[effector] = list(proteins_pks) + list(proteins_af_pks)
-
         query_sets_resolutions[effector] = Structure.objects.all() \
             .values('protein_conformation__protein__parent','state__name') \
             .annotate(res = Min('resolution'))
@@ -102,17 +106,26 @@ def PdbTableDataSource():
 
         query_sets_best_signal_coverage[effector] = get_best_signal_coverage(temp_signal_qs, 'effector')
     
-    # Create a query set for when no specific effector is requested, restrict to experimental structures
+    # Create a query set for when no specific effector is requested, restrict to experimental structures (Used by the main GPCR site)
     temp_data_qs = Structure.objects.all() \
         .filter(structure_type__origin = "experiment") \
         .prefetch_related(*common_prefetch, 
                             Prefetch("ligands", 
-                                     queryset=ligand_qs.exclude(structure__structure_type__slug__startswith='af-') \
+                                     queryset=ligand_qs.filter(structure__structure_type__origin='experiment') \
                                                        .prefetch_related('ligand', 'ligand__ligand_type', 'ligand_role')))
     
     temp_data_qs = temp_data_qs.prefetch_related('extra_proteins__protein_conformation','extra_proteins__wt_protein') \
         .order_by('extra_proteins__protein_conformation__protein__parent','state') \
-        .annotate(res_count = Sum(Case(When(extra_proteins__protein_conformation__residue__generic_number=None, then=0), default=1, output_field=IntegerField())),
+        .annotate(coverage_pct=ExpressionWrapper(
+                        Cast(Count("protein_conformation__residue", distinct=True),
+                                FloatField()) * 100.0 /
+                        Coalesce(
+                            Length("protein_conformation__protein__parent__sequence"),
+                            Length("protein_conformation__protein__sequence"),
+                            Value(1.0)
+                        ),
+                        output_field=IntegerField(),
+                    ),
                   is_complex=Case(When(id__in=complex_structure_ids, then=True), default=False, output_field=BooleanField()))
     
     temp_signal_qs = StructureExtraProteins.objects.all() \
@@ -123,9 +136,8 @@ def PdbTableDataSource():
     
     query_sets_data["no_effector"] = temp_data_qs
     query_sets_signal["no_effector"] = temp_signal_qs
-    query_sets_proteins_pks["no_effector"] = proteins_pks
     query_sets_resolutions["no_effector"] = Structure.objects.all() \
-        .exclude(structure_type__slug__startswith='af-') \
+        .filter(structure_type__origin='experiment') \
         .values('protein_conformation__protein__parent','state__name') \
         .annotate(res = Min('resolution'))
 
@@ -133,16 +145,6 @@ def PdbTableDataSource():
 
     query_sets_best_signal_coverage["no_effector"] = get_best_signal_coverage(temp_signal_qs, "no_effector")
 
-    residue_counts = ProteinConformation.objects.filter(protein__pk__in=proteins_pks) \
-        .values('protein__pk') \
-        .annotate(res_count = Sum(Case(When(residue__generic_number=None, then=0), 
-                                       default=1, 
-                                       output_field=IntegerField())))
-    
-    rcs = {}
-    for rc in residue_counts:
-        rcs[rc['protein__pk']] = rc['res_count']
-  
     result_sets = {}
     identity_lookup = {}
     for effector in query_sets_data.keys():
@@ -175,11 +177,7 @@ def PdbTableDataSource():
             entry['gene_name'] = gene_obj.name if gene_obj else "-"
             entry['gene_entrez_id'] = gene_obj.entrez_id if gene_obj else "-"
             entry['state'] = s.state.name
-            #entry['distance_representative'] = s.distance_representative
-            #entry['contact_representative'] = s.contact_representative 
-            #entry['class_consensus_based_representative'] = s.class_contact_representative
 
-            #entry['mammal'] = s.mammal
             entry['closest_to_human'] = s.closest_to_human
 
             entry['identity_to_human'] = 100
@@ -203,15 +201,7 @@ def PdbTableDataSource():
                         entry['identity_to_human'] = 0
                     identity_lookup[key] = entry['identity_to_human']
 
-            residues_wt = rcs.get(shorted.pk, None)
-            residues_s = s.res_count
-            if residues_wt and residues_s:
-                try:
-                    entry['fraction_of_wt_seq'] = int(100*residues_s/residues_wt)
-                except:
-                    entry['fraction_of_wt_seq'] = None
-            else:
-                entry['fraction_of_wt_seq'] = None
+            entry['fraction_of_wt_seq'] = s.coverage_pct
 
             a_list = []
             for a in s.stabilizing_agents.all():
