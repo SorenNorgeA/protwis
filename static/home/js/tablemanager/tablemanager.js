@@ -1,6 +1,7 @@
 import { Column } from "./column.js";
 import { DataTypeFactory } from "./datatypefactory.js";
 import { CellStyleFactory } from "./cellstylefactory.js";
+import { MasterCheckbox, Checkbox } from "./datatypes/checkbox.js";
 
 // This class represents the TableManager, which is responsible for managing the data table and its associated columns, filters, and rendering logic.
 // The TableManager interacts with the back end TableProvider to fetch configuration and content data, then initializes a DataTable with the appropriate settings and column definitions.
@@ -12,19 +13,31 @@ class TableManager {
    * Constructs a new TableManager instance.
    * @param {Array} columnSpecification - An array of column specification objects defining the properties and behaviors of each column in the data table.
    * @param {string} tableId - The ID of the HTML table element to be managed by the TableManager.
-   * @param {DataTypeFactory} DataTypeFactoryReference - An optional reference to a DataTypeFactory instance for initializing data types. Only required if you want to override the default factory with a custom one.
+   * @param {DataTypeFactory} dataTypeFactoryReference - An optional reference to a DataTypeFactory instance for initializing data types. Only required if you want to override the default factory with a custom one.
+   * @param {CellStyleFactory} cellStyleFactoryReference - An optional reference to a CellStyleFactory instance for initializing cell styles. Only required if you want to override the default factory with a custom one.
   **/
   constructor(
     columnSpecification,
     tableId, 
-    DataTypeFactoryReference,
-    CellStyleFactoryReference,
-    eventRegistry
+    dataTypeFactoryReference,
+    cellStyleFactoryReference    
   ) {
-    this.dataTypeFactory = DataTypeFactoryReference || new DataTypeFactory();
-    this.cellStyleFactory = CellStyleFactoryReference || new CellStyleFactory();
-    this.eventRegistry = eventRegistry || new TableEventRegister();
+    this.dataTypeFactory = dataTypeFactoryReference || new DataTypeFactory();
+    this.cellStyleFactory = cellStyleFactoryReference || new CellStyleFactory();
+
+    //registry of events and corresponding event handlers that can be attached to table cells, rows, or content
+    this.eventRegistry = new TableEventRegister();
+    
+    // Injector registries used for registering custom function to inject content into table cells, primary header cells and super-header cells
+    this.superHeaderInjectors = new SuperHeaderInjectorRegister();
+    this.primaryHeaderInjectors = new CellInjectorRegister();
+    this.filterHeaderInjectors = new CellInjectorRegister();
+    this.cellInjectors = new CellInjectorRegister();
+
+    // Event publisher/subscriber instance used for broadcasting events to subscribers
     this.eventPubSub = new EventPubSub();
+
+    // FetchCache instance used for caching results of server-side fetches
     this.cache = new FetchCache();
 
     this.columns = this.initialiseColumns(columnSpecification);
@@ -114,25 +127,78 @@ class TableManager {
     // If the showCategoryCounts option is enabled, create the category count header cells 
     // and set up an event listener for DataTables search events to update the counts accordingly.
     if (dataTableOptions.showCategoryCounts) {
-    // If any of the columns are of type "checkbox", subscribe to relevant events to help synchronise checkboxes.
-    if (this.columns.some((col) => col.data_type === "checkbox")) {
-      this.setupCheckboxEventSubscriptions();
-    }
-      this.dataTableReference.on("search", (e, settings) => { 
-        this._handleColumnUniqueValueCounts(settings);
-      })
-      //Trigger initial count update after table is initialized and data is loaded
-      this.dataLoadedCallBacks.push(() => { this._handleColumnUniqueValueCounts(this.dataTableReference.settings()[0]); });
+     this.setupCategoryCountsHeader(tableComponents.categoryCountsHeaderRow)
     }
         
     this.populateFilterHeaders(tableComponents.filterHeaderRow);
 
+    // -- Document ready callbacks -- //
     //We need to wait until the document is fully loaded before initializing any filter interface plugins (e.g. select2) to ensure the relevant DOM elements are available
     // so we store the initialization of such plugins as callbacks to be run on document ready, and push them into the documentReadyCallBacks array
-    $(document).ready(() => {
-      this.documentReadyCallBacks.forEach((callBack) => callBack());
+    $(() => { this.documentReadyCallBacks.forEach((callBack) => callBack()); }); //jQuery document ready function syntax
+
+    // Set up event publishing for DataTables events that may be of interest to subscribers, such as search, order, and page events.
+    this.setupDatTablesEventPublishing();
+
+    // If any of the columns are of type "checkbox", subscribe to relevant events to help synchronise checkboxes.
+    if (this.columns.some((col) => col.data_type === "checkbox")) {
+      this.setupCheckboxEventSubscriptions();
+    }
+
+    this.assignOddEvenRowClasses(dataTableOptions);
+  }
+
+  assignOddEvenRowClasses(dataTableOptions) {
+    
+    let evenRowClass = dataTableOptions.rowClassEven ? dataTableOptions.rowClassEven :"even_row";
+    let oddRowClass = dataTableOptions.rowClassOdd ? dataTableOptions.rowClassOdd :"odd_row";
+
+    let row_class_assigner = () => {
+      this.dataTableReference.rows({ search: "applied" }).every(function (rowIdx, tableLoop, rowLoop) {
+        const row = this.row(rowIdx).node();
+        $(row).toggleClass(oddRowClass, rowIdx % 2 !== 0);
+        $(row).toggleClass(evenRowClass, rowIdx % 2 == 0);
+      });
+    };
+
+    // Apply the row class assigner to the current view
+    row_class_assigner();
+
+    // Reapply the row class assigner whenever the table is redrawn
+    this.dataTableReference.on("draw.dt", row_class_assigner);
+  }
+
+  setupCategoryCountsHeader(categoryCountsHeaderRow){
+    this.createCategoryCountHeaderCells(categoryCountsHeaderRow);      
+    
+    // Set up an event listener for DataTables search events to update the 
+    // category counts whenever a search is performed on the table.
+    this.dataTableReference.on("search", (e, settings) => { 
+        this._handleColumnUniqueValueCounts(settings);
+    })
+
+    //Trigger initial count update after table is initialized and data is loaded
+    this.dataLoadedCallBacks.push(() => { this._handleColumnUniqueValueCounts(this.dataTableReference.settings()[0]); });    
+  }
+
+  setupDatTablesEventPublishing() {
+    //Add event listeners to the DataTable for various events (search, draw, order, page) and publish corresponding events via the eventPubSub instance.
+    this.dataTableReference.on("search.dt", (e, settings) => {
+      this.eventPubSub.publish("DataTableSearch", settings);
     });
 
+    this.dataTableReference.on("draw.dt", (e, settings) => {
+      this.eventPubSub.publish("DataTableDraw", settings);
+    });
+    
+    this.dataTableReference.on("order.dt", (e, settings) => {
+      this.eventPubSub.publish("DataTableOrder", settings);
+    });
+    
+    this.dataTableReference.on("page.dt", (e, settings) => {
+      this.eventPubSub.publish("DataTablePage", settings);
+    });
+  }
 
   setupCheckboxEventSubscriptions() {
       // Subscribe to the DataTableSearch event to update the currentSearchCheckBoxes state whenever a search is performed on the table.
@@ -231,7 +297,7 @@ class TableManager {
     return fetch(distinctValuesEndpoint)
       .then(response => {
         if (!response.ok) {
-          throw new Error(`HTTP error when fetching options for column ${ColumnJsonId}! Status: ${response.status}`);
+          throw new Error(`HTTP error when fetching distinct value counts! Status: ${response.status}`);
         }
         return response.json();
       })
@@ -320,6 +386,27 @@ class TableManager {
     return tableHead;
   }
 
+  /**
+   * Annotates the boundaries of column groups in the table header.
+   * @param {HTMLElement} headerCell - The header cell to annotate.
+   * @param {Object} currentColumn - The current column being processed.
+   * @param {Array} tableColumns - The array of all columns in the table.
+   */
+  _annotateColumnGroupBoundaries(headerCell, currentColumn, tableColumns){
+            if (currentColumn.column_group) {
+          let prev_col = tableColumns.find((c) => c.col_idx === currentColumn.col_idx - 1);
+          let next_col = tableColumns.find((c) => c.col_idx === currentColumn.col_idx + 1);
+
+          if (!prev_col || prev_col.column_group !== currentColumn.column_group) {
+            headerCell.classList.add("col_group_boundary_left");
+          }
+
+          if (!next_col || next_col.column_group !== currentColumn.column_group) {
+            headerCell.classList.add("col_group_boundary_right");
+          }
+        }
+  }
+
   //---------------------------/
   //  Super(/grouped) headers  /
   //---------------------------/
@@ -357,9 +444,20 @@ class TableManager {
 
     superHeaderStructure.forEach(({ name, colspan }) => {
       let th = document.createElement("th");
-      th.textContent = name;
+      let span = document.createElement("span");
+      span.textContent = name;
       th.colSpan = colspan;
       th.classList.add("super_header_cell");
+      
+      let superHeaderElements = [span]
+      // If there are any registered injectors for this super-header name, apply them to the cell's innerHTML
+      if(this.superHeaderInjectors.getInjectors(name).length > 0){
+        this.superHeaderInjectors.getInjectors(name).forEach((injectorFunction) => {
+          superHeaderElements = injectorFunction(superHeaderElements);
+        });
+      }
+      
+      th.append(...superHeaderElements);      
       superHeaderRow.append(th);
     });
   }
@@ -392,7 +490,9 @@ class TableManager {
     for (const col of columnsSpecifications) {
       const last = groups[groups.length - 1];
       if (last && last.name === col.column_group) {
-        last.colspan++;
+        if (col.visible !== false) {
+          last.colspan++;
+        }
       } else {
         groups.push({ name: col.column_group, colspan: 1 });
       }
@@ -419,7 +519,7 @@ class TableManager {
         th.appendChild(masterCheckbox.createHtmlElement());
         this.state.masterCheckbox = masterCheckbox; // Store reference to the master checkbox for later use
       } else {
-      th.textContent = col.title;
+        th.textContent = col.title;
       }
       
       if (col.cssClassHeaderCell) {
@@ -428,9 +528,12 @@ class TableManager {
         th.classList.add("primary_header_cell");
       }
       
+      this._annotateColumnGroupBoundaries(th, col, this.columns);
+
       primaryHeaderRow.append(th);
     });
   }
+
 
   //--------------/
   //  Filter row  /
@@ -451,26 +554,39 @@ class TableManager {
    */
   populateFilterHeaders(filterHeaderRow) {
     this.columns.forEach((col) => {
-      const filterTh = document.createElement("th");
+      if (col.visible !== false) {
+        const filterTh = document.createElement("th");
 
-      if (col.cssClassFilterCell) {
-        filterTh.classList.add(col.cssClassFilterCell);
-      } else {
-        filterTh.classList.add("filter_header_cell");
-      }
+        if (col.cssClassFilterCell) {
+          filterTh.classList.add(col.cssClassFilterCell);
+        } else {
+          filterTh.classList.add("filter_header_cell");
+        }
 
-      if (col.allow_filter) {
-        const filterInterface = col.createFilterInterface(this);
-        if (filterInterface) {
-          //Add filter <input> elements  to filter header cell
-          if (!Array.isArray(filterInterface)) {
-            filterTh.appendChild(filterInterface);
-          } else {
-            filterInterface.forEach((el) => filterTh.appendChild(el));
+        this._annotateColumnGroupBoundaries(filterTh, col, this.columns);
+
+        if (col.allow_filter) {
+          let filterInterface = col.createFilterInterface(this);
+          
+          //Fetch any registered injectors for this column's json_id and apply them to the filter interface
+          if(col.filterHeaderInjector) {
+            let filterInjectorFunction = this.filterHeaderInjectors.getInjector(col.filterHeaderInjector);
+            if (filterInjectorFunction) { 
+              filterInterface = filterInjectorFunction(!Array.isArray(filterInterface) ? [filterInterface] : filterInterface);            
+            }
+          }
+          
+          if (filterInterface) {
+            //Add filter <input> elements  to filter header cell
+            if (!Array.isArray(filterInterface)) {
+              filterTh.appendChild(filterInterface);
+            } else {
+              filterInterface.forEach((el) => filterTh.appendChild(el));
+            }
           }
         }
+        filterHeaderRow.append(filterTh);
       }
-      filterHeaderRow.append(filterTh);
     });
   }
 
@@ -495,25 +611,36 @@ class TableManager {
    */
   createCategoryCountHeaderCells(categoryCountHeaderRow) {
     this.columns.forEach((col) => {
-      const categoryCountTh = document.createElement("th");
-      categoryCountTh.id = "th_categoryCount_" + col.json_id;
-      categoryCountHeaderRow.append(categoryCountTh);
+      if (col.visible !== false) {
+        const categoryCountTh = document.createElement("th");
+        categoryCountTh.id = "th_categoryCount_" + col.json_id;
 
-      // Subscribe an update handler for the cell 
-      // to an event broadcast that will be
-      // triggered by datatables search 
-      this.eventPubSub.subscribe(
-        "CategoryCountRequiresUpdate", 
-        (settings) => { 
-          //Retrieve cached counts for this search configuration and update the cell
-          // Note: this.cache.get is an async function that returns a promise, 
-          // so we need to use .then() to handle the resolved value
-          this.cache.get(settings.aoPreSearchCols).then(           
-              (cachedCounts) => {
-                this._updateCategoryCountCell(cachedCounts, col, categoryCountTh);
-              }
-            )             
-        });
+        if (col.cssClassHeaderCell) {
+          categoryCountTh.classList.add(col.cssClassHeaderCell);
+        } else {
+          categoryCountTh.classList.add("primary_header_cell");
+        }
+
+        this._annotateColumnGroupBoundaries(categoryCountTh, col, this.columns);
+        
+        categoryCountHeaderRow.append(categoryCountTh);
+
+        // Subscribe an update handler for the cell 
+        // to an event broadcast that will be
+        // triggered by datatables search 
+        this.eventPubSub.subscribe(
+          "CategoryCountRequiresUpdate", 
+          (settings) => { 
+            //Retrieve cached counts for this search configuration and update the cell
+            // Note: this.cache.get is an async function that returns a promise, 
+            // so we need to use .then() to handle the resolved value
+            this.cache.get(settings.aoPreSearchCols).then(           
+                (cachedCounts) => {
+                  this._updateCategoryCountCell(cachedCounts, col, categoryCountTh);
+                }
+              )             
+          });
+      }
     });
   }
   
@@ -635,7 +762,10 @@ class TableManager {
   columnToDataTableColDef(column) {
     const colDef = { data: column.json_id };
     colDef.render = (data, type, row, meta) => column.dataTableRenderer(data, type, row, meta, this);
-    colDef.createdCell = (cell, cellData, rowData, rowIndex, colIndex) => column.cellFormatting(cell, cellData, rowData, rowIndex, colIndex, this);
+    colDef.createdCell = (cell, cellData, rowData, rowIndex, colIndex) => column.postCreationTasks(cell, cellData, rowData, rowIndex, colIndex, this);
+    colDef.visible = column.visible !== false; // Default to true if not specified
+    colDef.orderable = column.orderable !== false; // Default to true if not specified
+    colDef.name = column.json_id; // Set the name property to the json_id for easier reference
     return colDef;
   }
 
@@ -721,6 +851,12 @@ class TableManager {
   }
 }
 
+//----------------------//
+//                      //
+// Table Event Register //
+//                      //
+//----------------------//
+
 class TableEventRegister {
   constructor() {
     this.eventHandlers = {};
@@ -734,6 +870,55 @@ class TableEventRegister {
     return this.eventHandlers[eventHandlerName];
   }
 }
+
+//------------------------//
+//                        //
+// Cell Injector Register //
+//                        //
+//------------------------//
+
+class CellInjectorRegister {
+  constructor() {
+    this.injectors = {};
+  }
+
+  registerInjector(injectorName, injectorFunction) {
+    this.injectors[injectorName] = injectorFunction;
+  }
+
+  getInjector(injectorName) {
+    return this.injectors[injectorName];
+  }
+}
+
+//-------------------------------//
+//                               //
+// SuperHeader Injector Register //
+//                               //
+//-------------------------------//
+
+class SuperHeaderInjectorRegister {
+  constructor() {
+    this.injectors = {};
+  }
+
+  registerInjector(superHeaderName, injectorFunction) {
+    if (this.injectors[superHeaderName] == undefined) {
+      this.injectors[superHeaderName] = []
+    }
+    this.injectors[superHeaderName].push(injectorFunction);
+  }
+
+  getInjectors(superHeaderName) {
+    return this.injectors[superHeaderName] || [];
+  }
+}
+
+//----------------------//
+//                      //
+// Event Pub/Sub System //
+//                      //
+//----------------------//
 
 class EventPubSub{
     constructor(){
@@ -763,6 +948,12 @@ class EventPubSub{
         }
     }
 }
+
+//---------------//
+//               //
+//  Fetch Cache  //
+//               //
+//---------------//
 
 class FetchCache {
   constructor() {
@@ -806,6 +997,11 @@ class FetchCache {
   }
 }
 
+//------------------------------//
+//                              //
+// DataTables Parameter Builder //
+//                              //
+//------------------------------//
 
 class DataTablesParameterBuilder {
   /**
@@ -895,4 +1091,4 @@ class DataTablesParameterBuilder {
   }
 }
 
-export { TableManager };
+export { TableManager, DataTablesParameterBuilder };

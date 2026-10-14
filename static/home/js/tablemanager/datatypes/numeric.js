@@ -5,6 +5,16 @@ import { DataTypeBase } from "./datatypebase.js";
 
 class Numeric extends DataTypeBase {
 
+    dataTableRenderer(data, type, row, meta) {
+        if (type === "display" && data !== null && data !== undefined) {
+            if (this.precision !== undefined && !isNaN(this.precision)) {
+                return parseFloat(data).toFixed(this.precision);
+            }
+            return data;
+        }
+        // Search, order and type return
+        return data;
+    }
     createFilterInterface(tableManagerReference) {    
         let filterInputMin = document.createElement("input");
         filterInputMin.setAttribute("data-field", this.json_id);

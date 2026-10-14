@@ -18,6 +18,38 @@ class DataTypeBase {
     return data;
   } 
   
+  postCreationTasks(cell, cellData, rowData, rowIndex, colIndex, tableManagerReference) {
+    //apply any cell formatting or styling after the cell has been created and rendered in the DataTable.
+    this.cellFormatting(cell, cellData, rowData, rowIndex, colIndex, tableManagerReference);
+    
+    // Call the eventHookup method to allow subclasses to attach event listeners or perform other actions on the cell.
+    this.eventHookup(cell, cellData, rowData, rowIndex, colIndex, tableManagerReference);
+
+    // Call the injectorProcessing method to allow subclasses to perform any additional processing or modifications on the cell after it has been created and rendered in the DataTable.
+    this.injectorProcessing(cell, cellData, rowData, rowIndex, colIndex, tableManagerReference);
+
+  }
+
+  injectorProcessing(cell, cellData, rowData, rowIndex, colIndex, tableManagerReference) {
+    // This method collects the names of any injector functions specified in the cellInjector property of the column definition 
+    // and calls them to perform any additional processing or modifications on the cell after it has been created and rendered in the DataTable.
+    if (this.cellInjector){
+      let injectorSet = this.cellInjector.split(';');
+      for (let injector of injectorSet){
+        let injectorFunction = tableManagerReference.injectorRegistry.getInjector(injector);
+        if (injectorFunction == undefined) {
+          console.error(`Injector function ${injector} not found in injector registry.`);
+          continue;
+        }
+        injectorFunction(cell, cellData, rowData, rowIndex, colIndex, tableManagerReference);
+      }
+    }
+  }
+
+  eventHookup(cell, cellData, rowData, rowIndex, colIndex, tableManagerReference) {
+    // This method can be overridden by subclasses to attach event listeners or perform other actions on the cell after it has been created and rendered in the DataTable.
+  }
+
   cellFormatting(cell, cellData, rowData, rowIndex, colIndex, tableManagerReference) {
     if (this.cssClassCell) {
         if(this.cssClassCell.includes("_conditional_")){            
