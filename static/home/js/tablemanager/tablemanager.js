@@ -1,6 +1,7 @@
 import { Column } from "./column.js";
-import { DataTypeFactory } from "./datatypefactory.js";
-import { CellStyleFactory } from "./cellstylefactory.js";
+import { DataTypeFactory } from "./factories/datatypefactory.js";
+import { CellStyleFactory } from "./factories/cellstylefactory.js";
+import { ButtonFactory } from "./factories/buttonfactory.js";
 import { MasterCheckbox, Checkbox } from "./datatypes/checkbox.js";
 
 // This class represents the TableManager, which is responsible for managing the data table and its associated columns, filters, and rendering logic.
@@ -13,17 +14,14 @@ class TableManager {
    * Constructs a new TableManager instance.
    * @param {Array} columnSpecification - An array of column specification objects defining the properties and behaviors of each column in the data table.
    * @param {string} tableId - The ID of the HTML table element to be managed by the TableManager.
-   * @param {DataTypeFactory} dataTypeFactoryReference - An optional reference to a DataTypeFactory instance for initializing data types. Only required if you want to override the default factory with a custom one.
-   * @param {CellStyleFactory} cellStyleFactoryReference - An optional reference to a CellStyleFactory instance for initializing cell styles. Only required if you want to override the default factory with a custom one.
   **/
   constructor(
     columnSpecification,
-    tableId, 
-    dataTypeFactoryReference,
-    cellStyleFactoryReference    
+    tableId     
   ) {
-    this.dataTypeFactory = dataTypeFactoryReference || new DataTypeFactory();
-    this.cellStyleFactory = cellStyleFactoryReference || new CellStyleFactory();
+    this.dataTypeFactory = new DataTypeFactory();
+    this.cellStyleFactory = new CellStyleFactory();
+    this.buttonFactory = new ButtonFactory();
 
     //registry of events and corresponding event handlers that can be attached to table cells, rows, or content
     this.eventRegistry = new TableEventRegister();
@@ -39,6 +37,11 @@ class TableManager {
 
     // FetchCache instance used for caching results of server-side fetches
     this.cache = new FetchCache();
+
+    // Category count header cells ({ col, th }), all updated together by a single handler
+    this.categoryCountCells = [];
+    // Incremented per count request so a superseded (slower) response can't overwrite a newer one
+    this.categoryCountRequestId = 0;
 
     this.columns = this.initialiseColumns(columnSpecification);
     this.tableId = tableId;
@@ -91,6 +94,8 @@ class TableManager {
       return;
     }
 
+    // Placeholder shown in display mode for null cell values (e.g. "-"); must be set before the DataTable renders any cells
+    this.nullValuePlaceholder = dataTableOptions.nullValuePlaceholder ?? "-";
 
     //Returns [table, tableHead,  primaryHeaderRow, tableBody] HTML object references after adding them to DOM
     let tableComponents = this.createPrimaryTableStructure();
@@ -146,25 +151,41 @@ class TableManager {
     }
 
     this.assignOddEvenRowClasses(dataTableOptions);
+
+    this.runButtonFactory(dataTableOptions);
   }
 
+  runButtonFactory(dataTableOptions) {
+    // Create and attach buttons based on the button configurations in the dataTableOptions
+    if (dataTableOptions.buttonFactory) {
+      dataTableOptions.buttonFactory.forEach((buttonTypeName, idx) => {
+        const button = this.buttonFactory.getButtonType(buttonTypeName, this);
+        button.attach(idx);
+      })  
+    };
+    }  
+
   assignOddEvenRowClasses(dataTableOptions) {
-    
+
     let evenRowClass = dataTableOptions.rowClassEven ? dataTableOptions.rowClassEven :"even_row";
     let oddRowClass = dataTableOptions.rowClassOdd ? dataTableOptions.rowClassOdd :"odd_row";
 
     let row_class_assigner = () => {
-      this.dataTableReference.rows({ search: "applied" }).every(function (rowIdx, tableLoop, rowLoop) {
-        const row = this.row(rowIdx).node();
-        $(row).toggleClass(oddRowClass, rowIdx % 2 !== 0);
-        $(row).toggleClass(evenRowClass, rowIdx % 2 == 0);
+      // Apply odd/even classes based on display position (rowLoop), not original data index (rowIdx).
+      // Use page: "current" to only iterate rows visible on this page for efficiency.
+      // After sort/filter, this ensures stripes alternate correctly based on what's actually displayed.
+      this.dataTableReference.rows({ search: "applied", page: "current" }).every(function (_rowIdx, _tableLoop, rowLoop) {
+        const row = this.node();
+        if (!row) return;
+        $(row).toggleClass(oddRowClass, rowLoop % 2 !== 0);
+        $(row).toggleClass(evenRowClass, rowLoop % 2 === 0);
       });
     };
 
     // Apply the row class assigner to the current view
     row_class_assigner();
 
-    // Reapply the row class assigner whenever the table is redrawn
+    // Reapply the row class assigner whenever the table is redrawn (sort, filter, page change)
     this.dataTableReference.on("draw.dt", row_class_assigner);
   }
 
@@ -218,24 +239,36 @@ class TableManager {
   }
 
   async _handleColumnUniqueValueCounts(settings){
-    let storedCounts = await this.cache.get(settings.aoPreSearchCols)
-    if (this.dataTableReference.settings()[0].oFeatures.bServerSide === true){
-      if (!storedCounts) {
-        let counts = await this._fetchColumnUniqueValueCountsServerSide(settings, this.dataTableReference)
-        // Store counts for this search configurations in the cache this is an aync function 
-        // because of it uses the crypto library for hashing
-        await this.cache.push(settings.aoPreSearchCols, counts) 
-      }
-      this.eventPubSub.publish("CategoryCountRequiresUpdate", settings)        
-      } else {
-        if (!storedCounts) {
-          let counts = this._fetchColumnUniqueValueCountsClientSide(settings, this.dataTableReference)
-          await this.cache.push(settings.aoPreSearchCols, counts)
+    const requestId = ++this.categoryCountRequestId;
+    let counts;
+
+    try {
+      if (this.dataTableReference.settings()[0].oFeatures.bServerSide === true) {
+        // Key on the complete request (endpoint plus every search/order parameter) so any change that alters the counts misses the cache
+        const requestUrl = this._buildCountRequestUrl(settings, this.dataTableReference);
+        const cacheKey = { type: 'columnCounts', url: requestUrl };
+        counts = this.cache.get(cacheKey);
+        if (!counts) {
+          counts = await this._fetchColumnUniqueValueCountsServerSide(requestUrl);
+          this.cache.push(cacheKey, counts);
         }
-        this.eventPubSub.publish("CategoryCountRequiresUpdate", settings)
+      } else {
+        // Computed from the loaded rows each time: cheap, and always reflects global search and fixed search filters
+        counts = this._fetchColumnUniqueValueCountsClientSide(settings, this.dataTableReference);
       }
+    } catch (error) {
+      console.error("Fetching unique value counts failed:", error);
+      return;
     }
-  
+
+    // A newer request has started since this one, so its result is the one to display
+    if (requestId !== this.categoryCountRequestId) {
+      return;
+    }
+
+    this._updateCategoryCountCells(counts);
+  }
+
   _fetchColumnUniqueValueCountsClientSide(settings, dataTableReference) {
     const table = dataTableReference
 
@@ -259,10 +292,15 @@ class TableManager {
             } else if (Array.isArray(rowData)) {
                 value = rowData[columnInfo.index] || rowData[columnInfo.columnIndex]
             }
-
+            
             // Only count non-empty values
             if (value !== null && value !== undefined && value !== '') {
-                uniqueValues.add(String(value))
+              // Convert value to string, or JSON string if it's an object 
+              // (there is a risk of the same objects having different string representation due to property order, 
+              // but this is a reasonable compromise for counting unique values quicky -- sorting object keys for every cell 
+              // would be too slow for large datasets)
+                value = typeof value == 'object' && value !== null ?  JSON.stringify(value) : String(value)
+                uniqueValues.add(value)
             }
         })
 
@@ -278,7 +316,7 @@ class TableManager {
     columnSettings.forEach((colInfo) => {
         const columnName = colInfo.data || colInfo.name || colInfo.title
 
-        if (columnName) {
+        if (columnName && columnName !== 'checkbox') { // Exclude checkbox columns from unique value counts
             uniqueValuesByColumn.base[columnName] = countUniqueInColumn(baseRows, colInfo)
             uniqueValuesByColumn.filtered[columnName] = countUniqueInColumn(filteredRows, colInfo)
         }
@@ -287,13 +325,13 @@ class TableManager {
     return uniqueValuesByColumn
   }
 
-  async _fetchColumnUniqueValueCountsServerSide(dt_settings, dataTableReference) {
+  _buildCountRequestUrl(dt_settings, dataTableReference) {
     const dataEndpoint = dataTableReference.ajax.url()
-    
-    let queryString = DataTablesParameterBuilder.buildServerSideParams(dt_settings, 0, 0, 0).queryString
-    
-    const distinctValuesEndpoint = dataEndpoint + "/countdistinct" + "?" + queryString
-    
+    const queryString = DataTablesParameterBuilder.buildServerSideParams(dt_settings, 0, 0, 0).queryString
+    return dataEndpoint + "/countdistinct" + "?" + queryString
+  }
+
+  async _fetchColumnUniqueValueCountsServerSide(distinctValuesEndpoint) {
     return fetch(distinctValuesEndpoint)
       .then(response => {
         if (!response.ok) {
@@ -393,18 +431,27 @@ class TableManager {
    * @param {Array} tableColumns - The array of all columns in the table.
    */
   _annotateColumnGroupBoundaries(headerCell, currentColumn, tableColumns){
-            if (currentColumn.column_group) {
-          let prev_col = tableColumns.find((c) => c.col_idx === currentColumn.col_idx - 1);
-          let next_col = tableColumns.find((c) => c.col_idx === currentColumn.col_idx + 1);
+    if (currentColumn.column_group) {
+      // Find the nearest visible column before this one (skipping hidden columns in the same group)
+      let prev_col = tableColumns
+        .filter((c) => c.col_idx < currentColumn.col_idx && c.visible !== false)
+        .sort((a, b) => b.col_idx - a.col_idx)[0];
 
-          if (!prev_col || prev_col.column_group !== currentColumn.column_group) {
-            headerCell.classList.add("col_group_boundary_left");
-          }
+      // Find the nearest visible column after this one (skipping hidden columns in the same group)
+      let next_col = tableColumns
+        .filter((c) => c.col_idx > currentColumn.col_idx && c.visible !== false)
+        .sort((a, b) => a.col_idx - b.col_idx)[0];
 
-          if (!next_col || next_col.column_group !== currentColumn.column_group) {
-            headerCell.classList.add("col_group_boundary_right");
-          }
-        }
+      // Left boundary: if no visible previous column or it's in a different group
+      if (!prev_col || prev_col.column_group !== currentColumn.column_group) {
+        headerCell.classList.add("col_group_boundary_left");
+      }
+
+      // Right boundary: if no visible next column or it's in a different group
+      if (!next_col || next_col.column_group !== currentColumn.column_group) {
+        headerCell.classList.add("col_group_boundary_right");
+      }
+    }
   }
 
   //---------------------------/
@@ -494,11 +541,13 @@ class TableManager {
           last.colspan++;
         }
       } else {
-        groups.push({ name: col.column_group, colspan: 1 });
+        // Start a new group. Count only if the first column is visible; otherwise start at 0.
+        groups.push({ name: col.column_group, colspan: col.visible !== false ? 1 : 0 });
       }
     }
 
-    return groups;
+    // Drop groups with colspan 0 (all columns hidden)
+    return groups.filter(g => g.colspan > 0);
   }
 
   //-------------------/
@@ -625,39 +674,27 @@ class TableManager {
         
         categoryCountHeaderRow.append(categoryCountTh);
 
-        // Subscribe an update handler for the cell 
-        // to an event broadcast that will be
-        // triggered by datatables search 
-        this.eventPubSub.subscribe(
-          "CategoryCountRequiresUpdate", 
-          (settings) => { 
-            //Retrieve cached counts for this search configuration and update the cell
-            // Note: this.cache.get is an async function that returns a promise, 
-            // so we need to use .then() to handle the resolved value
-            this.cache.get(settings.aoPreSearchCols).then(           
-                (cachedCounts) => {
-                  this._updateCategoryCountCell(cachedCounts, col, categoryCountTh);
-                }
-              )             
-          });
+        // Register the cell so that _updateCategoryCountCells can update every count in one pass
+        this.categoryCountCells.push({ col: col, th: categoryCountTh });
       }
     });
   }
-  
-  _updateCategoryCountCell(cachedCounts, col, categoryCountTh) {
-    try
-    {
-      if(cachedCounts['base'][col.json_id])
+
+  _updateCategoryCountCells(counts) {
+    for (const { col, th } of this.categoryCountCells) {
+      try
       {
-        //Retrieve values cached during datatables search event prior to publishing the CategoryCountRequiresUpdate event
-        let baseCount = cachedCounts['base'][col.json_id]
-        let filterCount = cachedCounts['filtered'][col.json_id]
-        
-        categoryCountTh.textContent = filterCount + "/" + baseCount;
+        if(counts['base'][col.json_id])
+        {
+          let baseCount = counts['base'][col.json_id]
+          let filterCount = counts['filtered'][col.json_id] || 0; // Default to 0 if undefined (i.e., no rows match the filter)
+
+          th.textContent = filterCount + "/" + baseCount;
+        }
+      } catch {
+        console.error("Updating unique value counts failed for column:" + col.json_id)
       }
-    } catch {
-      console.error("Updating unique value counts failed for column:" + col.json_id)
-    } 
+    }
   }
 
   //------------------------------------/
@@ -677,6 +714,12 @@ class TableManager {
       );
     }
 
+    if (!this._checkAllOrNoneColumnGroups(this.columns)) {
+      throw new Error(
+        "Column specifications must have either all or none of the columns in a column group",
+      );
+    }
+
     if (!this._checkConsecutiveColumnGroups(this.columns)) {
       throw new Error(
         "Column specifications must have column groups that form contiguous blocks of columns",
@@ -690,6 +733,13 @@ class TableManager {
 
   _columnIndexesAbsent() {
     return this.columns.every((col) => !col.hasOwnProperty("col_idx"));
+  }
+
+  _checkAllOrNoneColumnGroups(columnsSpecifications) {
+    // Check that all columns have a group or all lack one (don't mix)
+    const hasGrouped = columnsSpecifications.some((col) => col.column_group);
+    const hasUngrouped = columnsSpecifications.some((col) => !col.column_group);
+    return !(hasGrouped && hasUngrouped)
   }
 
   // Checks if the col_idx values of the column specifications are continuous, meaning that they form a sequence without any gaps.
@@ -728,6 +778,10 @@ class TableManager {
    * @returns Boolean indicating whether the column groups are consecutive/contiguous
   */
   _checkConsecutiveColumnGroups(columnsSpecifications) {
+    if (!columnsSpecifications.some((col) => !col.column_group)) {
+      return true; // If no columns have a column_group, we consider them as consecutive by default
+    }
+
     const sorted = [...columnsSpecifications].sort(
       (a, b) => a.col_idx - b.col_idx,
     );
@@ -924,27 +978,38 @@ class EventPubSub{
     constructor(){
         this.events = {}
     }
-    
-    // Subscribe to an event with a handler function
+
+    // Subscribe to an event with a handler function. Returns an unsubscribe function for convenience.
     subscribe(event, handler){
         if(!this.events[event]){
             this.events[event] = []
         }
         this.events[event].push(handler)
+        // Return an unsubscribe function so callers don't need to remember the handler reference
+        return () => this.unsubscribe(event, handler);
     }
-    
+
     // Unsubscribe from an event with a handler function
     unsubscribe(event, handler){
         if(this.events[event]){
             const index = this.events[event].findIndex(item => item === handler)
-            this.events[event].splice(index, 1);
+            // Guard against index being -1 (handler not found). splice(-1, 1) would remove the last element.
+            if(index !== -1){
+                this.events[event].splice(index, 1);
+            }
         }
     }
-    
-    // Publish an event with optional data
+
+    // Publish an event with optional data. Errors in one handler don't prevent other handlers from running.
     publish(event, data){
         if(this.events[event]){
-            this.events[event].forEach(handler => handler(data));
+            this.events[event].forEach(handler => {
+                try {
+                    handler(data);
+                } catch(error) {
+                    console.error(`Error in event handler for '${event}':`, error);
+                }
+            });
         }
     }
 }
@@ -956,27 +1021,27 @@ class EventPubSub{
 //---------------//
 
 class FetchCache {
-  constructor() {
+  constructor(maxEntries = 200) {
     this.cache = new Map();
+    this.maxEntries = maxEntries;
   }
 
-  async get(keyObject) {
-    const key = await this.createHash(keyObject);
-    return this.cache.get(key);
+  get(keyObject) {
+    return this.cache.get(this.createKey(keyObject));
   }
 
-  async push(keyObject, value) {
-    const key = await this.createHash(keyObject);
+  push(keyObject, value) {
+    const key = this.createKey(keyObject);
+    this.cache.delete(key); // re-insert so the entry becomes the most recent
     this.cache.set(key, value);
+    if (this.cache.size > this.maxEntries) {
+      this.cache.delete(this.cache.keys().next().value); // evict the oldest entry
+    }
   }
 
-  async createHash(object) {
-    const data = JSON.stringify(this.sortKeys(object));
-    const encoded = new TextEncoder().encode(data);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
-    return Array.from(new Uint8Array(hashBuffer))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
+  // The canonical JSON string is used directly as the key. 
+  createKey(object) {
+    return JSON.stringify(this.sortKeys(object));
   }
 
   sortKeys(obj) {

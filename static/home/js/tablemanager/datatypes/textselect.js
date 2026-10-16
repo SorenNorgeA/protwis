@@ -16,7 +16,7 @@ class TextSelect extends DataTypeBase {
                             allowClear: true 
                         }    
     
-    createFilterInterface(tableManagerReference) {  
+    createFilterInterface(tableManagerReference) {
       if (!this.allow_filter) {
         return null;
       }
@@ -25,8 +25,8 @@ class TextSelect extends DataTypeBase {
       //  HTML Elements  //
       //-----------------//
 
-      let filterInput = this._createInputForSelectFilter();
-      
+      let filterInput = this._createInputForSelectFilter(tableManagerReference);
+
       //-----------------------------------------------------------------//
       /// Callbacks for post processing and event handler registration ////
       //-----------------------------------------------------------------//
@@ -39,13 +39,17 @@ class TextSelect extends DataTypeBase {
         tableManagerReference.dataLoadedCallBacks.push( () => this._populateTextSelectFilterOptionsClientSide(this.json_id, this.col_idx, filterInput, tableManagerReference.dataTableReference));
       }
 
-      // Add select2 initialization as a callback to be run when document is ready to ensure the relevant DOM element is available  
-      tableManagerReference.documentReadyCallBacks.push( 
-        () => $(`#${filterInput.attributes.id.value}`).select2(this.select2options)
+      // Add select2 initialization as a callback to be run when document is ready to ensure the relevant DOM element is available.
+      // Use the element reference directly instead of looking up by id, avoiding collisions across tables.
+      tableManagerReference.documentReadyCallBacks.push(
+        () => $(filterInput).select2(this.select2options)
       );
 
-      //Add event handler registration to callback for when document is ready
-      tableManagerReference.documentReadyCallBacks.push( () => $(`#${filterInput.attributes.id.value}`).on('change', (e) => this.onSelectChangeHandler(e, this.col_idx, tableManagerReference)));
+      // Add event handler registration to callback for when document is ready.
+      // Use the element reference directly instead of looking up by id.
+      tableManagerReference.documentReadyCallBacks.push(
+        () => $(filterInput).on('change', (e) => this.onSelectChangeHandler(e, this.col_idx, tableManagerReference))
+      );
 
       return filterInput;
   }
@@ -54,50 +58,40 @@ class TextSelect extends DataTypeBase {
     //  Event Handlers  //
     //------------------//
     onSelectChangeHandler = (e, col_idx, tableManagerReference) => {
-        let currentSearchValue = tableManagerReference.dataTableReference.columns(col_idx).search()[0] || "%";
+
+      // If we are in the process of clearing filters, we don't want to trigger 
+      // a redraw as it will be done after all filters have been cleared.
+        if (tableManagerReference.state.clearingFilters) {
+            return
+        }
+
+        let currentSearchValue = tableManagerReference.dataTableReference.columns(col_idx).search()[0] || "";
 
         let serverSideProcessing = tableManagerReference.dataTableReference.settings()[0].oFeatures.bServerSide;
 
+        // Work from the selected items only. Each carries its <option> element, which select2 marks with
+        // data-select2-tag="true" when the user typed the value in rather than choosing an existing option.
+        // Use the event target element directly instead of looking it up by id.
+        const selected = $(e.target).select2('data').map((o) => ({
+          // Server-side uses the id/value (the raw column data, needed to match the database). Client-side uses the text,
+          // which has been processed for display and matches the internal filter data DataTables keeps (settings.aoData[rowIndex]._aFilterData[columnIndex]).
+          value: serverSideProcessing ? o.id : o.text,
+          isTag: o.element?.dataset?.select2Tag === 'true'
+        }));
+
+        // DataTables regex search is required for multiple values (joined with the OR operator "|") and for any tag (contains match)
+        const useRegex = selected.length > 1 || selected.some((s) => s.isTag);
+
         let newSearchValues;
-        if (serverSideProcessing) {
-          // We use the id property of the select2 data object (which actually holds the 'value' property of the select element) rather than the display text, 
-          // as the id/value contains the raw data data for the column, which we will need for matching against the database.
-          newSearchValues = $('#' + e.target.id).select2('data').map( (o) => o.id)
-        } else {
-          // For client-side processing, we use the text property of the select2 data object as the text has been processed for display (e.g., HTML tags have been stripped) and 
-          // will match the internal data (see settings.aoData[rowIndex]._aFilterData[columnIndex]) that datatables automatically keeps for filtering.
-          newSearchValues = $('#' + e.target.id).select2('data').map( (o) => o.text)
-        }
-
-        const allOptions = $('#' + e.target.id).find('option').toArray()
-
-        let useRegex = newSearchValues.length > 1; //DataTables regex search is required for multiple values, as we will join them with the OR operator "|"
-        let tagState;
-        if (this.select2options.tags) {
-          tagState = allOptions.map((o) => o.dataset['select2Tag'] === 'true' || false)
-          if (tagState.includes(true)) {
-            useRegex = true;
-          }
-        }
-
         if (useRegex) {
-          newSearchValues = newSearchValues.map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')); // escape regex special characters
-          for (let i = 0; i < newSearchValues.length; i++) {
-            let optIdx;
-            if (serverSideProcessing) { // See above for explanation of why we use the id/value for client-side processing and the text for server-side processing
-              optIdx = allOptions.map( (o) => o.value).indexOf(newSearchValues[i]);
-            } else {
-              optIdx = allOptions.map( (o) => o.text).indexOf(newSearchValues[i]);
-            }
-            
-            let isTag = tagState[optIdx];
-            
-            if (isTag) {
-              newSearchValues[i] = "(.*" + newSearchValues[i] + ".*)"; // wrap tag values with wildcards for "contains" search
-            } else {
-              newSearchValues[i] = "(^" + newSearchValues[i] + "$)"; // wrap non-tag values with anchors for "exact match" search
-            }
-          }
+          newSearchValues = selected.map(({ value, isTag }) => {
+            const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // escape regex special characters
+            return isTag
+              ? "(.*" + escaped + ".*)" // wrap tag values with wildcards for "contains" search
+              : "(^" + escaped + "$)"; // wrap non-tag values with anchors for "exact match" search
+          });
+        } else {
+          newSearchValues = selected.map((s) => s.value);
         }
 
         let newSearchValue = newSearchValues.join("|"); // join multiple values with OR operator for regex search
@@ -107,11 +101,12 @@ class TextSelect extends DataTypeBase {
         }
     }
 
-    _createInputForSelectFilter() {
+    _createInputForSelectFilter(tableManagerReference) {
         let filterInput = document.createElement("select");
         filterInput.setAttribute("data-field", this.json_id);
-        filterInput.setAttribute("id", this.tableId + "_" + this.json_id + "_search");
-        filterInput.setAttribute("name", this.tableId + "_" + this.json_id + "_select");
+        // Prefix id with table id to avoid collisions when multiple tables have the same column on one page
+        filterInput.setAttribute("id", tableManagerReference.tableId + "_" + this.json_id + "_search");
+        filterInput.setAttribute("name", tableManagerReference.tableId + "_" + this.json_id + "_select");
 
         filterInput.classList.add("col-filter");
         filterInput.classList.add("select-filter");

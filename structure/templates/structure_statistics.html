@@ -419,17 +419,17 @@
 
 {% block content %}
 
-<!---------------->
-<!---------------->
-<!----- HTML ----->
-<!---------------->
-<!---------------->
+<!-- ---------------- -->
+<!-- ---------------- -->
+<!-- ----- HTML ----- -->
+<!-- ---------------- -->
+<!-- ---------------- -->
 
 {% if page == 'gpcr' %}
 
-    <!-------------------------------->
-    <!----- GPCR PAGE PROCESSING ----->
-    <!-------------------------------->
+    <!-- -------------------------------- -->
+    <!-- ----- GPCR PAGE PROCESSING ----- -->
+    <!-- -------------------------------- -->
 
 
     <!-- NAVIGATION TABS -->
@@ -458,9 +458,9 @@
     <!-- TAB CONTENT -->
     <div class="tab-content">
         
-        <!------------------------------->
+        <!-- ------------------------- -->
         <!-- WHEELS : RECEPTORS STATES -->
-        <!------------------------------->
+        <!-- ------------------------- -->
 
         <div id="structure_coverage_wheel_pane" class="tab-pane fade in active">
             <div class="col-md-12" style="margin-bottom:20px; margin-top:20px;">
@@ -502,9 +502,9 @@
             <div id="GPCRome_plot" class="text-center" style="padding-top:10px; margin-bottom:30px;"></div>
         </div>
 
-        <!------------------------------->
+        <!-- ------------------------- -->
         <!-- WHEELS : LIGAND COMPLEXES -->
-        <!------------------------------->
+        <!-- ------------------------- -->
 
         <div id="receptor_ligand_wheel_pane" class="tab-pane fade">
             <div class="col-md-12" style="margin-bottom:20px; margin-top:20px;">
@@ -546,9 +546,9 @@
             <div id="GPCRome_complexes_plot" class="text-center" style="padding-top:10px; margin-bottom:30px;"></div>
         </div>
 
-        <!---------------------------------->
+        <!-- ---------------------------- -->
         <!-- WHEELS : OLFACTORY RECEPTORS -->
-        <!---------------------------------->
+        <!-- ---------------------------- -->
 
         <div id="olfactory_wheel_pane" class="tab-pane fade">
             <div class="col-md-12" style="margin-bottom:20px; margin-top:20px;">
@@ -590,9 +590,9 @@
             <div id="GPCRome_olfactory_plot" class="text-center" style="padding-top:10px; margin-bottom:30px;"></div>
         </div>
 
-        <!----------------------------------------->
+        <!-- ----------------------------------- -->
         <!-- STRUCTURE COUNTS BY YEAR BAR CHARTS -->
-        <!----------------------------------------->
+        <!-- ----------------------------------- -->
 
         <div id="barchart" class="tab-pane fade">
             <script>
@@ -699,9 +699,9 @@
             </div>
         </div>
 
-        <!-------------------------------------->
+        <!-- -------------------------------- -->
         <!-- GPCRDB SUMMARY STATISTICS TABLES -->
-        <!-------------------------------------->
+        <!-- -------------------------------- -->
         
         <div id="table_counts" class="tab-pane fade">
             <ul class="nav nav-tabs sub">
@@ -770,13 +770,29 @@
                 <span class="footer"> Specific sets of structures can be downloaded from the <a href="/structure">Structures</a> page. The latest released structure is from <strong>{{ latest_structure|date:"Y-m-d" }}</strong>.</span>
         </div>
         
-        <!----------------------------------->
+        <!-- ----------------------------- -->
         <!-- PER-RECEPTOR STATISTICS TABLE -->
-        <!----------------------------------->
+        <!-- ----------------------------- -->
 
         <div id="table_perreceptorstats" class="tab-pane fade">
             <table id="structureStatisticsTable" class="display" style="width:100%">
-                <!-- This table is populated by the TableManager via AJAX -->  
+                    <script type="module">
+                        // Populate structure model statistics table using TableManager
+                        import { TableManager } from "{% static 'home/js/tablemanager/tablemanager.js' %}";
+                        let stattable = null;
+                        TableManager.fetchConfiguration(
+                        'structure_statistics_table_gpcr', //dataTableConfigName
+                        'clientside', //dataTableConfigVariant
+                        'structure_statistics_table_gpcr', //columnConfigName
+                        'basic' //columnConfigVariant
+                        )
+                        .then(config => {
+                        stattable = new TableManager(config.columnsSpecifications, 'structureStatisticsTable');
+                        stattable.initialiseDataTable(config.datatableConfiguration);
+                        }).catch(error => {
+                        console.error('Error fetching configuration:', error);
+                        });
+                    </script>
             </table>
             <div style="margin-top: 10px;text-align: right;">
                 <div class="btn-group">
@@ -792,9 +808,9 @@
         </div>
     </div>
 
-<!--------------------------->
+<!-- --------------------- -->
 <!-- Class Selection Modal -->
-<!--------------------------->
+<!-- --------------------- -->
 
 <div class="modal fade" id="classSelectionModal" tabindex="-1" role="dialog" aria-labelledby="classSelectionModalLabel">
     <div class="modal-dialog" role="document">
@@ -816,9 +832,9 @@
     </div>
 </div>
 
-<!------------------------------->
+<!-- ------------------------- -->
 <!-- Chemotype Selection Modal -->
-<!------------------------------->
+<!-- ------------------------- -->
 
 <div class="modal fade" id="chemotypeSelectionModal" tabindex="-1" role="dialog" aria-labelledby="chemotypeSelectionModalLabel">
     <div class="modal-dialog" role="document">
@@ -840,9 +856,9 @@
     </div>
 </div>
 
-<!---------------------------->
+<!-- ---------------------- -->
 <!-- Family Selection Modal -->
-<!---------------------------->
+<!-- ---------------------- -->
 
 <div class="modal fade" id="familySelectionModal" tabindex="-1" role="dialog" aria-labelledby="familySelectionModalLabel">
     <div class="modal-dialog" role="document">
@@ -867,11 +883,11 @@
 
 {% elif page == 'gprotein' %}
     
-    <!------------------------------------>
-    <!----- GPROTEIN PAGE PROCESSING ----->
-    <!------------------------------------>
+    <!-- -------------------------- -->
+    <!--  GPROTEIN PAGE PROCESSING  -->
+    <!-- -------------------------- -->
 
-    <!----- WHEEL/TABLE SELECTOR NAV TAB DEFINITION -->
+    <!-- -- WHEEL/TABLE SELECTOR NAV TAB DEFINITION -- -->
     <ul class="nav nav-tabs main">
         <li class="dropdown active">
             <a class="dropdown-toggle" data-toggle="dropdown" href="#">Trees <span class="caret"></span></a>
@@ -890,7 +906,7 @@
         </li>
     </ul>
     
-    <!----- CHART CONTROLS: Fixed bottom left -->
+    <!-- --- CHART CONTROLS: Fixed bottom left --- -->
     <div class="wheel_or_tree_chart_legend bottom_left visible">
         Receptor names:
         <div class="btn-group" role="group" id="gtp_plus">
@@ -899,7 +915,7 @@
         </div>
     </div>
 
-    <!----- CHART LEGEND: Fixed to bottom right -->
+    <!-- --- CHART LEGEND: Fixed to bottom right --- -->
     <div class="wheel_or_tree_chart_legend bottom_right visible">
         <div class="text-center">
             <b>G Protein complexes</b> <br />
@@ -912,7 +928,7 @@
     </div>
 
     <div class="tab-content">
-            <!----- CLASS A TREE PANEL  -->
+            <!-- --- CLASS A TREE PANEL --- -->
             <div id="tree_class_a_rhodopsin" class="tab-pane fade in active">
                 <div id="class_a" class="text-center">
                     <h4 class="chartHeader">Class A<br />(Rhodopsin)</h4>
@@ -945,7 +961,7 @@
                 </div>
             </div>
     
-            <!----- CLASS A ORPHAN WHEEL PANEL  -->
+            <!-- --- CLASS A ORPHAN WHEEL PANEL --- -->
             <div id="tree_class_a_orphan" class="tab-pane fade">
                 <div id="orphan" class="text-center">
                     <h4 class="chartHeader">Class A <br /> (Orphans)</h4>
@@ -978,7 +994,7 @@
                 </div>
             </div>
     
-            <!----- CLASS B1 WHEEL PANEL  -->
+            <!-- --- CLASS B1 WHEEL PANEL --- -->
             <div id="tree_class_b1_secretin" class="tab-pane fade">
                 <div id="class_b1" class="text-center">
                     <h4 class="chartHeader">Class B1<br />(Secretin)</h4>
@@ -1011,7 +1027,7 @@
                 </div>
             </div>
     
-            <!----- CLASS B2 TREE PANEL  -->
+            <!-- --- CLASS B2 TREE PANEL --- -->
             <div id="tree_class_b2_adhesion" class="tab-pane fade">
                 <div id="class_b2" class="text-center">
                     <h4 class="chartHeader">Class B2<br />(Adhesion)</h4>
@@ -1044,7 +1060,7 @@
                 </div>
             </div>
     
-            <!----- CLASS C WHEEL PANEL  -->
+            <!-- --- CLASS C WHEEL PANEL --- -->
             <div id="tree_class_c_glutamate" class="tab-pane fade">
                 <div id="class_c" class="text-center">
                     <h4 class="chartHeader">Class C<br />(Glutamate)</h4>
@@ -1077,7 +1093,7 @@
                 </div>
             </div>
     
-            <!----- CLASS F WHEEL PANEL  -->
+            <!-- --- CLASS F WHEEL PANEL --- -->
             <div id="tree_class_f_frizzled" class="tab-pane fade">
                 <div id="class_f" class="text-center">
                     <h4 class="chartHeader">Class F<br />(Frizzled)</h4>
@@ -1110,7 +1126,7 @@
                 </div>
             </div>
     
-            <!----- CLASS T2 WHEEL PANEL  -->
+            <!-- --- CLASS T2 WHEEL PANEL --- -->
             <div id="tree_class_t2_taste2" class="tab-pane fade">
                 <div id="class_t2" class="text-center">
                     <h4 class="chartHeader">Class T <br /> (Taste 2)</h4>
@@ -1144,7 +1160,8 @@
             </div>
 
 
-        <!----- TABLE NAV PANEL  -->
+
+        <!-- --- TABLE NAV PANEL --- -->
         <div id="gprotein_tables" class="tab-pane fade">
             <ul class="nav nav-tabs sub">
                 <li class="active">
@@ -1162,11 +1179,11 @@
 
 {% elif page == 'arrestin' %}
 
-    <!------------------------------------>
-    <!----- ARRESTIN PAGE PROCESSING ----->
-    <!------------------------------------>
+    <!-- ------------------------------------ -->
+    <!-- ----- ARRESTIN PAGE PROCESSING ----- -->
+    <!-- ------------------------------------ -->
 
-    <!----- WHEEL/TABLE SELECTOR NAV TAB DEFINITION -->
+    <!-- --- WHEEL/TABLE SELECTOR NAV TAB DEFINITION --- -->
     <ul class="nav nav-tabs main">
         <li class="active">
             <a href="#arrestin_wheels" data-toggle="tab">GPCRome Wheel</a>
@@ -1176,12 +1193,12 @@
         </li>
     </ul>
 
-        <!----- WHEEL/TABLE SELECTOR NAV TAB CONTENT -->
+        <!-- --- WHEEL/TABLE SELECTOR NAV TAB CONTENT --- -->
     <div class="tab-content">
-        <!----- WHEEL NAV PANEL  -->
+        <!-- --- WHEEL NAV PANEL --- -->
         <div id="arrestin_wheels" class="tab-pane fade in active">
 
-            <!----- CHART CONTROLS: Fixed bottom left -->
+            <!-- --- CHART CONTROLS: Fixed bottom left --- -->
             <div style="position: fixed; bottom: 20px; left: 20px;z-index: 1000">
                 Receptor names:
                 <div class="btn-group" role="group" id="gtp_plus">
@@ -1242,7 +1259,7 @@
             </div>
         </div>
 
-        <!----- TABLE NAV PANEL  -->
+        <!-- --- TABLE NAV PANEL --- -->
         <div id="arrestin_tables" class="tab-pane fade">
             <ul class="nav nav-tabs sub">
                 <li class="active">
@@ -1262,11 +1279,11 @@
 
 {% block addon_js %}
 
-<!----------------------->
-<!----------------------->
-<!----- JAVA SCRIPT ----->
-<!----------------------->
-<!----------------------->
+<!-- ----------------------- -->
+<!-- ----------------------- -->
+<!-- ----- JAVA SCRIPT ----- -->
+<!-- ----------------------- -->
+<!-- ----------------------- -->
 
 <script src="{% static 'home/js/bootstrap-toggle.min.js' %}"></script>
 <script src="{% static 'home/js/d3.min.js' %}"></script>
@@ -1281,9 +1298,9 @@
 
 {% if page == 'gpcr' %}
 
-    <!-------------------------------->
-    <!----- GPCR PAGE JAVASCRIPT ----->
-    <!-------------------------------->
+    <!-- -------------------------------- -->
+    <!-- ----- GPCR PAGE JAVASCRIPT ----- -->
+    <!-- -------------------------------- -->
 
 <script src="{% static 'home/js/datamapper.js' %}"></script>
     <script src="{% static 'home/js/popper.min.js' %}"></script>
@@ -1312,23 +1329,6 @@
     <script src="{% static 'home/js/gpcrome_svg_export.js' %}"></script>
     <script src="{% static 'home/js/gpcrome_wheel_controls.js' %}"></script>
     <script src="{% static 'home/js/structure/statistics_gpcrome_wheels.js' %}"></script>
-    <script type="module">
-        // Populate structure model statistics table using TableManager
-        import { TableManager } from "{% static 'home/js/tablemanager/tablemanager.js' %}";
-        let stattable = null;
-        TableManager.fetchConfiguration(
-          'structure_statistics_table_gpcr', //dataTableConfigName
-          'clientside', //dataTableConfigVariant
-          'structure_statistics_table_gpcr', //columnConfigName
-          'basic' //columnConfigVariant
-        )
-        .then(config => {
-          stattable = new TableManager(config.columnsSpecifications, 'structureStatisticsTable');
-          stattable.initialiseDataTable(config.datatableConfiguration);
-        }).catch(error => {
-          console.error('Error fetching configuration:', error);
-        });
-    </script>
     <script>
         function exportStructureStatistics(format) {
           try {
@@ -1540,9 +1540,9 @@
 
 {% elif page == 'gprotein' %}
     
-    <!------------------------------------>
-    <!----- GPROTEIN PAGE PROCESSING ----->
-    <!------------------------------------>
+    <!-- -------------------------- -->
+    <!--  GPROTEIN PAGE PROCESSING  -->
+    <!-- -------------------------- -->
 
     <script type="text/javascript" charset="utf-8">
             class_a = {{ class_a | safe }};
@@ -1768,9 +1768,9 @@
 
 {% elif page == 'arrestin' %}
 
-    <!------------------------------------>
-    <!----- ARRESTIN PAGE PROCESSING ----->
-    <!------------------------------------>
+    <!-- -------------------------- -->
+    <!--  ARRESTIN PAGE PROCESSING  -->
+    <!-- -------------------------- -->
 
     <script src="{% static 'home/js/datamapper.js' %}"></script>
     <script src="{% static 'home/js/popper.min.js' %}"></script>

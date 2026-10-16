@@ -5,10 +5,18 @@ import { DataTypeBase } from "./datatypebase.js";
 
 class Numeric extends DataTypeBase {
 
-    dataTableRenderer(data, type, row, meta) {
-        if (type === "display" && data !== null && data !== undefined) {
+    dataTableRenderer(data, type, row, meta, tableManagerReference) {
+        if (type === "display" && (data === null || data === undefined)) {
+            return tableManagerReference.nullValuePlaceholder;
+        }
+        if (type === "display") {
+            // Show non-numeric values (e.g. empty strings or placeholder text from older cached responses) unchanged rather than as "NaN"
+            const numericValue = parseFloat(data);
+            if (!Number.isFinite(numericValue)) {
+                return data;
+            }
             if (this.precision !== undefined && !isNaN(this.precision)) {
-                return parseFloat(data).toFixed(this.precision);
+                return numericValue.toFixed(this.precision);
             }
             return data;
         }
@@ -18,12 +26,14 @@ class Numeric extends DataTypeBase {
     createFilterInterface(tableManagerReference) {    
         let filterInputMin = document.createElement("input");
         filterInputMin.setAttribute("data-field", this.json_id);
-        filterInputMin.setAttribute("id", this.json_id + "_search_min");
+        // Prefix id with table id to avoid collisions when multiple tables have the same column on one page
+        filterInputMin.setAttribute("id", tableManagerReference.tableId + "_" + this.json_id + "_search_min");
         filterInputMin.setAttribute("placeholder", "Min");
-        
+
         let filterInputMax = document.createElement("input");
         filterInputMax.setAttribute("data-field", this.json_id);
-        filterInputMax.setAttribute("id", this.json_id + "_search_max");
+        // Prefix id with table id to avoid collisions when multiple tables have the same column on one page
+        filterInputMax.setAttribute("id", tableManagerReference.tableId + "_" + this.json_id + "_search_max");
         filterInputMax.setAttribute("placeholder", "Max");
 
         filterInputMin.classList.add("col-filter");
@@ -39,11 +49,11 @@ class Numeric extends DataTypeBase {
         let filterChangeListener = null;
         if (tableManagerReference.dataTableReference.settings()[0].oFeatures.bServerSide === true) {
         // ---- SERVER SIDE PROCESSING MODE ----
-        filterChangeListener = this._createNumericFilterChangeListener(
+        filterChangeListener = this._createNumericFilterChangeListener_ServerSide(
             this.col_idx,
             filterInputMin,
             filterInputMax,
-            tableManagerReference.dataTableReference
+            tableManagerReference
         );
         } else {
         // ---- CLIENT SIDE PROCESSING MODE ----
@@ -53,9 +63,7 @@ class Numeric extends DataTypeBase {
         // so we just need to trigger a redraw whenever the filter inputs change to ensure the filtering is applied.
         this._attachFixedSearchToDataTable(this.json_id, filterInputMin, filterInputMax, tableManagerReference.dataTableReference);
         // trigger redraw on filter input change to apply the filtering
-        filterChangeListener = function () {
-            tableManagerReference.dataTableReference.draw();
-        };
+        filterChangeListener = this._createNumericFilterChangeListener_ClientSide(tableManagerReference);
         }
 
         filterInputMin.addEventListener("blur", filterChangeListener);
@@ -92,11 +100,21 @@ class Numeric extends DataTypeBase {
         );
     }
 
-    _createNumericFilterChangeListener(
+    _createNumericFilterChangeListener_ClientSide(tableManagerReference){        
+        let handler = (e) => {
+            // If we are in the process of clearing filters, we don't want to trigger a redraw as it will be done after all filters have been cleared.
+            if (!tableManagerReference.state.clearingFilters) {
+                tableManagerReference.dataTableReference.draw();            
+            }
+        }
+        return handler;
+    }
+
+    _createNumericFilterChangeListener_ServerSide(
         columnIdx,
         filterInputMin,
         filterInputMax,
-        dataTableReference,
+        tableManagerReference,
         ) {
         //create event callback function
         return function () {
@@ -108,12 +126,16 @@ class Numeric extends DataTypeBase {
             // DataTables sends the current search value for the column as the first element of the array returned by .search()
             // we can use this to avoid unnecessary reloads if the range hasn't actually changed
             let currentSearchValue =
-            dataTableReference.columns(columnIdx).search()[0] || "-Inf~Inf"; // default to full range if no search value currently set
+            tableManagerReference.dataTableReference.columns(columnIdx).search()[0] || "-Inf~Inf"; // default to full range if no search value currently set
 
             let newSearchValue = `${rangeMin}~${rangeMax}`;
 
             if (newSearchValue !== currentSearchValue) {
-                dataTableReference.columns(columnIdx).search(newSearchValue).draw();
+                 // If we are in the process of clearing filters, we don't want to trigger 
+                 // a redraw as it will be done after all filters have been cleared.
+                if (!tableManagerReference.state.clearingFilters) {
+                    tableManagerReference.dataTableReference.columns(columnIdx).search(newSearchValue).draw();
+                }
             }
         };
     }

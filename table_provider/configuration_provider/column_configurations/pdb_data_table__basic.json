@@ -1,13 +1,45 @@
 [
     {
-    "column_group": "Receptor",
+    "column_group": "Structure",
     "json_id": "checkbox",
     "title": "",
     "data_type": "checkbox",
     "allow_filter": false,
-    "eventRegister": {
-      "click": {"handler":"checkboxClick", "eventOwner":"row" }
-    }
+    "orderable": false
+  },
+    {
+    "column_group": "Structure",
+    "json_id": "pdb_id",
+    "title": "PDB ID",
+    "data_type": "weblinktext",
+    "allow_filter": true   
+  },
+   {
+    "column_group": "Structure",
+    "json_id": "structure_type",
+    "title": "Structure Type",
+    "data_type": "textselect",
+    "allow_filter": true   
+  },
+    {
+    "column_group": "Structure",
+    "json_id": "resolution",
+    "title": "Resolution",
+    "data_type": "numeric",
+    "precision": 1,
+    "allow_filter": true,
+    "cssClassCell": "_conditional_categorical_",
+    "cssClassCellConditionSource": "resolution_best",
+    "cssClassCellConditionRules": "true:bestTrue;false:bestFalse",
+    "filterHeaderInjector": "show_best_resolution_toggle"
+  },
+   {
+    "column_group": "Structure",
+    "json_id": "resolution_best",
+    "title": "resolution_best",
+    "data_type": "text",
+    "visible": false,
+    "allow_filter": true
   },
   {
     "column_group": "Receptor",
@@ -20,7 +52,7 @@
     "column_group": "Receptor",
     "json_id": "protein_name_short",
     "title": "GtoPdb",
-    "data_type": "text",
+    "data_type": "textselect",
     "allow_filter": true   
   },
   {
@@ -34,14 +66,14 @@
     "column_group": "Receptor",
     "json_id": "receptor_family_short",
     "title": "Receptor Family",
-    "data_type": "text",
+    "data_type": "textselect",
     "allow_filter": true   
   },
     {
     "column_group": "Receptor",
     "json_id": "receptor_class_code",
     "title": "Class",
-    "data_type": "text",
+    "data_type": "textselect",
     "allow_filter": true   
   },
     {
@@ -49,54 +81,41 @@
     "json_id": "fraction_of_wt_seq",
     "title": "% of Seq",
     "data_type": "numeric",
+    "precision": 0,
     "allow_filter": true   
   },    
     {
     "column_group": "Species",
     "json_id": "species_common_name",
     "title": "Species",
-    "data_type": "text",
+    "data_type": "textselect",
     "allow_filter": true,
     "cssClassCell": "_conditional_categorical_",
     "cssClassCellConditionSource": "closest_to_human",
-    "cssClassCellConditionRules": "true:bestSpeciesTrue;false:bestSpeciesFalse"
+    "cssClassCellConditionRules": "true:bestTrue;false:bestFalse",
+    "filterHeaderInjector": "show_closest_to_human_toggle"
   },
     {
     "column_group": "Species",
     "json_id": "identity_to_human",
     "title": "Identity to Human (%)",
     "data_type": "numeric",
+    "precision": 0,
     "allow_filter": true   
   },
-    {
-    "column_group": "Structure",
-    "json_id": "structure_type",
-    "title": "Structure Type",
+  {
+    "column_group": "Species",
+    "json_id": "closest_to_human",
+    "title": "closest_to_human",
     "data_type": "text",
+    "visible": false,
     "allow_filter": true   
-  },
-    {
-    "column_group": "Structure",
-    "json_id": "pdb_id",
-    "title": "PDB ID",
-    "data_type": "weblinktext",
-    "allow_filter": true   
-  },
-    {
-    "column_group": "Structure",
-    "json_id": "resolution",
-    "title": "Resolution",
-    "data_type": "numeric",
-    "allow_filter": true,
-    "cssClassCell": "_conditional_gradient_greyscale_",
-    "cssClassCellConditionSource": "resolution",
-    "cssClassCellConditionRules": "shadingMin:0;shadingMax:30;valueClampMax:4"
   },
     {
     "column_group": "Receptor State",
     "json_id": "state",
     "title": "State",
-    "data_type": "text",
+    "data_type": "textselect",
     "allow_filter": true   
   },
     {
@@ -104,6 +123,7 @@
     "json_id": "gprot_bound_likeness",
     "title": "Degree Active (%)",
     "data_type": "numeric",
+    "precision": 0,
     "allow_filter": true   
   },
     {
@@ -111,26 +131,33 @@
     "json_id": "tm6_angle",
     "title": "TM6 Tilt",
     "data_type": "numeric",
-    "allow_filter": true   
+    "precision": 0,
+    "allow_filter": true,
+    "cssClassCell": "_conditional_gradient_greyscale_",
+    "cssClassCellConditionSource": "tm6_angle",
+    "cssClassCellConditionRules": "shadingMin:0;shadingMax:30;valueClampMax:100;valueClampMin:30"
   },
     {
     "column_group": "Signalling Protein",
     "json_id": "signal_protein",
     "title": "Family",
-    "data_type": "text",
+    "data_type": "textselect",
     "allow_filter": true   
   },  
     {
     "column_group": "Signalling Protein",
     "json_id": "signal_protein_subtype",
     "title": "Subtype",
-    "data_type": "text",
+    "data_type": "textselect",
     "allow_filter": true   
   },
     {
     "column_group": "Signalling Protein",
     "json_id": "signal_protein_note",
     "title": "Note",
+    "max_display_length": 10,
+    "cssClassCell": "wide-note-cell",
+    "cssClassHeaderCell": "wide-note-header",
     "data_type": "text",
     "allow_filter": false   
   },
@@ -139,6 +166,7 @@
     "json_id": "signal_protein_pcntseq",
     "title": "% of Seq",
     "data_type": "numeric",
+    "precision": 0,
     "allow_filter": true   
   },
     {
@@ -166,7 +194,7 @@
     "column_group": "Ligand",
     "json_id": "ligand_role",
     "title": "Role",
-    "data_type": "text",
+    "data_type": "textselect",
     "allow_filter": true   
   }
 ]

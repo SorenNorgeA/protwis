@@ -1,5 +1,6 @@
 class NumericGradientGrayscale {
-    constructor(cell, cellData, rowData, rowIndex, colIndex, conditionSource, tableManagerReference, settings) {
+    constructor(cell, cellData, rowData, rowIndex, colIndex, conditionSource, tableManagerReference, settings, columnJsonId) {
+        this.columnJsonId = columnJsonId;
         this.cell = cell;
         this.cellData = cellData;
         this.rowData = rowData;
@@ -10,105 +11,93 @@ class NumericGradientGrayscale {
         this.settings = settings;
     }
 
-    sleep(delay) { return new Promise((resolve) => setTimeout(resolve, delay)) }
-
     applyStyle() {
-        if (this.tableManagerReference.dataTableReference.settings()[0].oFeatures.bServerSide === true) {
-            this._createGradientGreyscale_serverside(this.cell, this.cellData, this.conditionSource, this.tableManagerReference, this.settings);
-        }
-        else {
-            this._createGradientGreyscale_clientside(this.cell, this.cellData, this.conditionSource, this.tableManagerReference, this.settings)
+        const range = this._getColumnRange();
+
+        if (range instanceof Promise) {
+            // Server-side: every cell in the column awaits the same promise, so the range is requested once.
+            range.then((resolved) => this._applyRange(resolved));
+        } else {
+            this._applyRange(range);
         }
     }
 
-    async _createGradientGreyscale_serverside(cell, cellData, conditionSource, tableManagerReference, settings) {
-        //retrieve the stored min and max values for this column from globalThis, if they exist
-        let storedMin = globalThis["min_" + this.json_id];
-        let storedMax = globalThis["max_" + this.json_id];
-        
-        // a flag to indicate whether the min and max values have been requested from the server
-        // this is necessary because multiple cells in the same column may be rendered before the min and max values are returned from the server, 
-        // and we don't want to make multiple requests for the same data
-        let requested = globalThis["requested_max_min_" + this.json_id];
-        
-        //If the min and max values are not stored and nobody has requested them, we need to fetch them from the server. 
-        if ((storedMin == undefined || storedMax == undefined) & requested == undefined) {                     
-            globalThis["requested_max_min_" + this.json_id] = true;
-            let range = await this._get_min_max_serverside(conditionSource, tableManagerReference.dataTableReference)
-            globalThis["min_" + this.json_id] = range.min;
-            globalThis["max_" + this.json_id] = range.max;            
+    // Applies the shading once the range is known. A null range (e.g. failed fetch, no numeric data) leaves the cell unstyled.
+    _applyRange(range) {
+        if (range) {
+            this._set_grayscale_style(this.cell, this.cellData, range.min, range.max, this.settings);
+        }
+    }
+
+    // Returns the {min, max} range for this column (client-side) or a promise of it (server-side).
+    // Ranges are cached on the table manager's state, keyed by column, so different columns
+    // and different tables never share a range.
+    _getColumnRange() {
+        const state = this.tableManagerReference.state;
+        if (!state.gradientRanges) {
+            state.gradientRanges = {};
         }
 
-        // By now, this or some other cell has already requested the min and max values, so we wait here 
-        // until the values are available in globalThis before proceeding to set the grayscale style
-        let tried = 0;
-        while (globalThis["min_" + this.json_id] == undefined || globalThis["max_" + this.json_id] == undefined) {
-            await this.sleep(100); // Wait for 100 milliseconds before checking again
-            tried++;
-            if (tried > 50) { // If we've tried 50 times (5 seconds), break the loop to avoid infinite waiting
-                console.error("Failed to retrieve min/max values for gradient greyscale after multiple attempts.");
-                break;
+        if (!(this.columnJsonId in state.gradientRanges)) {
+            const dataTable = this.tableManagerReference.dataTableReference;
+            if (dataTable.settings()[0].oFeatures.bServerSide === true) {
+                state.gradientRanges[this.columnJsonId] = this._get_min_max_serverside(this.conditionSource, dataTable);
+            } else {
+                state.gradientRanges[this.columnJsonId] = this._get_min_max_clientside(this.conditionSource, dataTable);
             }
         }
-        
-        this._set_grayscale_style(cell, cellData, globalThis["min_" + this.json_id], globalThis["max_" + this.json_id], settings);            
-    }
 
-    _createGradientGreyscale_clientside(cell, cellData, conditionSource, tableManagerReference, settings) {
-        //retrieve the stored min and max values for this column from globalThis, if they exist
-        let storedMin = globalThis["min_" + this.json_id];
-        let storedMax = globalThis["max_" + this.json_id];
-
-        //If the min and max values are not stored, we need to compute them from the AJAX data payload
-        if (storedMin == undefined || storedMax == undefined) {                     
-            this._get_min_max_clientside(conditionSource, tableManagerReference.dataTableReference)            
-        }
-
-        storedMin = globalThis["min_" + this.json_id];
-        storedMax = globalThis["max_" + this.json_id];
-        
-        this._set_grayscale_style(cell, cellData, storedMin, storedMax, settings);            
+        return state.gradientRanges[this.columnJsonId];
     }
 
     _get_min_max_clientside(sources, dataTable) {
-        let dataPayload = dataTable.ajax.json().data;
         let min = Number.POSITIVE_INFINITY;
         let max = Number.NEGATIVE_INFINITY;
-        
-        dataPayload.forEach(function (rowData) {
+
+        dataTable.rows().data().toArray().forEach((rowData) => {
             for (const source of sources) {
-                min = Math.min(min, rowData[source]);
-                max = Math.max(max, rowData[source]);
+                const raw = rowData[source];
+                if (raw === null || raw === undefined || raw === "") {
+                    continue;
+                }
+                const value = parseFloat(raw);
+                if (Number.isFinite(value)) {
+                    min = Math.min(min, value);
+                    max = Math.max(max, value);
+                }
             }
-        })
-        
-        //Store result so every cell doesn't have to recalculate/requery the min/max values
-        globalThis["min_" + this.json_id] = min;
-        globalThis["max_" + this.json_id] = max;
+        });
+
+        return Number.isFinite(min) && Number.isFinite(max) ? { min: min, max: max } : null;
     }
 
+    // Never rejects: resolves to null if any range request fails, so cells stay unstyled instead of waiting or erroring.
     async _get_min_max_serverside(sources, dataTable) {
-        let promises = [];
-        let min = Number.POSITIVE_INFINITY;
-        let max = Number.NEGATIVE_INFINITY;
+        const dataEndpoint = dataTable.ajax.url();
 
-        for (const source of sources) {
-            let dataEndpoint = dataTable.settings()[0].ajax.url;
-            let optionsEndpoint = dataEndpoint + "/range/" + source + "/"
+        try {
+            const ranges = await Promise.all(sources.map(async (source) => {
+                const response = await fetch(dataEndpoint + "/range/" + source + "/");
+                if (!response.ok) {
+                    throw new Error(`HTTP error when fetching range for ${source}! Status: ${response.status}`);
+                }
+                return response.json();
+            }));
 
-            promises.push(
-                fetch(optionsEndpoint).then(response => response.json())
-            )
+            let min = Number.POSITIVE_INFINITY;
+            let max = Number.NEGATIVE_INFINITY;
+            for (const range of ranges) {
+                const rangeMin = parseFloat(range.min);
+                const rangeMax = parseFloat(range.max);
+                if (Number.isFinite(rangeMin)) min = Math.min(min, rangeMin);
+                if (Number.isFinite(rangeMax)) max = Math.max(max, rangeMax);
+            }
+
+            return Number.isFinite(min) && Number.isFinite(max) ? { min: min, max: max } : null;
+        } catch (error) {
+            console.error("Failed to retrieve min/max values for gradient greyscale:", error);
+            return null;
         }
-
-        let ranges = await Promise.all(promises)
-
-        for (const range of ranges) {
-            min = Math.min(min, range.min);
-            max = Math.max(max, range.max);
-        }
-
-        return {min: min, max: max};
     }
 
     _set_grayscale_style(cell, cellData, rangeMin, rangeMax, settings)

@@ -14,6 +14,11 @@
     "dataSrc":  "data"           
     
   },
+  "order": {
+		"name": "uniprot",
+		"dir": "asc"
+	},
   "lengthMenu": [ [10, 25, 50], [10, 25, 50] ],
+  "nullValuePlaceholder": "-",
   "showCategoryCounts": true
 }

@@ -1,6 +1,12 @@
 import re
 
+class QueryStringProcessingError(ValueError):
+    """Raised when a malformed or oversized query string is received (a client error)."""
+
+
 class DatatablesQueryStringProcessor:
+    MAX_ARRAY_INDEX = 500  # Prevent unbounded memory allocation from large array indices
+
     def __init__(self, request):
         """Initializes a DatatablesQueryStringProcessor instance and begins processing."""
         try:
@@ -30,6 +36,11 @@ class DatatablesQueryStringProcessor:
                 else:
                     if sub_key.isdigit():
                         sub_key = int(sub_key)
+                        # Reject array indices above the limit to prevent unbounded allocation
+                        if sub_key > self.MAX_ARRAY_INDEX:
+                            raise QueryStringProcessingError(
+                                f"Array index {sub_key} exceeds the maximum of {self.MAX_ARRAY_INDEX}."
+                            )
                         # Ensure the current level is a list and has enough elements
                         while len(current_level) <= sub_key:
                             current_level.append(None)

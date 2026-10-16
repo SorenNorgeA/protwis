@@ -5,11 +5,17 @@ import { DataTypeBase } from "./datatypebase.js";
 
 class Text extends DataTypeBase {
 
-    dataTableRenderer(data, type, row, meta) { 
+    dataTableRenderer(data, type, row, meta, tableManagerReference) {
+        if (type === "display" && (data === null || data === undefined)) {
+            return tableManagerReference.nullValuePlaceholder;
+        }
         if (type === "display" && data) {
             if(this.max_display_length && data.length > this.max_display_length){
                 let truncatedData = data.substring(0, this.max_display_length) + "...";
-                return `<span title="${data}">${truncatedData}</span>`;
+                const span = document.createElement("span");
+                span.setAttribute("title", data);
+                span.textContent = truncatedData;
+                return span.outerHTML;
             }
             return data;
         }
@@ -23,7 +29,8 @@ class Text extends DataTypeBase {
 
         let filterInput = document.createElement("input");
         filterInput.setAttribute("data-field", this.json_id);
-        filterInput.setAttribute("id", this.json_id + "_search");
+        // Prefix id with table id to avoid collisions when multiple tables have the same column on one page
+        filterInput.setAttribute("id", tableManagerReference.tableId + "_" + this.json_id + "_search");
 
         filterInput.classList.add("col-filter");
         filterInput.classList.add("text-filter");
@@ -126,16 +133,33 @@ class Text extends DataTypeBase {
         return { symbolBtn, popup };
     }
         
-    _stripHtmlTags(str) {
-        return str.replace(/<[^>]*>/g, '');
+    _stripHtmlTags(v) {
+        return v == null ? "" : String(v).replace(/<[^>]*>/g, '');
     }
 
     blurHandler = async (e, col_idx, tableManagerReference) => {
 
+        // If we are in the process of clearing filters, we don't want to trigger a redraw as it will be done after all filters have been cleared.
+        if (tableManagerReference.state.clearingFilters) {
+            return
+        }
 
         const currentSearchValue = tableManagerReference.dataTableReference.columns(col_idx).search()[0];
+        let newSearchValue = e.target.value.trim();
 
-        let newSearchValue = e.target.value;
+        // Handle empty input: clear filter if one is currently set, otherwise do nothing
+        if (newSearchValue === "") {
+            if (currentSearchValue) {
+                tableManagerReference.dataTableReference.columns(col_idx).search("").draw();
+            }
+            // If already empty, no change needed - return early to avoid unnecessary work
+            return;
+        }
+
+        // Skip processing if the value hasn't actually changed
+        if (newSearchValue === currentSearchValue) {
+            return;
+        }
 
         //Get a list of unique values for the column, either from the server or from the client-side data
         let dataOptions;
@@ -144,7 +168,7 @@ class Text extends DataTypeBase {
            dataOptions = await this._fetchColumnValueOptions(jsonId, tableManagerReference);
         }
         else {
-            dataOptions = tableManagerReference.dataTableReference.column(col_idx).data(0).toArray().map((item) => this._stripHtmlTags(item));
+            dataOptions = tableManagerReference.dataTableReference.column(col_idx).data().toArray().map((item) => this._stripHtmlTags(item));
         }
 
         //if the search value is not in the list of unique values, we will use regex search to allow for partial matches
@@ -155,16 +179,14 @@ class Text extends DataTypeBase {
               newSearchValue = ".*" + newSearchValue + ".*"; // wrap tag values with wildcards for "contains" search
         }
 
-        if (newSearchValue !== currentSearchValue) {
-            tableManagerReference.dataTableReference.columns(col_idx).search(newSearchValue, useRegex).draw();
-        }
+        tableManagerReference.dataTableReference.columns(col_idx).search(newSearchValue, useRegex).draw();
     }
 
     async _fetchColumnValueOptions(ColumnJsonId, tableManagerReference) {
       const cacheKey = { type: 'columnOptions', columnId: ColumnJsonId };
 
       // Check cache first
-      const cachedData = await tableManagerReference.cache.get(cacheKey);
+      const cachedData = tableManagerReference.cache.get(cacheKey);
       if (cachedData !== undefined) {
         return cachedData;
       }
@@ -181,7 +203,7 @@ class Text extends DataTypeBase {
         const data = await response.json();
 
         // Store in cache before returning
-        await tableManagerReference.cache.push(cacheKey, data);
+        tableManagerReference.cache.push(cacheKey, data);
 
         return data;
       } catch (error) {

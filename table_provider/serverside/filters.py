@@ -1,5 +1,12 @@
 from table_provider.serverside.querystringprocessing import DatatablesQueryStringProcessor
+import math
+
 from django.db.models import Q
+
+
+class FilterError(ValueError):
+    """Raised when a request contains filter or ordering parameters that cannot be interpreted (a client error)."""
+
 
 """
  This module provides classes and functions for filtering and ordering data in a server-side processing context, specifically for use with DataTables.
@@ -43,13 +50,16 @@ class FilterSet:
             return
 
         for column in self.query_parameters['columns']:
-            data_field = column['data']
+            try:
+                data_field = column['data']
+                search_value = column['search']['value']
+            except (KeyError, TypeError):
+                raise FilterError("Each column must provide 'data' and 'search[value]'.")
             field_type = self.SerializerClass.Meta.datatypes.get(data_field)
-            search_value = column['search']['value']
 
             if not field_type:
-                raise ValueError(f"No datatype mapping found for field '{data_field}' in serializer. " + \
-                                 "Ensure you have declared all fields that require filtering under datatypes in meta data")
+                raise FilterError(f"No datatype mapping found for field '{data_field}' in serializer. " + \
+                                  "Ensure you have declared all fields that require filtering under datatypes in meta data")
 
             if field_type in self.ignored_datatypes:
                 continue
@@ -58,7 +68,10 @@ class FilterSet:
                 if field_type == 'text':
                     filter_req = TextFilter(self.field_mappings.get(data_field), search_value)
                 elif field_type == 'numeric':
-                    [filter_min, filter_max ]  = search_value.split('~')
+                    bounds = search_value.split('~')
+                    if len(bounds) != 2:
+                        raise FilterError(f"Invalid numeric range '{search_value}' for field '{data_field}'; expected 'min~max'.")
+                    [filter_min, filter_max] = bounds
                     if filter_min != "-Inf" or filter_max != "Inf":
                         filter_req = NumericRangeFilter(self.field_mappings.get(data_field), filter_min, filter_max)
                     else:
@@ -76,21 +89,44 @@ class FilterSet:
                 self.add_filter(filter_req)
 
     def parse_ordering(self):
-        """Extract columns used for row ordering from query parameters"""
+        """Extract columns used for row ordering from query parameters.
 
-        if 'order' not in self.query_parameters:
-            return
-
+        Always appends 'pk' as a final tie-breaker to ensure deterministic pagination.
+        When no ordering is specified, defaults to 'pk' ordering.
+        """
         order_array = []
-        for order_column in self.query_parameters['order']:
-            column_idx = int(order_column['column'])
-            json_name = self.query_parameters['columns'][column_idx]['data']
-            field_type = self.SerializerClass.Meta.datatypes.get(json_name)
-            if field_type in self.ignored_datatypes:
-                continue
-            db_name = self.field_mappings.get(json_name)
-            order_direction = '' if order_column['dir'] == 'asc' else '-'
-            order_array.append(f"{order_direction}{db_name}")
+
+        # Extract ordering from query parameters if provided
+        if 'order' in self.query_parameters:
+            for order_column in self.query_parameters['order']:
+                try:
+                    column_idx = int(order_column['column'])
+                    json_name = self.query_parameters['columns'][column_idx]['data']
+                    direction = order_column['dir']
+                except (KeyError, IndexError, TypeError, ValueError):
+                    raise FilterError("Invalid 'order' parameter: it must reference an existing column and a direction.")
+                if direction not in ('asc', 'desc'):
+                    raise FilterError(f"Invalid order direction '{direction}'.")
+                field_type = self.SerializerClass.Meta.datatypes.get(json_name)
+                if field_type in self.ignored_datatypes:
+                    continue
+                db_name = self.field_mappings.get(json_name)
+                if not db_name:
+                    raise FilterError(f"Cannot order by unknown field '{json_name}'.")
+                order_direction = '' if direction == 'asc' else '-'
+                order_array.append(f"{order_direction}{db_name}")
+
+        # Always append 'pk' as a final tie-breaker for deterministic pagination.
+        # This ensures that rows with identical values in the primary sort column
+        # are always returned in the same order, preventing duplicates or skipped rows
+        # when using LIMIT/OFFSET pagination.
+        if 'pk' not in order_array and '-pk' not in order_array:
+            order_array.append('pk')
+
+        # If no ordering was specified at all, default to ordering by pk
+        if not order_array:
+            order_array = ['pk']
+
         self._ordering = order_array
 
 
@@ -123,6 +159,8 @@ class TextFilter(FilterRequirement):
 
         #remove regex anchors added for datatables from filter values
         for fv in filter_value:
+            if not fv:
+                continue # an empty value (e.g. an empty search string) is not a filter
             if fv.startswith('('):
                 fv = fv.strip("()")
             if fv.startswith('^'):
@@ -134,14 +172,18 @@ class TextFilter(FilterRequirement):
                 self.standard_filters.append(fv)
 
     def format_query(self):
-        """Converts filter values into a Django Q object for querying the database"""
-        if len(self.tag_filters) == 0 and len(self.standard_filters) == 1:
-            return Q(**{f"{self.db_field_name}": self.standard_filters[0]})
+        """Converts filter values into a Django Q object for querying the database.
 
+        Combines exact-match standard filters and regex tag filters with OR logic,
+        so a row matches if the field equals any standard value OR matches any tag pattern.
+        """
         query = Q()
-        if len(self.standard_filters) > 1:
-            query &= Q(**{f"{self.db_field_name}__in": self.standard_filters})
 
+        # Add exact-match values (works for 1 or many; __in ORs them internally)
+        if self.standard_filters:
+            query |= Q(**{f"{self.db_field_name}__in": self.standard_filters})
+
+        # Add tag filters (contains-match via regex), ORed with exact matches and each other
         for tag_filter in self.tag_filters:
             query |= Q(**{f"{self.db_field_name}__iregex": rf"{tag_filter}"})
 
@@ -157,31 +199,55 @@ class NumericRangeFilter(FilterRequirement):
     """
 
     def __init__(self, db_field_name, filter_min, filter_max):
-        """Initializes a NumericRangeFilter instance with the specified database field name and filter values."""
+        """Initializes a NumericRangeFilter instance with the specified database field name and filter values.
+
+        Bounds are inclusive (match ==, >=, <=, not just >/<).
+        """
         super().__init__(db_field_name, 'numeric')
 
-        if (filter_min == '-Inf' and filter_max == 'Inf'):
-            self.filter_values = { 'min': filter_min, 'max': filter_max }
-            self.filter_action = 'between'
+        # Bounds must be numeric (or the infinite sentinels) before they reach the ORM
+        for bound, sentinel in ((filter_min, '-Inf'), (filter_max, 'Inf')):
+            if bound == sentinel:
+                continue
+            try:
+                valid = math.isfinite(float(bound))
+            except (TypeError, ValueError):
+                valid = False
+            if not valid:
+                raise FilterError(f"Invalid numeric bound '{bound}' for field '{db_field_name}'.")
 
-        if (filter_min != '-Inf' and filter_max != 'Inf'):
-            self.filter_values = { 'min': filter_min, 'max': filter_max }
+        # Both bounds unbound: no filter needed
+        if filter_min == '-Inf' and filter_max == 'Inf':
+            self.filter_values = {}
+            self.filter_action = 'none'
+        # Both bounds specified: between (inclusive on both ends)
+        elif filter_min != '-Inf' and filter_max != 'Inf':
+            self.filter_values = {'min': filter_min, 'max': filter_max}
             self.filter_action = 'between'
-
+        # Only min bound: greater-than-or-equal
         elif filter_min != '-Inf':
-            self.filter_values = { 'min': filter_min }
-            self.filter_action = 'gt'
-
+            self.filter_values = {'min': filter_min}
+            self.filter_action = 'gte'
+        # Only max bound: less-than-or-equal
         elif filter_max != 'Inf':
-            self.filter_values = { 'max': filter_max }
-            self.filter_action = 'lt'
+            self.filter_values = {'max': filter_max}
+            self.filter_action = 'lte'
 
     def format_query(self):
-        """Converts filter values into a Django Q object for querying the database"""
-        if(self.filter_action == 'between'):
-            return (Q(**{f"{self.db_field_name}__gt": self.filter_values.get('min')}) & Q(**{f"{self.db_field_name}__lt": self.filter_values.get('max')}))
+        """Converts filter values into a Django Q object for querying the database.
+
+        Returns an empty Q() if no bounds are set (both infinite).
+        """
+        if self.filter_action == 'none':
+            # No filter needed; both bounds are infinite
+            return Q()
+        elif self.filter_action == 'between':
+            # Both min and max: use >= and <= (inclusive)
+            return (Q(**{f"{self.db_field_name}__gte": self.filter_values.get('min')}) &
+                    Q(**{f"{self.db_field_name}__lte": self.filter_values.get('max')}))
         else:
-            comp = 'min' if self.filter_action == 'gt' else 'max'
+            # Min-only (gte) or max-only (lte)
+            comp = 'min' if self.filter_action == 'gte' else 'max'
             return Q(**{f"{self.db_field_name}__{self.filter_action}": self.filter_values[comp]})
 
 class BooleanFilter(FilterRequirement):

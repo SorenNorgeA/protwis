@@ -1,5 +1,6 @@
 class Categorical {
-    constructor(cell, cellData, rowData, rowIndex, colIndex, conditionSource, tableManagerReference, settings) {
+    constructor(cell, cellData, rowData, rowIndex, colIndex, conditionSource, tableManagerReference, settings, columnJsonId) {
+        this.columnJsonId = columnJsonId;
         this.cell = cell;
         this.cellData = cellData;
         this.rowData = rowData;

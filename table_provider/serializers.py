@@ -19,10 +19,10 @@ class GpcrStatisticsSummarySerializer(serializers.Serializer):
     st_interm_c = serializers.ReadOnlyField(read_only=True)
     st_act_c = serializers.ReadOnlyField(read_only=True)
 
-    # Best resolution by state ("-" when no structure of that state exists)
-    best_res_inact = serializers.SerializerMethodField()
-    best_res_interm = serializers.SerializerMethodField()
-    best_res_act = serializers.SerializerMethodField()
+    # Best resolution by state (null when no structure of that state exists; the client chooses the placeholder via nullValuePlaceholder)
+    best_res_inact = serializers.ReadOnlyField(read_only=True)
+    best_res_interm = serializers.ReadOnlyField(read_only=True)
+    best_res_act = serializers.ReadOnlyField(read_only=True)
 
     # Transducer / extra-protein counts (map to annotated names)
     transd_gio_c = serializers.ReadOnlyField(read_only=True)
@@ -72,21 +72,7 @@ class GpcrStatisticsSummarySerializer(serializers.Serializer):
         #Mapping for fields that use a SerializerMethodField to a single source field in the database. This is used for filtering and sorting.
         serializer_method_to_filter_field_map = {
             'uniprot': 'uniprot_entry_name', 'gene': 'gene_name',
-            'best_res_inact': 'best_res_inact', 'best_res_interm': 'best_res_interm', 'best_res_act': 'best_res_act',
         }
-
-    @staticmethod
-    def _format_resolution(value):
-        return value if value is not None else "-"
-
-    def get_best_res_inact(self, obj):
-        return self._format_resolution(getattr(obj, 'best_res_inact', None))
-
-    def get_best_res_interm(self, obj):
-        return self._format_resolution(getattr(obj, 'best_res_interm', None))
-
-    def get_best_res_act(self, obj):
-        return self._format_resolution(getattr(obj, 'best_res_act', None))
 
     def get_gene_weblink(self, entrez_id):
         if entrez_id:
@@ -171,8 +157,8 @@ class PdbStructureSummarySerializer(serializers.Serializer):
     structure_type = serializers.ReadOnlyField(read_only=True)
     pdb_id = serializers.SerializerMethodField()
 
-    # Resolution ("-" when not available)
-    resolution = serializers.SerializerMethodField()
+    # Resolution (null when not available; the client chooses the placeholder via nullValuePlaceholder)
+    resolution = serializers.ReadOnlyField(read_only=True)
     resolution_best = serializers.ReadOnlyField(read_only=True)
     state = serializers.ReadOnlyField(read_only=True)
     query_effector = serializers.ReadOnlyField(read_only=True)
@@ -209,7 +195,7 @@ class PdbStructureSummarySerializer(serializers.Serializer):
         }
         #Mapping for fields that use a SerializerMethodField to a single source field in the database. This is used for filtering and sorting.
         serializer_method_to_filter_field_map = {
-           'checkbox':'checkbox', 'uniprot': 'uniprot_entry_name', 'gene': 'gene_name', 'pdb_id': 'pdb_id', 'resolution': 'resolution',
+           'checkbox':'checkbox', 'uniprot': 'uniprot_entry_name', 'gene': 'gene_name', 'pdb_id': 'pdb_id',
         }
 
         #Helper to map complex/compund columns back to their json/datatable id
@@ -219,19 +205,12 @@ class PdbStructureSummarySerializer(serializers.Serializer):
                     if value == column_name: return key
             return column_name
 
-    @staticmethod
-    def _format_resolution(value):
-        return value if value is not None else "-"
-
     def get_checkbox(self, obj):
         checkbox = {}
         checkbox['row_id'] = obj.id
         checkbox['data'] = {} 
         checkbox['data']['pdb_id'] = obj.pdb_id
         return checkbox
-
-    def get_resolution(self, obj):
-        return self._format_resolution(getattr(obj, 'resolution', None))
 
     def get_gene_weblink(self, entrez_id):
         if entrez_id:

@@ -4,8 +4,9 @@
   "deferRender": true,
   "scrollX": true,
   "layout": {
-    "topEnd": null
-  },
+    "topEnd": null,
+   	"topStart": "buttons"
+	},
   "fixedColumns": { "left": 1 },
   "ajax": {
     "url": "/table_provider/pdb_data_table_cached",
@@ -14,7 +15,15 @@
     "dataSrc":  "data"
   },  
   "search": {
-    "regex": true
-},
-  "lengthMenu": [ [10, 25, 50], [10, 25, 50] ]
+    "regex": true,
+    "caseInsensitive": true
+  },
+  "order": {
+		"name": "uniprot",
+		"dir": "asc"
+	},
+  "lengthMenu": [ [10, 25, 50], [10, 25, 50] ],
+  "nullValuePlaceholder": "-",
+  "showCategoryCounts": true,
+  "buttonFactory": [ "excel_default", "clear_filters_default"]
 }

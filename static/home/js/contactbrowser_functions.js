@@ -1581,30 +1581,30 @@ function intersect(a, b) {
 // undefined (reading 'oInstance')" on the first "Select Structure" click of a session).
 var pdbTableDataReady = null;
 
-$('#single-crystal-pdb-modal-table').on('shown.bs.modal', function (e) {
-    $.when(pdbTableDataReady).done(function () { showPDBtable('#single-crystal-pdb-modal-table'); });
-})
-$('#single-crystal-group-pdbs-modal-table').on('shown.bs.modal', function (e) {
-    $.when(pdbTableDataReady).done(function () { showPDBtable('#single-crystal-group-pdbs-modal-table'); });
-})
-$('#two-crystal-group-pdbs-modal-1-table').on('shown.bs.modal', function (e) {
-    $.when(pdbTableDataReady).done(function () { showPDBtable('#two-crystal-group-pdbs-modal-1-table'); });
-})
-$('#two-crystal-group-pdbs-modal-2-table').on('shown.bs.modal', function (e) {
-    $.when(pdbTableDataReady).done(function () { showPDBtable('#two-crystal-group-pdbs-modal-2-table'); });
-})
+// $('#single-crystal-pdb-modal-table').on('shown.bs.modal', function (e) {
+//     $.when(pdbTableDataReady).done(function () { showPDBtable('#single-crystal-pdb-modal-table'); });
+// })
+// $('#single-crystal-group-pdbs-modal-table').on('shown.bs.modal', function (e) {
+//     $.when(pdbTableDataReady).done(function () { showPDBtable('#single-crystal-group-pdbs-modal-table'); });
+// })
+// $('#two-crystal-group-pdbs-modal-1-table').on('shown.bs.modal', function (e) {
+//     $.when(pdbTableDataReady).done(function () { showPDBtable('#two-crystal-group-pdbs-modal-1-table'); });
+// })
+// $('#two-crystal-group-pdbs-modal-2-table').on('shown.bs.modal', function (e) {
+//     $.when(pdbTableDataReady).done(function () { showPDBtable('#two-crystal-group-pdbs-modal-2-table'); });
+// })
 
 
-function initializePdbChooserTables() {
-    pdbTableDataReady = $.get('/contactnetwork/pdbtabledata', function (data) {
-        $('#single-crystal-pdb-modal-table .tableview').html(data);
-        $('#single-crystal-group-pdbs-modal-table .tableview').html(data);
-        $('#two-crystal-group-pdbs-modal-1-table .tableview').html(data);
-        $('#two-crystal-group-pdbs-modal-2-table .tableview').html(data);
-        pdbtabledata = data;
-    });
-    $(".main_loading_overlay").hide();
-}
+// function initializePdbChooserTables() {
+//     pdbTableDataReady = $.get('/contactnetwork/pdbtabledata', function (data) {
+//         $('#single-crystal-pdb-modal-table .tableview').html(data);
+//         $('#single-crystal-group-pdbs-modal-table .tableview').html(data);
+//         $('#two-crystal-group-pdbs-modal-1-table .tableview').html(data);
+//         $('#two-crystal-group-pdbs-modal-2-table .tableview').html(data);
+//         pdbtabledata = data;
+//     });
+//     $(".main_loading_overlay").hide();
+// }
 
 
 function initalizeSingleCrystalView() {

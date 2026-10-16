@@ -15,7 +15,9 @@
     
   },
   "search": {
-    "regex": true
+    "regex": true,
+    "caseInsensitive": true
 },
+  "nullValuePlaceholder": "-",
   "lengthMenu": [ [10, 25, 50], [10, 25, 50] ]
 }

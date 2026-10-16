@@ -1,8 +1,8 @@
-import { Text } from "./datatypes/text.js";
-import { Numeric } from "./datatypes/numeric.js";
-import { TextSelect } from "./datatypes/textselect.js";
-import { WebLinkText } from "./datatypes/weblinktext.js";
-import { Checkbox } from "./datatypes/checkbox.js"
+import { Text } from "../datatypes/text.js";
+import { Numeric } from "../datatypes/numeric.js";
+import { TextSelect } from "../datatypes/textselect.js";
+import { WebLinkText } from "../datatypes/weblinktext.js";
+import { Checkbox } from "../datatypes/checkbox.js"
 
 // This class is responsible for managing the different data types used in the table manager. 
 // It facilitate dynamic initialization of data types by calling the constructor for the 
@@ -11,7 +11,7 @@ import { Checkbox } from "./datatypes/checkbox.js"
 // capabilities without modifying the core codebase.
 
 class DataTypeFactory {
-    dataTypes = {};
+    _dataTypes = {};
 
     constructor() {
         this.registerDataType("text", Text);
@@ -22,14 +22,14 @@ class DataTypeFactory {
     }
 
     registerDataType(dataTypeName, dataTypeClass) {
-        this.dataTypes[dataTypeName] = dataTypeClass;
+        this._dataTypes[dataTypeName] = dataTypeClass;
     }
 
     initialiseDataType(Column) {
-        if (!this.dataTypes[Column.data_type]) {
+        if (!this._dataTypes[Column.data_type]) {
             throw new Error(`Data type "${Column.data_type}" is not registered.`);
         }
-        return new this.dataTypes[Column.data_type](Column);
+        return new this._dataTypes[Column.data_type](Column);
     }
 }
 
