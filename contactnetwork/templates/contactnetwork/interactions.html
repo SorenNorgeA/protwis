@@ -621,19 +621,20 @@
                                                 toggleButton.addEventListener(
                                                     'click', 
                                                     function() {
-                                                    let colIdx = pdbTableManager.columns.findIndex( (x) => x.json_id == "closest_to_human")                        
+                                                    const column = pdbTableManager.columns.find((x) => x.json_id == "closest_to_human")
+
                                                     if (toggleButton.className === 'toggle_on') {
                                                         //Flip filter on and show turn off button
                                                         toggleButton.className = 'toggle_off'
                                                         toggleButton.value = 'Off'
                                                         toggleButton.title = offTooltip
-                                                        pdbTableManager.dataTableReference.columns(colIdx).search('true').draw()
+                                                        pdbTableManager.dataSource.applyColumnFilter(column, { type: "text", terms: [{ value: "true", contains: false }] })
                                                     } else {
                                                         //Flip filter off and show turn on button
                                                         toggleButton.className = 'toggle_on'
                                                         toggleButton.title = onTooltip
                                                         toggleButton.value = 'On'
-                                                        pdbTableManager.dataTableReference.columns(colIdx).search('').draw()      
+                                                        pdbTableManager.dataSource.applyColumnFilter(column, { type: "text", terms: [] })    
                                                     }
                                                 });
 
@@ -664,19 +665,20 @@
                                                 toggleButton.addEventListener(
                                                     'click', 
                                                     function() {
-                                                    let colIdx = pdbTableManager.columns.findIndex( (x) => x.json_id == "resolution_best")                        
+                                                    const column = pdbTableManager.columns.find((x) => x.json_id == "resolution_best")
+                                                    
                                                     if (toggleButton.className === 'toggle_on') {
                                                         //Flip filter on and show turn off button
                                                         toggleButton.className = 'toggle_off'
                                                         toggleButton.value = 'Off'
                                                         toggleButton.title = offTooltip
-                                                        pdbTableManager.dataTableReference.columns(colIdx).search('true').draw()
+                                                        pdbTableManager.dataSource.applyColumnFilter(column, { type: "text", terms: [{ value: "true", contains: false }] })
                                                     } else {
                                                         //Flip filter off and show turn on button
                                                         toggleButton.className = 'toggle_on'
                                                         toggleButton.title = onTooltip
                                                         toggleButton.value = 'On'
-                                                        pdbTableManager.dataTableReference.columns(colIdx).search('').draw()      
+                                                        pdbTableManager.dataSource.applyColumnFilter(column, { type: "text", terms: [] })
                                                     }
                                                 });
 

@@ -2,7 +2,6 @@
 // It provides simple text filtering capabilities, allowing users to filter table data based on text input.
 
 import { DataTypeBase } from "./datatypebase.js";
-import { DataTablesParameterBuilder } from "../tablemanager.js";
 
 class Checkbox extends DataTypeBase {
     
@@ -126,9 +125,9 @@ class MasterCheckbox{
     column;
     tableManagerReference;
     checkboxElement;
-    pending = null; // Promise for the in-flight serverside search-set request
-    searchSetValid = true; // False while a serverside update is pending or if the last one failed
-    abortController = null; // Cancels a superseded serverside request
+    pending = null; // Promise for the in-flight search-set request
+    searchSetValid = true; // False while an update is pending or if the last one failed
+    abortController = null; // Cancels a superseded request
     
     constructor(checkboxColumnColumnReference, tableManagerReference) {        
         this.column = checkboxColumnColumnReference;
@@ -147,7 +146,7 @@ class MasterCheckbox{
         const masterCheckbox = event.target;
         const activeCheckboxes = tableManagerReference.state.activeCheckBoxes;
 
-        // Wait for any in-flight serverside search-set request (never rejects). Loop in case a newer search
+        // Wait for any in-flight search-set request (never rejects). Loop in case a newer search
         // superseded the request we were waiting on.
         let awaited;
         do {
@@ -155,7 +154,7 @@ class MasterCheckbox{
             await awaited;
         } while (awaited !== this.pending);
 
-        // The search set is stale if the last server update failed, so don't act on the click
+        // The search set is stale if the last update failed, so don't act on the click
         if (!this.searchSetValid) {
             console.error("Master checkbox click ignored: the search set could not be updated from the server.");
             this.synchroniseCheckedState(); // Revert the checkbox to reflect the real state
@@ -200,39 +199,13 @@ class MasterCheckbox{
 
     async updateCheckBoxSearchSet() {
         // Update the currentSearchCheckBoxes map with the checkbox data for all rows matching the current search/filters, regardless of pagination
-        if (this.tableManagerReference.dataTableReference.settings()[0].oFeatures.bServerSide === true) {
-            await this.populateCurrentSearchCheckBoxes_ServerSide(this.tableManagerReference);
-        }
-        else {
-            this.populateCurrentSearchCheckBoxes_ClientSide();
-        }
+        await this.populateCurrentSearchCheckBoxes();
 
         this.synchroniseCheckedState();
     }
 
-      // Populate a map of the checkbox data for all rows matching the current search/filters using client-side data
-    populateCurrentSearchCheckBoxes_ClientSide() {
-        // Clear the current search checkboxes map
-        this.tableManagerReference.state.currentSearchCheckBoxes.clear();
-
-        // Iterate through rows matching the current search and their underlying data
-        this.tableManagerReference.dataTableReference.rows({ search: "applied" }).every((rowIndex) => {
-            const rowData = this.tableManagerReference.dataTableReference.row(rowIndex).data();
-            
-            // Get the checkbox cell data (i.e AJAX data) for this row using the column's data property
-            const checkboxData = rowData[this.column.json_id];
-            
-            if (checkboxData?.row_id != null) {
-                const rowId = Number.parseInt(checkboxData.row_id);
-                
-                // If this checkbox is in the active set, add it to current search
-                this.tableManagerReference.state.currentSearchCheckBoxes.set(rowId, checkboxData);            
-            }
-        });
-    }
-
-    // Populate a map of the checkbox data for all rows matching the current search/filters using client-side data
-    async populateCurrentSearchCheckBoxes_ServerSide(tableManagerReference) {
+    // Populate a map of the checkbox data for all rows matching the current search/filters, from the table manager's data source
+    async populateCurrentSearchCheckBoxes() {
         // A newer search supersedes any request still in flight, so a stale response can never overwrite fresh state
         this.abortController?.abort();
         const controller = new AbortController();
@@ -243,15 +216,14 @@ class MasterCheckbox{
         this.searchSetValid = false;
         const request = (async () => {
             try {
-                const checkBoxData = await this.fetchSearchSetCheckBoxesFromServerSide(tableManagerReference, controller.signal);
-                if (controller.signal.aborted || !checkBoxData) {
+                const checkBoxData = await this.tableManagerReference.dataSource.getSearchSetRows(this.column, controller.signal);
+                if (controller.signal.aborted) {
                     return;
                 }
 
                 this.tableManagerReference.state.currentSearchCheckBoxes.clear();
 
-                for (const checkboxEntry of checkBoxData) {
-                    let checkbox = checkboxEntry.checkbox;
+                for (const checkbox of checkBoxData) {
                     if (checkbox?.row_id != null) {
                         const rowId = Number.parseInt(checkbox.row_id);
                         this.tableManagerReference.state.currentSearchCheckBoxes.set(rowId, checkbox);
@@ -260,30 +232,13 @@ class MasterCheckbox{
                 this.searchSetValid = true;
             } catch (error) {
                 if (error.name !== "AbortError") {
-                    console.error("Failed to fetch checkbox data for current search set from server:", error);
+                    console.error("Failed to get checkbox data for the current search set:", error);
                 }
             }
         })();
 
         this.pending = request;
         await request;
-    }
-
-    // Fetch the checkbox data for the current search set from the server
-    async fetchSearchSetCheckBoxesFromServerSide(tableManagerReference, signal) {
-        const dataEndpoint = tableManagerReference.dataTableReference.ajax.url()
-
-        let queryString = DataTablesParameterBuilder.buildServerSideParams(this.tableManagerReference.dataTableReference.settings()[0], 0, 0, 0).queryString
-
-        const checkboxEndpoint = dataEndpoint + "/options/checkbox/?" + queryString
-        let result = await fetch(checkboxEndpoint, { signal })
-
-        if (!result.ok) {
-            console.error(`HTTP error when fetching checkbox data for current search set! Status: ${result.status}`);
-            return;
-        }
-
-        return await result.json();
     }
 
     synchroniseCheckedState() {

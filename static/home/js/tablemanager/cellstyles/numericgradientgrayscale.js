@@ -12,14 +12,8 @@ class NumericGradientGrayscale {
     }
 
     applyStyle() {
-        const range = this._getColumnRange();
-
-        if (range instanceof Promise) {
-            // Server-side: every cell in the column awaits the same promise, so the range is requested once.
-            range.then((resolved) => this._applyRange(resolved));
-        } else {
-            this._applyRange(range);
-        }
+        // Every cell in the column awaits the same promise, so the range is computed or requested once.
+        this._getColumnRange().then((range) => this._applyRange(range));
     }
 
     // Applies the shading once the range is known. A null range (e.g. failed fetch, no numeric data) leaves the cell unstyled.
@@ -29,7 +23,7 @@ class NumericGradientGrayscale {
         }
     }
 
-    // Returns the {min, max} range for this column (client-side) or a promise of it (server-side).
+    // Returns a promise of the {min, max} range for this column, from the table manager's data source.
     // Ranges are cached on the table manager's state, keyed by column, so different columns
     // and different tables never share a range.
     _getColumnRange() {
@@ -39,65 +33,10 @@ class NumericGradientGrayscale {
         }
 
         if (!(this.columnJsonId in state.gradientRanges)) {
-            const dataTable = this.tableManagerReference.dataTableReference;
-            if (dataTable.settings()[0].oFeatures.bServerSide === true) {
-                state.gradientRanges[this.columnJsonId] = this._get_min_max_serverside(this.conditionSource, dataTable);
-            } else {
-                state.gradientRanges[this.columnJsonId] = this._get_min_max_clientside(this.conditionSource, dataTable);
-            }
+            state.gradientRanges[this.columnJsonId] = this.tableManagerReference.dataSource.getRange(this.conditionSource);
         }
 
         return state.gradientRanges[this.columnJsonId];
-    }
-
-    _get_min_max_clientside(sources, dataTable) {
-        let min = Number.POSITIVE_INFINITY;
-        let max = Number.NEGATIVE_INFINITY;
-
-        dataTable.rows().data().toArray().forEach((rowData) => {
-            for (const source of sources) {
-                const raw = rowData[source];
-                if (raw === null || raw === undefined || raw === "") {
-                    continue;
-                }
-                const value = parseFloat(raw);
-                if (Number.isFinite(value)) {
-                    min = Math.min(min, value);
-                    max = Math.max(max, value);
-                }
-            }
-        });
-
-        return Number.isFinite(min) && Number.isFinite(max) ? { min: min, max: max } : null;
-    }
-
-    // Never rejects: resolves to null if any range request fails, so cells stay unstyled instead of waiting or erroring.
-    async _get_min_max_serverside(sources, dataTable) {
-        const dataEndpoint = dataTable.ajax.url();
-
-        try {
-            const ranges = await Promise.all(sources.map(async (source) => {
-                const response = await fetch(dataEndpoint + "/range/" + source + "/");
-                if (!response.ok) {
-                    throw new Error(`HTTP error when fetching range for ${source}! Status: ${response.status}`);
-                }
-                return response.json();
-            }));
-
-            let min = Number.POSITIVE_INFINITY;
-            let max = Number.NEGATIVE_INFINITY;
-            for (const range of ranges) {
-                const rangeMin = parseFloat(range.min);
-                const rangeMax = parseFloat(range.max);
-                if (Number.isFinite(rangeMin)) min = Math.min(min, rangeMin);
-                if (Number.isFinite(rangeMax)) max = Math.max(max, rangeMax);
-            }
-
-            return Number.isFinite(min) && Number.isFinite(max) ? { min: min, max: max } : null;
-        } catch (error) {
-            console.error("Failed to retrieve min/max values for gradient greyscale:", error);
-            return null;
-        }
     }
 
     _set_grayscale_style(cell, cellData, rangeMin, rangeMax, settings)

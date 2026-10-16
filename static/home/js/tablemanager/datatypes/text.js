@@ -39,10 +39,10 @@ class Text extends DataTypeBase {
             filterInput.classList.add(this.cssClassFilterInput);
         }
 
-        filterInput.addEventListener("blur", (e) => this.blurHandler(e, this.col_idx, tableManagerReference));
+        filterInput.addEventListener("blur", (e) => this.blurHandler(e, this, tableManagerReference));
         filterInput.addEventListener("keydown", (e) => {
             if (e.key === "Enter") {
-                this.blurHandler(e, this.col_idx, tableManagerReference);
+                this.blurHandler(e, this, tableManagerReference);
             }
         });
 
@@ -133,110 +133,37 @@ class Text extends DataTypeBase {
         return { symbolBtn, popup };
     }
         
-    buildTextSearch(terms, serverSideProcessing) {
-        // Builds the DataTables column search for a text filter (shared by Text and TextSelect) from a list of
-        // terms {value, contains}: an exact match, or a "contains" (substring) match when contains is true.
-        // Returns {value, regex} for column().search(value, regex); no terms gives an empty search (no filter).
-        if (terms.length === 0) {
-            return { value: "", regex: false };
-        }
-
-        if (serverSideProcessing) {
-            // Server-side: a JSON filter object the server reads directly, so values are matched exactly as given
-            // (no regex escaping or parsing). Both keys are always present, in a fixed order, so the same filter
-            // always gives the same string and can be compared with the current search value.
-            const filter = { in: [], contains: [] };
-            terms.forEach(({ value, contains }) => (contains ? filter.contains : filter.in).push(String(value)));
-            return { value: JSON.stringify(filter), regex: false };
-        }
-
-        // Client-side: DataTables' own search. A single exact value is a plain search; several values (ORed with "|")
-        // or any contains match need a regex.
-        if (terms.length === 1 && !terms[0].contains) {
-            return { value: terms[0].value, regex: false };
-        }
-        const escape = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // escape regex special characters
-        const value = terms
-            .map(({ value, contains }) => contains
-                ? "(.*" + escape(value) + ".*)" // wildcards for "contains" search
-                : "(^" + escape(value) + "$)") // anchors for "exact match" search
-            .join("|");
-        return { value: value, regex: true };
-    }
-
     _stripHtmlTags(v) {
         return v == null ? "" : String(v).replace(/<[^>]*>/g, '');
     }
 
-    blurHandler = async (e, col_idx, tableManagerReference) => {
+    // column is passed in because, as an arrow function field, this handler's "this" is the data type instance, not the column
+    blurHandler = async (e, column, tableManagerReference) => {
 
         // If we are in the process of clearing filters, we don't want to trigger a redraw as it will be done after all filters have been cleared.
         if (tableManagerReference.state.clearingFilters) {
             return
         }
 
-        const currentSearchValue = tableManagerReference.dataTableReference.columns(col_idx).search()[0] || "";
+        const dataSource = tableManagerReference.dataSource;
         const newSearchValue = e.target.value.trim();
 
-        // Handle empty input: clear filter if one is currently set, otherwise do nothing
-        if (newSearchValue === "") {
-            if (currentSearchValue) {
-                tableManagerReference.dataTableReference.columns(col_idx).search("").draw();
+        // An empty input gives no terms, which clears the filter
+        const terms = [];
+        if (newSearchValue !== "") {
+            // Get the list of unique values for the column. Client-side these are the raw cell data, so compare
+            // against their text; server-side they are the values the server matches on, so compare them as given.
+            let dataOptions = await dataSource.getOptions(column);
+            if (!dataSource.isServerSide) {
+                dataOptions = dataOptions.map((item) => this._stripHtmlTags(item));
             }
-            // If already empty, no change needed - return early to avoid unnecessary work
-            return;
+
+            //if the search value is not in the list of unique values, use a "contains" search to allow for partial matches
+            terms.push({ value: newSearchValue, contains: !dataOptions.includes(newSearchValue) });
         }
 
-        //Get a list of unique values for the column, either from the server or from the client-side data
-        let dataOptions;
-        let jsonId = tableManagerReference.columns[col_idx].json_id;
-        const serverSideProcessing = tableManagerReference.dataTableReference.settings()[0].oFeatures.bServerSide === true;
-        if(serverSideProcessing) {
-           dataOptions = await this._fetchColumnValueOptions(jsonId, tableManagerReference);
-        }
-        else {
-            dataOptions = tableManagerReference.dataTableReference.column(col_idx).data().toArray().map((item) => this._stripHtmlTags(item));
-        }
-
-        //if the search value is not in the list of unique values, use a "contains" search to allow for partial matches
-        const search = this.buildTextSearch([{ value: newSearchValue, contains: !dataOptions.includes(newSearchValue) }], serverSideProcessing);
-
-        // Skip the redraw if the search hasn't actually changed
-        if (search.value === currentSearchValue) {
-            return;
-        }
-
-        tableManagerReference.dataTableReference.columns(col_idx).search(search.value, search.regex).draw();
-    }
-
-    async _fetchColumnValueOptions(ColumnJsonId, tableManagerReference) {
-      const cacheKey = { type: 'columnOptions', columnId: ColumnJsonId };
-
-      // Check cache first
-      const cachedData = tableManagerReference.cache.get(cacheKey);
-      if (cachedData !== undefined) {
-        return cachedData;
-      }
-
-      // Fetch from endpoint if not in cache
-      const dataEndpoint = tableManagerReference.dataTableReference.ajax.url();
-      const optionsEndpoint = dataEndpoint + "/options/" + ColumnJsonId + "/";
-
-      try {
-        const response = await fetch(optionsEndpoint);
-        if (!response.ok) {
-          throw new Error(`HTTP error when fetching options for column ${ColumnJsonId}! Status: ${response.status}`);
-        }
-        const data = await response.json();
-
-        // Store in cache before returning
-        tableManagerReference.cache.push(cacheKey, data);
-
-        return data;
-      } catch (error) {
-        console.error(`Error fetching column options for ${ColumnJsonId}:`, error);
-        return [];
-      }
+        // Redraws only if the filter has changed
+        dataSource.applyColumnFilter(column, { type: "text", terms: terms });
     }
 }
 

@@ -3,6 +3,8 @@ import { DataTypeFactory } from "./factories/datatypefactory.js";
 import { CellStyleFactory } from "./factories/cellstylefactory.js";
 import { ButtonFactory } from "./factories/buttonfactory.js";
 import { MasterCheckbox, Checkbox } from "./datatypes/checkbox.js";
+import { ClientDataSource } from "./datasources/clientdatasource.js";
+import { ServerDataSource } from "./datasources/serverdatasource.js";
 
 // This class represents the TableManager, which is responsible for managing the data table and its associated columns, filters, and rendering logic.
 // The TableManager interacts with the back end TableProvider to fetch configuration and content data, then initializes a DataTable with the appropriate settings and column definitions.
@@ -96,6 +98,10 @@ class TableManager {
 
     // Placeholder shown in display mode for null cell values (e.g. "-"); must be set before the DataTable renders any cells
     this.nullValuePlaceholder = dataTableOptions.nullValuePlaceholder ?? "-";
+
+    // The data source hides the processing mode from the columns, cell styles and counts; it must exist before the
+    // DataTable is created, as cells can be rendered (and styled) during initialisation
+    this.dataSource = dataTableOptions.serverSide === true ? new ServerDataSource(this) : new ClientDataSource(this);
 
     //Returns [table, tableHead,  primaryHeaderRow, tableBody] HTML object references after adding them to DOM
     let tableComponents = this.createPrimaryTableStructure();
@@ -243,19 +249,7 @@ class TableManager {
     let counts;
 
     try {
-      if (this.dataTableReference.settings()[0].oFeatures.bServerSide === true) {
-        // Key on the complete request (endpoint plus every search/order parameter) so any change that alters the counts misses the cache
-        const requestUrl = this._buildCountRequestUrl(settings, this.dataTableReference);
-        const cacheKey = { type: 'columnCounts', url: requestUrl };
-        counts = this.cache.get(cacheKey);
-        if (!counts) {
-          counts = await this._fetchColumnUniqueValueCountsServerSide(requestUrl);
-          this.cache.push(cacheKey, counts);
-        }
-      } else {
-        // Computed from the loaded rows each time: cheap, and always reflects global search and fixed search filters
-        counts = this._fetchColumnUniqueValueCountsClientSide(settings, this.dataTableReference);
-      }
+      counts = await this.dataSource.getDistinctCounts(settings);
     } catch (error) {
       console.error("Fetching unique value counts failed:", error);
       return;
@@ -267,78 +261,6 @@ class TableManager {
     }
 
     this._updateCategoryCountCells(counts);
-  }
-
-  _fetchColumnUniqueValueCountsClientSide(settings, dataTableReference) {
-    const table = dataTableReference
-
-    // Get all rows (base dataset) and filtered rows
-    const baseRows = table.rows().data().toArray()
-    const filteredRows = table.rows({search: 'applied'}).data().toArray()
-
-    // Get column information
-    const columnSettings = table.settings()[0].aoColumns
-
-    // Helper function to count unique values in a column across rows
-    const countUniqueInColumn = (rows, columnInfo) => {
-        const uniqueValues = new Set()
-
-        rows.forEach((rowData) => {
-            let value
-
-            // Handle different data structures: object vs array
-            if (typeof rowData === 'object' && !Array.isArray(rowData)) {
-                value = rowData[columnInfo.data] || rowData[columnInfo.name]
-            } else if (Array.isArray(rowData)) {
-                value = rowData[columnInfo.index] || rowData[columnInfo.columnIndex]
-            }
-            
-            // Only count non-empty values
-            if (value !== null && value !== undefined && value !== '') {
-              // Convert value to string, or JSON string if it's an object 
-              // (there is a risk of the same objects having different string representation due to property order, 
-              // but this is a reasonable compromise for counting unique values quicky -- sorting object keys for every cell 
-              // would be too slow for large datasets)
-                value = typeof value == 'object' && value !== null ?  JSON.stringify(value) : String(value)
-                uniqueValues.add(value)
-            }
-        })
-
-        return uniqueValues.size
-    }
-
-    // Calculate unique counts for each column in both base and filtered datasets
-    const uniqueValuesByColumn = {
-        'base': {},
-        'filtered': {}
-    }
-
-    columnSettings.forEach((colInfo) => {
-        const columnName = colInfo.data || colInfo.name || colInfo.title
-
-        if (columnName && columnName !== 'checkbox') { // Exclude checkbox columns from unique value counts
-            uniqueValuesByColumn.base[columnName] = countUniqueInColumn(baseRows, colInfo)
-            uniqueValuesByColumn.filtered[columnName] = countUniqueInColumn(filteredRows, colInfo)
-        }
-    })
-
-    return uniqueValuesByColumn
-  }
-
-  _buildCountRequestUrl(dt_settings, dataTableReference) {
-    const dataEndpoint = dataTableReference.ajax.url()
-    const queryString = DataTablesParameterBuilder.buildServerSideParams(dt_settings, 0, 0, 0).queryString
-    return dataEndpoint + "/countdistinct" + "?" + queryString
-  }
-
-  async _fetchColumnUniqueValueCountsServerSide(distinctValuesEndpoint) {
-    return fetch(distinctValuesEndpoint)
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(`HTTP error when fetching distinct value counts! Status: ${response.status}`);
-        }
-        return response.json();
-      })
   }
 
 /**

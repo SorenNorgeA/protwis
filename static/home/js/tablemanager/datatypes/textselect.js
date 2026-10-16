@@ -1,9 +1,9 @@
 // This class represents the "textselect" data type used in the table manager.
 // It provides a select input filtering interface, allowing users to filter table data based on options selected from a dropdown list.
 // The select2 library is used to enhance the select input with features such as multi-select, search, and tagging.
-// The options for the select input can be populated either from the client-side data or fetched from the server-side endpoint, depending on the configuration of the DataTable.
+// The options for the select input come from the table manager's data source (the loaded rows client-side, the options endpoint server-side).
 
-// It extends Text, inheriting its display rendering (null placeholder, truncation) and the cached column options fetch.
+// It extends Text, inheriting its display rendering (null placeholder, truncation).
 
 import { Text } from "./text.js";
 
@@ -35,11 +35,10 @@ class TextSelect extends Text {
 
       // Add function to populate select options as a callback to be run once data is loaded into the table,
       // as we need access to the dataset to determine the unique values for the options.
-      if(tableManagerReference.dataTableReference.settings()[0].oFeatures.bServerSide === true) {
-        tableManagerReference.dataLoadedCallBacks.push( () => this._populateTextSelectFilterOptionsServerSide(this.json_id, filterInput, tableManagerReference));
-      } else {
-        tableManagerReference.dataLoadedCallBacks.push( () => this._populateTextSelectFilterOptionsClientSide(this.json_id, this.col_idx, filterInput, tableManagerReference.dataTableReference));
-      }
+      tableManagerReference.dataLoadedCallBacks.push(async () => {
+        const options = await tableManagerReference.dataSource.getOptions(this);
+        this._populateTextSelectFilterOptionsFromData(options, this.json_id, filterInput);
+      });
 
       // Add select2 initialization as a callback to be run when document is ready to ensure the relevant DOM element is available.
       // Use the element reference directly instead of looking up by id, avoiding collisions across tables.
@@ -50,7 +49,7 @@ class TextSelect extends Text {
       // Add event handler registration to callback for when document is ready.
       // Use the element reference directly instead of looking up by id.
       tableManagerReference.documentReadyCallBacks.push(
-        () => $(filterInput).on('change', (e) => this.onSelectChangeHandler(e, this.col_idx, tableManagerReference))
+        () => $(filterInput).on('change', (e) => this.onSelectChangeHandler(e, this, tableManagerReference))
       );
 
       return filterInput;
@@ -59,7 +58,8 @@ class TextSelect extends Text {
     //------------------//
     //  Event Handlers  //
     //------------------//
-    onSelectChangeHandler = (e, col_idx, tableManagerReference) => {
+    // column is passed in because, as an arrow function field, this handler's "this" is the data type instance, not the column
+    onSelectChangeHandler = (e, column, tableManagerReference) => {
 
       // If we are in the process of clearing filters, we don't want to trigger 
       // a redraw as it will be done after all filters have been cleared.
@@ -67,9 +67,7 @@ class TextSelect extends Text {
             return
         }
 
-        let currentSearchValue = tableManagerReference.dataTableReference.columns(col_idx).search()[0] || "";
-
-        let serverSideProcessing = tableManagerReference.dataTableReference.settings()[0].oFeatures.bServerSide;
+        const dataSource = tableManagerReference.dataSource;
 
         // Work from the selected items only. Each carries its <option> element, which select2 marks with
         // data-select2-tag="true" when the user typed the value in rather than choosing an existing option.
@@ -78,15 +76,12 @@ class TextSelect extends Text {
         const terms = $(e.target).select2('data').map((o) => ({
           // Server-side uses the id/value (the raw column data, needed to match the database). Client-side uses the text,
           // which has been processed for display and matches the internal filter data DataTables keeps (settings.aoData[rowIndex]._aFilterData[columnIndex]).
-          value: serverSideProcessing ? o.id : o.text,
+          value: dataSource.isServerSide ? o.id : o.text,
           contains: o.element?.dataset?.select2Tag === 'true'
         }));
 
-        const search = this.buildTextSearch(terms, serverSideProcessing);
-
-        if (search.value !== currentSearchValue) {
-          tableManagerReference.dataTableReference.columns(col_idx).search(search.value, search.regex).draw();
-        }
+        // Redraws only if the filter has changed
+        dataSource.applyColumnFilter(column, { type: "text", terms: terms });
     }
 
     _createInputForSelectFilter(tableManagerReference) {
@@ -168,21 +163,6 @@ class TextSelect extends Text {
         option.value = value; 
         filterInput.appendChild(option);
       });
-    }
-
-    _populateTextSelectFilterOptionsClientSide(ColumnJsonId, columnIdx, filterInput, dataTableReference) {
-      const data = dataTableReference.column(columnIdx).data().toArray()
-      if (data) {
-        const uniqueValues = Array.from(new Set([...data])).sort();      
-        this._populateTextSelectFilterOptionsFromData(uniqueValues, ColumnJsonId, filterInput);
-      }
-    }
-
-
-    async _populateTextSelectFilterOptionsServerSide(ColumnJsonId, filterInput, tableManagerReference) {
-      // Reuses Text's cached fetch of the column's options endpoint
-      const data = await this._fetchColumnValueOptions(ColumnJsonId, tableManagerReference);
-      this._populateTextSelectFilterOptionsFromData(data, ColumnJsonId, filterInput);
     }
 }
 
