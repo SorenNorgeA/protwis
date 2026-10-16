@@ -1,5 +1,11 @@
-from django.test import TestCase
+import json
+import pathlib
+
+from django.test import SimpleTestCase, TestCase
 from django.db.models import Q
+from table_provider.serializers import (
+    GpcrStatisticsSummarySerializer, PdbStructureSummarySerializer, TABLE_SERIALIZERS,
+)
 from table_provider.serverside.filters import TextFilter, NumericRangeFilter, BooleanFilter, FilterSet, FilterError
 from table_provider.serverside.querystringprocessing import DatatablesQueryStringProcessor, QueryStringProcessingError
 from rest_framework import serializers
@@ -149,8 +155,9 @@ class FilterSetOrderingTestCase(TestCase):
             uniprot = serializers.CharField()
             state = serializers.CharField()
 
-            class Meta:
-                datatypes = {
+            @staticmethod
+            def column_datatypes():
+                return {
                     'uniprot': 'text',
                     'state': 'text',
                 }
@@ -226,8 +233,9 @@ class FilterErrorTestCase(TestCase):
 
     def _make_mock_serializer(self):
         class MockSerializer(serializers.Serializer):
-            class Meta:
-                datatypes = {'resolution': 'numeric', 'state': 'text'}
+            @staticmethod
+            def column_datatypes():
+                return {'resolution': 'numeric', 'state': 'text'}
 
             @staticmethod
             def source_mapping():
@@ -338,3 +346,85 @@ class QueryStringProcessingTestCase(TestCase):
 
         with self.assertRaises(QueryStringProcessingError):
             DatatablesQueryStringProcessor(FakeRequest())
+
+
+class SerializerColumnMetadataTestCase(SimpleTestCase):
+    """Datatypes derived from the model fields must match the previously hand-written Meta.datatypes (A1)."""
+
+    def test_pdb_datatypes(self):
+        self.assertEqual(PdbStructureSummarySerializer.column_datatypes(), {
+            'checkbox': 'checkbox', 'uniprot': 'text', 'protein_name_short': 'text', 'receptor_family_short': 'text',
+            'receptor_class_code': 'text', 'gene': 'text', 'fraction_of_wt_seq': 'numeric', 'closest_to_human': 'boolean',
+            'species_common_name': 'text', 'identity_to_human': 'numeric', 'structure_type': 'text', 'pdb_id': 'text',
+            'resolution': 'numeric', 'resolution_best': 'boolean', 'state': 'text', 'query_effector': 'text',
+            'gprot_bound_likeness': 'numeric', 'tm6_angle': 'numeric', 'signal_protein': 'text',
+            'signal_protein_subtype': 'text', 'signal_protein_note': 'text', 'signal_protein_pcntseq': 'numeric',
+            'fusion': 'text', 'antibody': 'text', 'ligand': 'text', 'ligand_role': 'text',
+        })
+
+    def test_gpcr_datatypes(self):
+        numeric = [
+            'st_inact_c', 'st_interm_c', 'st_act_c', 'best_res_inact', 'best_res_interm', 'best_res_act',
+            'transd_gio_c', 'transd_gq11_c', 'transd_g1213_c', 'transd_arrest_c', 'transd_grks_c',
+            'ligand_types_smmol_c', 'ligand_types_pep_c', 'limodgrp_stim_c', 'limodgrp_inhib_c', 'limodgrp_unk_c',
+            'limod_apo_c', 'limod_ag_c', 'limod_ag_partial_c', 'limod_allo_antag_c', 'limod_antag_c',
+            'limod_inv_ag_c', 'limod_nam_c', 'limod_pam_c', 'limod_unk_c',
+        ]
+        expected = {name: 'text' for name in
+                    ['uniprot', 'protein_name', 'receptor_family', 'receptor_class', 'gene', 'species_common_name']}
+        expected.update({name: 'numeric' for name in numeric})
+        self.assertEqual(GpcrStatisticsSummarySerializer.column_datatypes(), expected)
+
+    def test_method_fields_map_to_database_columns(self):
+        mapping = PdbStructureSummarySerializer.source_mapping()
+        self.assertEqual(mapping['uniprot'], 'uniprot_entry_name')
+        self.assertEqual(mapping['gene'], 'gene_name')
+        self.assertEqual(mapping['resolution'], 'resolution')
+
+
+class ColumnConfigurationConsistencyTestCase(SimpleTestCase):
+    """Every column JSON file must agree with the serializer behind its table (A1)."""
+
+    CONFIG_DIR = pathlib.Path(__file__).resolve().parent / "configuration_provider" / "column_configurations"
+
+    # Client data_type -> server datatypes it can filter correctly.
+    # text/textselect accept boolean because the client sends "true"/"false" search strings.
+    COMPATIBLE = {
+        'text': {'text', 'boolean'},
+        'textselect': {'text', 'boolean'},
+        'weblinktext': {'text'},
+        'numeric': {'numeric'},
+        'checkbox': {'checkbox'},
+    }
+
+    def _configs(self):
+        files = sorted(self.CONFIG_DIR.glob("*.json"))
+        self.assertTrue(files, f"No column configurations found in {self.CONFIG_DIR}")
+        for path in files:
+            table_name = path.stem.split("__")[0]
+            with open(path) as f:
+                yield path.name, table_name, json.load(f)
+
+    def test_every_table_has_a_serializer(self):
+        for file_name, table_name, _ in self._configs():
+            with self.subTest(file=file_name):
+                self.assertIn(table_name, TABLE_SERIALIZERS)
+
+    def test_columns_exist_with_compatible_datatypes(self):
+        for file_name, table_name, columns in self._configs():
+            datatypes = TABLE_SERIALIZERS[table_name].column_datatypes()
+            for column in columns:
+                json_id = column['json_id']
+                with self.subTest(file=file_name, column=json_id):
+                    self.assertIn(json_id, datatypes, "column is not a serializer field")
+                    self.assertIn(column['data_type'], self.COMPATIBLE, "unknown client data_type")
+                    self.assertIn(datatypes[json_id], self.COMPATIBLE[column['data_type']],
+                                  f"client type '{column['data_type']}' cannot filter server type '{datatypes[json_id]}'")
+
+    def test_condition_sources_are_columns(self):
+        for file_name, _, columns in self._configs():
+            json_ids = {column['json_id'] for column in columns}
+            for column in columns:
+                for source in filter(None, (s.strip() for s in column.get('cssClassCellConditionSource', '').split(';'))):
+                    with self.subTest(file=file_name, column=column['json_id'], source=source):
+                        self.assertIn(source, json_ids)

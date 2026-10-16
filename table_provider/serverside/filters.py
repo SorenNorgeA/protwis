@@ -24,6 +24,7 @@ class FilterSet:
         self.request = request
         self.SerializerClass = SerializerClass
         self.field_mappings = SerializerClass.source_mapping()
+        self.datatypes = SerializerClass.column_datatypes()
         if request is not None:
             self.query_parameters = DatatablesQueryStringProcessor(self.request).query_set
             self.parse_filters()
@@ -55,11 +56,10 @@ class FilterSet:
                 search_value = column['search']['value']
             except (KeyError, TypeError):
                 raise FilterError("Each column must provide 'data' and 'search[value]'.")
-            field_type = self.SerializerClass.Meta.datatypes.get(data_field)
+            field_type = self.datatypes.get(data_field)
 
             if not field_type:
-                raise FilterError(f"No datatype mapping found for field '{data_field}' in serializer. " + \
-                                  "Ensure you have declared all fields that require filtering under datatypes in meta data")
+                raise FilterError(f"Unknown column '{data_field}'.")
 
             if field_type in self.ignored_datatypes:
                 continue
@@ -107,7 +107,7 @@ class FilterSet:
                     raise FilterError("Invalid 'order' parameter: it must reference an existing column and a direction.")
                 if direction not in ('asc', 'desc'):
                     raise FilterError(f"Invalid order direction '{direction}'.")
-                field_type = self.SerializerClass.Meta.datatypes.get(json_name)
+                field_type = self.datatypes.get(json_name)
                 if field_type in self.ignored_datatypes:
                     continue
                 db_name = self.field_mappings.get(json_name)

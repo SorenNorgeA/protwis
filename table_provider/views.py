@@ -112,13 +112,11 @@ class GpcrStructureStatisticsSummaryTable(generics.ListAPIView):
 
     @staticmethod
     def get_select_options(request, column):
-        # Only columns the serializer exposes may be queried
-        if column not in GpcrStatisticsSummarySerializer.source_mapping():
+        # Only columns the serializer exposes may be queried; map them to their database column
+        sources = GpcrStatisticsSummarySerializer.source_mapping()
+        if column not in sources:
             return JsonResponse({'error': f'Invalid column requested: {column}'}, status=400)
-
-        #Map any complex table columns back to their primary data column for the query (e.g. weblinks with custom renderers)
-        if column in GpcrStatisticsSummarySerializer.Meta.serializer_method_to_filter_field_map:
-            column = GpcrStatisticsSummarySerializer.Meta.serializer_method_to_filter_field_map[column]
+        column = sources[column]
 
         try:
             queryset = GpcrStructureStatisticsTable.objects.values_list(column, flat=True).distinct().order_by(column)
@@ -196,15 +194,13 @@ class PdbStructureSummaryTable(generics.ListAPIView):
     @staticmethod
     def get_select_options(request, column):
         """Get the unique values for a given column in the PdbTable."""
-        # Only columns the serializer exposes may be queried
-        if column not in PdbStructureSummarySerializer.source_mapping():
+        # Only columns the serializer exposes may be queried; map them to their database column
+        sources = PdbStructureSummarySerializer.source_mapping()
+        if column not in sources:
             return JsonResponse({'error': f'Invalid column requested: {column}'}, status=400)
+        column = sources[column]
 
-        #Map any complex table columns back to their primary data column for the query (e.g. weblinks with custom renderers)
-        if column in PdbStructureSummarySerializer.Meta.serializer_method_to_filter_field_map:
-            column = PdbStructureSummarySerializer.Meta.serializer_method_to_filter_field_map[column]
-
-        try:    
+        try:
             base = PdbStructureSummaryTable._scoped_queryset(request)
             filtered = apply_filterset(base, FilterSet(request, PdbStructureSummarySerializer))
             
@@ -260,15 +256,14 @@ class PdbStructureSummaryTable(generics.ListAPIView):
 
     @staticmethod
     def get_numeric_range(request, column):
-        # Only columns the serializer exposes may be queried
-        if column not in PdbStructureSummarySerializer.source_mapping():
+        # Only columns the serializer exposes may be queried; map them to their database column
+        sources = PdbStructureSummarySerializer.source_mapping()
+        if column not in sources:
             return JsonResponse({'error': f'Invalid column requested: {column}'}, status=400)
+        is_numeric = PdbStructureSummarySerializer.column_datatypes()[column] == 'numeric'
+        column = sources[column]
 
-        #Map any complex table columns back to their primary data column for the query (e.g. weblinks with custom renderers)
-        if column in PdbStructureSummarySerializer.Meta.serializer_method_to_filter_field_map:
-            column = PdbStructureSummarySerializer.Meta.serializer_method_to_filter_field_map[column]
-
-        if column in PdbStructureSummarySerializer.Meta.datatypes and PdbStructureSummarySerializer.Meta.datatypes[column] == 'numeric':
+        if is_numeric:
             try:
                 # Scope by effector / exclude_non_interacting like every other PDB endpoint, but not by user filters,
                 # so the gradient stays stable while the user filters the table.
