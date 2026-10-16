@@ -3,9 +3,11 @@
 // The select2 library is used to enhance the select input with features such as multi-select, search, and tagging.
 // The options for the select input can be populated either from the client-side data or fetched from the server-side endpoint, depending on the configuration of the DataTable.
 
-import { DataTypeBase } from "./datatypebase.js";
+// It extends Text, inheriting its display rendering (null placeholder, truncation) and the cached column options fetch.
 
-class TextSelect extends DataTypeBase {
+import { Text } from "./text.js";
+
+class TextSelect extends Text {
 
     select2options = {
                             multiple: true,
@@ -34,7 +36,7 @@ class TextSelect extends DataTypeBase {
       // Add function to populate select options as a callback to be run once data is loaded into the table,
       // as we need access to the dataset to determine the unique values for the options.
       if(tableManagerReference.dataTableReference.settings()[0].oFeatures.bServerSide === true) {
-        tableManagerReference.dataLoadedCallBacks.push( () => this._populateTextSelectFilterOptionsServerSide(this.json_id, this.col_idx, filterInput, tableManagerReference.dataTableReference));
+        tableManagerReference.dataLoadedCallBacks.push( () => this._populateTextSelectFilterOptionsServerSide(this.json_id, filterInput, tableManagerReference));
       } else {
         tableManagerReference.dataLoadedCallBacks.push( () => this._populateTextSelectFilterOptionsClientSide(this.json_id, this.col_idx, filterInput, tableManagerReference.dataTableReference));
       }
@@ -72,32 +74,18 @@ class TextSelect extends DataTypeBase {
         // Work from the selected items only. Each carries its <option> element, which select2 marks with
         // data-select2-tag="true" when the user typed the value in rather than choosing an existing option.
         // Use the event target element directly instead of looking it up by id.
-        const selected = $(e.target).select2('data').map((o) => ({
+        // Typed-in tags are "contains" matches, chosen options are exact matches.
+        const terms = $(e.target).select2('data').map((o) => ({
           // Server-side uses the id/value (the raw column data, needed to match the database). Client-side uses the text,
           // which has been processed for display and matches the internal filter data DataTables keeps (settings.aoData[rowIndex]._aFilterData[columnIndex]).
           value: serverSideProcessing ? o.id : o.text,
-          isTag: o.element?.dataset?.select2Tag === 'true'
+          contains: o.element?.dataset?.select2Tag === 'true'
         }));
 
-        // DataTables regex search is required for multiple values (joined with the OR operator "|") and for any tag (contains match)
-        const useRegex = selected.length > 1 || selected.some((s) => s.isTag);
+        const search = this.buildTextSearch(terms, serverSideProcessing);
 
-        let newSearchValues;
-        if (useRegex) {
-          newSearchValues = selected.map(({ value, isTag }) => {
-            const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // escape regex special characters
-            return isTag
-              ? "(.*" + escaped + ".*)" // wrap tag values with wildcards for "contains" search
-              : "(^" + escaped + "$)"; // wrap non-tag values with anchors for "exact match" search
-          });
-        } else {
-          newSearchValues = selected.map((s) => s.value);
-        }
-
-        let newSearchValue = newSearchValues.join("|"); // join multiple values with OR operator for regex search
-
-        if (newSearchValue !== currentSearchValue) {
-          tableManagerReference.dataTableReference.columns(col_idx).search(newSearchValue, useRegex).draw();
+        if (search.value !== currentSearchValue) {
+          tableManagerReference.dataTableReference.columns(col_idx).search(search.value, search.regex).draw();
         }
     }
 
@@ -191,21 +179,10 @@ class TextSelect extends DataTypeBase {
     }
 
 
-    _populateTextSelectFilterOptionsServerSide(ColumnJsonId, columnIdx, filterInput, dataTableReference) {
-      const dataEndpoint = dataTableReference.ajax.url()
-      const optionsEndpoint = dataEndpoint + "/options/" + ColumnJsonId + "/"
-
-      fetch(optionsEndpoint)
-        .then(response => {
-          if (!response.ok) {
-            throw new Error(`HTTP error when fetching options for column ${ColumnJsonId}! Status: ${response.status}`);
-          }
-          return response.json();
-        })
-        .then(data => {
-          this._populateTextSelectFilterOptionsFromData(data, ColumnJsonId, filterInput);
-        });
-
+    async _populateTextSelectFilterOptionsServerSide(ColumnJsonId, filterInput, tableManagerReference) {
+      // Reuses Text's cached fetch of the column's options endpoint
+      const data = await this._fetchColumnValueOptions(ColumnJsonId, tableManagerReference);
+      this._populateTextSelectFilterOptionsFromData(data, ColumnJsonId, filterInput);
     }
 }
 

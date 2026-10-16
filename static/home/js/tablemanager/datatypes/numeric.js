@@ -118,17 +118,21 @@ class Numeric extends DataTypeBase {
         ) {
         //create event callback function
         return function () {
-            // For server-side processing, we will encode the range filter as a single search string in the format "min~max"
-            // where min and max are the values from the two inputs, or -Inf/Inf if not set. The server can then parse this string to apply the appropriate filtering.
-            let rangeMin = filterInputMin.value || "-Inf";
-            let rangeMax = filterInputMax.value || "Inf";
+            // For server-side processing, the range filter is sent as the column search value in the form of a JSON object
+            // {"min": x, "max": y}, with null for an open bound, which the server parses to apply the filtering. As in
+            // client-side mode, an input that is not a number leaves that bound open. No bounds means no filter (empty search).
+            const bound = (input) => {
+                const value = parseFloat(input.value);
+                return Number.isFinite(value) ? value : null;
+            };
+            const rangeMin = bound(filterInputMin);
+            const rangeMax = bound(filterInputMax);
 
             // DataTables sends the current search value for the column as the first element of the array returned by .search()
             // we can use this to avoid unnecessary reloads if the range hasn't actually changed
-            let currentSearchValue =
-            tableManagerReference.dataTableReference.columns(columnIdx).search()[0] || "-Inf~Inf"; // default to full range if no search value currently set
+            const currentSearchValue = tableManagerReference.dataTableReference.columns(columnIdx).search()[0] || "";
 
-            let newSearchValue = `${rangeMin}~${rangeMax}`;
+            const newSearchValue = (rangeMin === null && rangeMax === null) ? "" : JSON.stringify({ min: rangeMin, max: rangeMax });
 
             if (newSearchValue !== currentSearchValue) {
                  // If we are in the process of clearing filters, we don't want to trigger 

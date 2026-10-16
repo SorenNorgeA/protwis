@@ -133,6 +133,37 @@ class Text extends DataTypeBase {
         return { symbolBtn, popup };
     }
         
+    buildTextSearch(terms, serverSideProcessing) {
+        // Builds the DataTables column search for a text filter (shared by Text and TextSelect) from a list of
+        // terms {value, contains}: an exact match, or a "contains" (substring) match when contains is true.
+        // Returns {value, regex} for column().search(value, regex); no terms gives an empty search (no filter).
+        if (terms.length === 0) {
+            return { value: "", regex: false };
+        }
+
+        if (serverSideProcessing) {
+            // Server-side: a JSON filter object the server reads directly, so values are matched exactly as given
+            // (no regex escaping or parsing). Both keys are always present, in a fixed order, so the same filter
+            // always gives the same string and can be compared with the current search value.
+            const filter = { in: [], contains: [] };
+            terms.forEach(({ value, contains }) => (contains ? filter.contains : filter.in).push(String(value)));
+            return { value: JSON.stringify(filter), regex: false };
+        }
+
+        // Client-side: DataTables' own search. A single exact value is a plain search; several values (ORed with "|")
+        // or any contains match need a regex.
+        if (terms.length === 1 && !terms[0].contains) {
+            return { value: terms[0].value, regex: false };
+        }
+        const escape = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // escape regex special characters
+        const value = terms
+            .map(({ value, contains }) => contains
+                ? "(.*" + escape(value) + ".*)" // wildcards for "contains" search
+                : "(^" + escape(value) + "$)") // anchors for "exact match" search
+            .join("|");
+        return { value: value, regex: true };
+    }
+
     _stripHtmlTags(v) {
         return v == null ? "" : String(v).replace(/<[^>]*>/g, '');
     }
@@ -144,8 +175,8 @@ class Text extends DataTypeBase {
             return
         }
 
-        const currentSearchValue = tableManagerReference.dataTableReference.columns(col_idx).search()[0];
-        let newSearchValue = e.target.value.trim();
+        const currentSearchValue = tableManagerReference.dataTableReference.columns(col_idx).search()[0] || "";
+        const newSearchValue = e.target.value.trim();
 
         // Handle empty input: clear filter if one is currently set, otherwise do nothing
         if (newSearchValue === "") {
@@ -156,30 +187,26 @@ class Text extends DataTypeBase {
             return;
         }
 
-        // Skip processing if the value hasn't actually changed
-        if (newSearchValue === currentSearchValue) {
-            return;
-        }
-
         //Get a list of unique values for the column, either from the server or from the client-side data
         let dataOptions;
         let jsonId = tableManagerReference.columns[col_idx].json_id;
-        if(tableManagerReference.dataTableReference.settings()[0].oFeatures.bServerSide === true) {
+        const serverSideProcessing = tableManagerReference.dataTableReference.settings()[0].oFeatures.bServerSide === true;
+        if(serverSideProcessing) {
            dataOptions = await this._fetchColumnValueOptions(jsonId, tableManagerReference);
         }
         else {
             dataOptions = tableManagerReference.dataTableReference.column(col_idx).data().toArray().map((item) => this._stripHtmlTags(item));
         }
 
-        //if the search value is not in the list of unique values, we will use regex search to allow for partial matches
-        const useRegex = !dataOptions.includes(newSearchValue)
+        //if the search value is not in the list of unique values, use a "contains" search to allow for partial matches
+        const search = this.buildTextSearch([{ value: newSearchValue, contains: !dataOptions.includes(newSearchValue) }], serverSideProcessing);
 
-        if (useRegex) {
-              newSearchValue = newSearchValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // escape regex special characters
-              newSearchValue = ".*" + newSearchValue + ".*"; // wrap tag values with wildcards for "contains" search
+        // Skip the redraw if the search hasn't actually changed
+        if (search.value === currentSearchValue) {
+            return;
         }
 
-        tableManagerReference.dataTableReference.columns(col_idx).search(newSearchValue, useRegex).draw();
+        tableManagerReference.dataTableReference.columns(col_idx).search(search.value, search.regex).draw();
     }
 
     async _fetchColumnValueOptions(ColumnJsonId, tableManagerReference) {

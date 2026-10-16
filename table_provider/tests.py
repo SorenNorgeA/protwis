@@ -16,84 +16,52 @@ class TextFilterTestCase(TestCase):
 
     def test_single_exact_value_only(self):
         """Single exact match value should return exact equality Q."""
-        f = TextFilter("state", "Active")
-        q = f.format_query()
-        # Should match "Active" exactly
-        self.assertEqual(q, Q(state__in=["Active"]))
+        f = TextFilter("state", ["Active"])
+        self.assertEqual(f.format_query(), Q(state__in=["Active"]))
 
     def test_multiple_exact_values_only(self):
         """Multiple exact matches should return __in Q."""
-        f = TextFilter("state", "Active|Inactive")
-        q = f.format_query()
-        self.assertEqual(q, Q(state__in=["Active", "Inactive"]))
+        f = TextFilter("state", ["Active", "Inactive"])
+        self.assertEqual(f.format_query(), Q(state__in=["Active", "Inactive"]))
 
-    def test_single_tag_only(self):
-        """Single tag filter should use iregex."""
-        f = TextFilter("state", "(.*inter.*)")
-        q = f.format_query()
-        self.assertEqual(q, Q(state__iregex=".*inter.*"))
+    def test_single_contains_only(self):
+        """Single contains value should use icontains."""
+        f = TextFilter("state", contains=["inter"])
+        self.assertEqual(f.format_query(), Q(state__icontains="inter"))
 
-    def test_multiple_tags_only(self):
-        """Multiple tag filters should be ORed."""
-        f = TextFilter("state", "(.*inter.*)|(.*act.*)")
-        q = f.format_query()
-        expected = Q(state__iregex=".*inter.*") | Q(state__iregex=".*act.*")
-        self.assertEqual(q, expected)
+    def test_multiple_contains_only(self):
+        """Multiple contains values should be ORed."""
+        f = TextFilter("state", contains=["inter", "act"])
+        self.assertEqual(f.format_query(), Q(state__icontains="inter") | Q(state__icontains="act"))
 
-    def test_single_exact_plus_single_tag(self):
-        """Single exact value AND single tag should both be included (ORed).
+    def test_single_exact_plus_single_contains(self):
+        """Single exact value AND single contains value should both be included (ORed).
 
         This is the bug B2 regression test. When there's exactly one exact match
         and at least one tag, both should be in the result.
         """
-        f = TextFilter("state", "(^Active$)|(.*inter.*)")
-        q = f.format_query()
-        expected = Q(state__in=["Active"]) | Q(state__iregex=".*inter.*")
-        self.assertEqual(q, expected)
+        f = TextFilter("state", ["Active"], ["inter"])
+        self.assertEqual(f.format_query(), Q(state__in=["Active"]) | Q(state__icontains="inter"))
 
-    def test_single_exact_plus_multiple_tags(self):
-        """Single exact value and multiple tags should all be ORed."""
-        f = TextFilter("state", "(^Active$)|(.*inter.*)|(.*act.*)")
-        q = f.format_query()
-        expected = (
-            Q(state__in=["Active"]) |
-            Q(state__iregex=".*inter.*") |
-            Q(state__iregex=".*act.*")
-        )
-        self.assertEqual(q, expected)
-
-    def test_multiple_exact_plus_multiple_tags(self):
-        """Multiple exact values and multiple tags should all be ORed."""
-        f = TextFilter("state", "(^Active$)|(^Inactive$)|(.*inter.*)|(.*act.*)")
-        q = f.format_query()
+    def test_multiple_exact_plus_multiple_contains(self):
+        """Multiple exact values and multiple contains values should all be ORed."""
+        f = TextFilter("state", ["Active", "Inactive"], ["inter", "act"])
         expected = (
             Q(state__in=["Active", "Inactive"]) |
-            Q(state__iregex=".*inter.*") |
-            Q(state__iregex=".*act.*")
+            Q(state__icontains="inter") |
+            Q(state__icontains="act")
         )
-        self.assertEqual(q, expected)
+        self.assertEqual(f.format_query(), expected)
 
     def test_empty_filters(self):
-        """Empty filter should return empty Q."""
-        f = TextFilter("state", "")
-        q = f.format_query()
-        # Empty Q() is falsy but represents an empty condition
-        self.assertEqual(q, Q())
+        """No values should return empty Q, and an empty contains term must not match every row."""
+        self.assertEqual(TextFilter("state").format_query(), Q())
+        self.assertEqual(TextFilter("state", contains=[""]).format_query(), Q())
 
-    def test_anchors_removed_correctly(self):
-        """Anchors should be stripped from exact values but not from tags."""
-        # Exact value with anchors: (^value$) -> value
-        f = TextFilter("state", "(^Active$)")
-        q = f.format_query()
-        self.assertEqual(q, Q(state__in=["Active"]))
-
-    def test_escape_characters_removed_from_exact(self):
-        """Escape characters should be removed from exact values."""
-        # This would come from a value with special chars that were escaped
-        f = TextFilter("state", "Test\\(Escaped\\)")
-        q = f.format_query()
-        # Backslashes are removed from standard filters
-        self.assertEqual(q, Q(state__in=["Test(Escaped)"]))
+    def test_special_characters_used_verbatim(self):
+        """Values are not parsed as regex, so brackets, pipes and backslashes are matched as given (B2, B5)."""
+        f = TextFilter("state", ["(A|B)\\x"], ["^.*$"])
+        self.assertEqual(f.format_query(), Q(state__in=["(A|B)\\x"]) | Q(state__icontains="^.*$"))
 
 
 class NumericRangeFilterTestCase(TestCase):
@@ -102,48 +70,97 @@ class NumericRangeFilterTestCase(TestCase):
     Tests that bounds are inclusive (>=, <=) matching client-side behavior.
     """
 
-    def test_both_bounds_infinite(self):
-        """Both bounds infinite should return empty Q (no filtering)."""
-        f = NumericRangeFilter("resolution", "-Inf", "Inf")
-        q = f.format_query()
-        self.assertEqual(q, Q())
+    def test_both_bounds_open(self):
+        """No bounds should return empty Q (no filtering)."""
+        f = NumericRangeFilter("resolution", None, None)
+        self.assertEqual(f.format_query(), Q())
 
     def test_min_only_inclusive(self):
-        """Min-only filter should use >= (inclusive)."""
-        f = NumericRangeFilter("resolution", "2.0", "Inf")
-        q = f.format_query()
-        self.assertEqual(q, Q(resolution__gte="2.0"))
-
-    def test_max_only_inclusive(self):
-        """Max-only filter should use <= (inclusive)."""
-        f = NumericRangeFilter("resolution", "-Inf", "3.5")
-        q = f.format_query()
-        self.assertEqual(q, Q(resolution__lte="3.5"))
-
-    def test_both_bounds_inclusive(self):
-        """Both bounds should use >= and <= (inclusive)."""
-        f = NumericRangeFilter("resolution", "2.0", "3.5")
-        q = f.format_query()
-        expected = Q(resolution__gte="2.0") & Q(resolution__lte="3.5")
-        self.assertEqual(q, expected)
-
-    def test_boundary_value_2_inclusive(self):
-        """Value 2.0 should be included with min=2.0 (inclusive).
+        """Min-only filter should use >= (inclusive).
 
         This is the B3 regression test. Ensures server-side and client-side
         both use inclusive bounds (>= and <=, not > and <).
         """
-        f = NumericRangeFilter("resolution", "2.0", "Inf")
-        q = f.format_query()
-        # Must use >= not > so value 2.0 is included
-        self.assertEqual(q, Q(resolution__gte="2.0"))
+        f = NumericRangeFilter("resolution", 2.0, None)
+        self.assertEqual(f.format_query(), Q(resolution__gte=2.0))
 
-    def test_boundary_value_35_inclusive(self):
-        """Value 3.5 should be included with max=3.5 (inclusive)."""
-        f = NumericRangeFilter("resolution", "-Inf", "3.5")
-        q = f.format_query()
-        # Must use <= not < so value 3.5 is included
-        self.assertEqual(q, Q(resolution__lte="3.5"))
+    def test_max_only_inclusive(self):
+        """Max-only filter should use <= (inclusive)."""
+        f = NumericRangeFilter("resolution", None, 3.5)
+        self.assertEqual(f.format_query(), Q(resolution__lte=3.5))
+
+    def test_both_bounds_inclusive(self):
+        """Both bounds should use >= and <= (inclusive)."""
+        f = NumericRangeFilter("resolution", 2, 3.5)
+        self.assertEqual(f.format_query(), Q(resolution__gte=2) & Q(resolution__lte=3.5))
+
+
+class BooleanFilterTestCase(TestCase):
+    """Tests for BooleanFilter.format_query()."""
+
+    def test_single_value(self):
+        self.assertEqual(BooleanFilter("is_complex", True).format_query(), Q(is_complex=True))
+
+    def test_collection_of_values(self):
+        self.assertEqual(BooleanFilter("is_complex", {True, False}).format_query(), Q(is_complex__in=[False, True]))
+
+
+class FilterSetParseFiltersTestCase(TestCase):
+    """Tests for FilterSet.parse_filters() reading the JSON filter in each column's search value (A2)."""
+
+    def _make_mock_serializer(self):
+        class MockSerializer(serializers.Serializer):
+            @staticmethod
+            def column_datatypes():
+                return {'resolution': 'numeric', 'state': 'text', 'best': 'boolean', 'checkbox': 'checkbox'}
+
+            @staticmethod
+            def source_mapping():
+                return {'resolution': 'resolution', 'state': 'state_name', 'best': 'resolution_best', 'checkbox': 'checkbox'}
+
+        return MockSerializer
+
+    def _queries(self, data, spec):
+        fs = FilterSet(None, self._make_mock_serializer())
+        value = spec if isinstance(spec, str) else json.dumps(spec)
+        fs.query_parameters = {'columns': [{'data': data, 'search': {'value': value, 'regex': 'false'}}]}
+        fs.parse_filters()
+        return [f.format_query() for f in fs.get_filters()]
+
+    def test_empty_search_value_is_no_filter(self):
+        self.assertEqual(self._queries('state', ''), [])
+
+    def test_text_filter_uses_source_mapping(self):
+        self.assertEqual(self._queries('state', {'in': ['A|B'], 'contains': ['(x']}),
+                         [Q(state_name__in=['A|B']) | Q(state_name__icontains='(x')])
+
+    def test_text_filter_keys_optional(self):
+        self.assertEqual(self._queries('state', {'contains': ['x']}), [Q(state_name__icontains='x')])
+
+    def test_numeric_filter(self):
+        self.assertEqual(self._queries('resolution', {'min': 2, 'max': None}), [Q(resolution__gte=2)])
+
+    def test_numeric_filter_without_bounds_is_no_filter(self):
+        self.assertEqual(self._queries('resolution', {'min': None, 'max': None}), [])
+
+    def test_boolean_filter_from_text_shape(self):
+        self.assertEqual(self._queries('best', {'in': ['True', False], 'contains': []}),
+                         [Q(resolution_best__in=[False, True])])
+
+    def test_boolean_filter_contains_matches_names(self):
+        self.assertEqual(self._queries('best', {'in': [], 'contains': ['fa']}), [Q(resolution_best__in=[False])])
+        self.assertEqual(self._queries('best', {'in': [], 'contains': ['E']}), [Q(resolution_best__in=[False, True])])
+        self.assertEqual(self._queries('best', {'in': [], 'contains': ['zz']}), [Q(resolution_best__in=[])])
+
+    def test_boolean_filter_empty_is_no_filter(self):
+        self.assertEqual(self._queries('best', {'in': [], 'contains': []}), [])
+
+    def test_boolean_filter_invalid_value_raises(self):
+        with self.assertRaises(FilterError):
+            self._queries('best', {'in': ['yes']})
+
+    def test_checkbox_column_ignored(self):
+        self.assertEqual(self._queries('checkbox', 'anything'), [])
 
 
 class FilterSetOrderingTestCase(TestCase):
@@ -253,29 +270,46 @@ class FilterErrorTestCase(TestCase):
 
     def test_non_numeric_bound_raises(self):
         with self.assertRaises(FilterError):
-            NumericRangeFilter("resolution", "abc", "Inf")
+            NumericRangeFilter("resolution", "2.0", None)
 
     def test_non_finite_bound_raises(self):
         with self.assertRaises(FilterError):
-            NumericRangeFilter("resolution", "nan", "3.0")
+            NumericRangeFilter("resolution", float("nan"), 3.0)
+
+    def test_boolean_bound_raises(self):
+        with self.assertRaises(FilterError):
+            NumericRangeFilter("resolution", True, None)
 
     def test_valid_bounds_accepted(self):
-        NumericRangeFilter("resolution", "-1.5", "3")
+        NumericRangeFilter("resolution", -1.5, 3)
 
-    def test_range_without_separator_raises(self):
-        fs = self._filterset(self._column('resolution', '2.0'))
+    def test_search_value_not_json_raises(self):
+        for value in ('2.0~3.0', '(^Active$)', '{"in": '):
+            fs = self._filterset(self._column('state', value))
+            with self.assertRaises(FilterError):
+                fs.parse_filters()
+
+    def test_search_value_not_object_raises(self):
+        fs = self._filterset(self._column('state', '["A"]'))
         with self.assertRaises(FilterError):
             fs.parse_filters()
 
-    def test_range_with_multiple_separators_raises(self):
-        fs = self._filterset(self._column('resolution', '1~2~3'))
+    def test_unknown_filter_key_raises(self):
+        fs = self._filterset(self._column('state', '{"regex": "A"}'))
         with self.assertRaises(FilterError):
             fs.parse_filters()
+
+    def test_text_values_not_strings_raises(self):
+        for value in ('{"in": "A"}', '{"in": [1]}', '{"contains": [null]}'):
+            fs = self._filterset(self._column('state', value))
+            with self.assertRaises(FilterError):
+                fs.parse_filters()
 
     def test_non_numeric_range_via_filterset_raises(self):
-        fs = self._filterset(self._column('resolution', 'abc~2'))
-        with self.assertRaises(FilterError):
-            fs.parse_filters()
+        for value in ('{"min": "abc"}', '{"min": NaN}', '{"max": Infinity}'):
+            fs = self._filterset(self._column('resolution', value))
+            with self.assertRaises(FilterError):
+                fs.parse_filters()
 
     def test_unknown_column_raises(self):
         fs = self._filterset(self._column('nonexistent', 'x'))

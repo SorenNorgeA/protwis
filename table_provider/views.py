@@ -222,7 +222,7 @@ class PdbStructureSummaryTable(generics.ListAPIView):
         effector = request.GET.get('effector', 'no_effector')
         exclude_non_interacting = request.GET.get('exclude_non_interacting') == 'true'
 
-        queryset = PdbTable.objects.filter(TextFilter('query_effector', effector).format_query())
+        queryset = PdbTable.objects.filter(TextFilter('query_effector', [effector]).format_query())
         if exclude_non_interacting:
             queryset = queryset.filter(BooleanFilter('is_complex', True).format_query())
         return queryset

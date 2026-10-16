@@ -1,4 +1,5 @@
 from table_provider.serverside.querystringprocessing import DatatablesQueryStringProcessor
+import json
 import math
 
 from django.db.models import Q
@@ -6,6 +7,24 @@ from django.db.models import Q
 
 class FilterError(ValueError):
     """Raised when a request contains filter or ordering parameters that cannot be interpreted (a client error)."""
+
+
+# Keys of the JSON filter objects the client sends as a column's search value in server-side mode
+TEXT_FILTER_KEYS = {'in', 'contains'}       # e.g. {"in": ["A"], "contains": ["b"]}
+NUMERIC_FILTER_KEYS = {'min', 'max'}        # e.g. {"min": 2, "max": null}
+BOOLEAN_STRINGS = {'true': True, 'false': False}
+
+
+def _check_filter_keys(spec, allowed_keys, data_field):
+    if not isinstance(spec, dict) or not set(spec) <= allowed_keys:
+        raise FilterError(f"Invalid filter for field '{data_field}'; expected an object with keys {sorted(allowed_keys)}.")
+
+
+def _filter_list(spec, key, data_field, item_types=(str,)):
+    values = spec.get(key, [])
+    if not isinstance(values, list) or not all(isinstance(v, item_types) for v in values):
+        raise FilterError(f"Invalid '{key}' filter for field '{data_field}'; expected a list of strings.")
+    return values
 
 
 """
@@ -45,6 +64,10 @@ class FilterSet:
         Parses query parameters from a DataTables serverside request
         to generate filter requirements based on the specified
         serializer's field mappings and data types.
+
+        Each column's search value is empty (no filter) or a JSON object whose shape depends on the column datatype:
+        text and boolean columns take {"in": [...], "contains": [...]}, numeric columns take {"min": x, "max": y}
+        with null for an open bound. The search regex flag is ignored.
         """
 
         if 'columns' not in self.query_parameters:
@@ -64,29 +87,57 @@ class FilterSet:
             if field_type in self.ignored_datatypes:
                 continue
 
-            if search_value:
-                if field_type == 'text':
-                    filter_req = TextFilter(self.field_mappings.get(data_field), search_value)
-                elif field_type == 'numeric':
-                    bounds = search_value.split('~')
-                    if len(bounds) != 2:
-                        raise FilterError(f"Invalid numeric range '{search_value}' for field '{data_field}'; expected 'min~max'.")
-                    [filter_min, filter_max] = bounds
-                    if filter_min != "-Inf" or filter_max != "Inf":
-                        filter_req = NumericRangeFilter(self.field_mappings.get(data_field), filter_min, filter_max)
-                    else:
-                        continue
-                elif field_type == 'boolean':
-                    if search_value.lower() in ['true', '1', 'yes']:
-                        filter_req = BooleanFilter(self.field_mappings.get(data_field), True)
-                    elif search_value.lower() in ['false', '0', 'no']:
-                        filter_req = BooleanFilter(self.field_mappings.get(data_field), False)
-                    else:
-                        continue
-                else:
-                    continue
+            if not search_value:
+                continue
 
-                self.add_filter(filter_req)
+            try:
+                spec = json.loads(search_value)
+            except (TypeError, ValueError):
+                raise FilterError(f"Invalid filter for field '{data_field}'; expected a JSON object.")
+
+            db_field = self.field_mappings.get(data_field)
+            if field_type == 'text':
+                _check_filter_keys(spec, TEXT_FILTER_KEYS, data_field)
+                filter_req = TextFilter(db_field, _filter_list(spec, 'in', data_field), _filter_list(spec, 'contains', data_field))
+            elif field_type == 'numeric':
+                _check_filter_keys(spec, NUMERIC_FILTER_KEYS, data_field)
+                if spec.get('min') is None and spec.get('max') is None:
+                    continue
+                filter_req = NumericRangeFilter(db_field, spec.get('min'), spec.get('max'))
+            elif field_type == 'boolean':
+                values = self._boolean_filter_values(spec, data_field)
+                if values is None:
+                    continue
+                filter_req = BooleanFilter(db_field, values)
+            else:
+                continue
+
+            self.add_filter(filter_req)
+
+    @staticmethod
+    def _boolean_filter_values(spec, data_field):
+        """Boolean columns use text filter widgets, so they receive the text filter shape.
+
+        'in' values are booleans or "true"/"false" (any case). A 'contains' term selects each boolean whose
+        name contains it, matching what client-side search does with the rendered text. Returns the set of
+        accepted booleans, or None when the filter is empty.
+        """
+        _check_filter_keys(spec, TEXT_FILTER_KEYS, data_field)
+        exact = _filter_list(spec, 'in', data_field, item_types=(str, bool))
+        contains = _filter_list(spec, 'contains', data_field)
+        if not exact and not contains:
+            return None
+
+        values = set()
+        for value in exact:
+            if isinstance(value, str):
+                if value.lower() not in BOOLEAN_STRINGS:
+                    raise FilterError(f"Invalid boolean value '{value}' for field '{data_field}'.")
+                value = BOOLEAN_STRINGS[value.lower()]
+            values.add(value)
+        for term in contains:
+            values.update(b for name, b in BOOLEAN_STRINGS.items() if term.lower() in name)
+        return values
 
     def parse_ordering(self):
         """Extract columns used for row ordering from query parameters.
@@ -145,47 +196,31 @@ class FilterRequirement:
 class TextFilter(FilterRequirement):
     """A text filter requirement for a specific database field.
 
-    Supports filtering based on exact matches or regular expressions, allowing for flexible text-based filtering.
-    Interacts with Select2 "tag" system to allow partial matches and multiple values to be filtered on a single field.
-    Queries are built using Django's Q objects, allowing for complex filtering logic to be constructed and applied to the database query.
+    Matches rows whose field equals any of the exact values, or contains (case-insensitively) any of the
+    contains values. The two lists correspond to the "in" and "contains" keys of the JSON filter the client
+    sends (exact values are chosen Select2 options, contains values are typed-in Select2 tags), and are used
+    as given: no regex parsing or escaping is involved.
     """
 
-    def __init__(self, db_field_name, filter_value):
+    def __init__(self, db_field_name, exact=(), contains=()):
         super().__init__(db_field_name, 'text')
-        self.tag_filters = []
-        self.standard_filters = []
-
-        filter_value = filter_value.split('|')
-
-        #remove regex anchors added for datatables from filter values
-        for fv in filter_value:
-            if not fv:
-                continue # an empty value (e.g. an empty search string) is not a filter
-            if fv.startswith('('):
-                fv = fv.strip("()")
-            if fv.startswith('^'):
-                fv = fv.strip("^$")
-            if ".*" in fv:
-                self.tag_filters.append(fv)
-            else:
-                fv = fv.replace("\\", "") #Remove escape characters from standard filters (added for regex compatibility with datatables)
-                self.standard_filters.append(fv)
+        self.exact_values = list(exact)
+        self.contains_values = [v for v in contains if v]  # an empty contains term would match every row
 
     def format_query(self):
         """Converts filter values into a Django Q object for querying the database.
 
-        Combines exact-match standard filters and regex tag filters with OR logic,
-        so a row matches if the field equals any standard value OR matches any tag pattern.
+        Combines exact matches and contains matches with OR logic.
         """
         query = Q()
 
-        # Add exact-match values (works for 1 or many; __in ORs them internally)
-        if self.standard_filters:
-            query |= Q(**{f"{self.db_field_name}__in": self.standard_filters})
+        # Exact-match values (works for 1 or many; __in ORs them internally)
+        if self.exact_values:
+            query |= Q(**{f"{self.db_field_name}__in": self.exact_values})
 
-        # Add tag filters (contains-match via regex), ORed with exact matches and each other
-        for tag_filter in self.tag_filters:
-            query |= Q(**{f"{self.db_field_name}__iregex": rf"{tag_filter}"})
+        # Contains matches, ORed with exact matches and each other
+        for value in self.contains_values:
+            query |= Q(**{f"{self.db_field_name}__icontains": value})
 
         return query
 
@@ -194,78 +229,52 @@ class TextFilter(FilterRequirement):
 class NumericRangeFilter(FilterRequirement):
     """Represents a numeric range filter requirement for a specific database field.
 
-    It supports filtering based on minimum and maximum values. Values can be specified as '-Inf' or 'Inf'
-    to represent unbounded ranges, allowing for filtering based on only a minimum or maximum value.
+    It supports filtering based on minimum and maximum values. A bound of None leaves that side of the range open,
+    allowing for filtering based on only a minimum or maximum value.
     """
 
-    def __init__(self, db_field_name, filter_min, filter_max):
+    def __init__(self, db_field_name, filter_min=None, filter_max=None):
         """Initializes a NumericRangeFilter instance with the specified database field name and filter values.
 
         Bounds are inclusive (match ==, >=, <=, not just >/<).
         """
         super().__init__(db_field_name, 'numeric')
 
-        # Bounds must be numeric (or the infinite sentinels) before they reach the ORM
-        for bound, sentinel in ((filter_min, '-Inf'), (filter_max, 'Inf')):
-            if bound == sentinel:
+        # Bounds must be finite numbers before they reach the ORM (bool is an int subclass, so reject it explicitly)
+        for bound in (filter_min, filter_max):
+            if bound is None:
                 continue
-            try:
-                valid = math.isfinite(float(bound))
-            except (TypeError, ValueError):
-                valid = False
-            if not valid:
+            if isinstance(bound, bool) or not isinstance(bound, (int, float)) or not math.isfinite(bound):
                 raise FilterError(f"Invalid numeric bound '{bound}' for field '{db_field_name}'.")
 
-        # Both bounds unbound: no filter needed
-        if filter_min == '-Inf' and filter_max == 'Inf':
-            self.filter_values = {}
-            self.filter_action = 'none'
-        # Both bounds specified: between (inclusive on both ends)
-        elif filter_min != '-Inf' and filter_max != 'Inf':
-            self.filter_values = {'min': filter_min, 'max': filter_max}
-            self.filter_action = 'between'
-        # Only min bound: greater-than-or-equal
-        elif filter_min != '-Inf':
-            self.filter_values = {'min': filter_min}
-            self.filter_action = 'gte'
-        # Only max bound: less-than-or-equal
-        elif filter_max != 'Inf':
-            self.filter_values = {'max': filter_max}
-            self.filter_action = 'lte'
+        self.filter_values = {key: bound for key, bound in (('min', filter_min), ('max', filter_max)) if bound is not None}
 
     def format_query(self):
         """Converts filter values into a Django Q object for querying the database.
 
-        Returns an empty Q() if no bounds are set (both infinite).
+        Returns an empty Q() if no bounds are set.
         """
-        if self.filter_action == 'none':
-            # No filter needed; both bounds are infinite
-            return Q()
-        elif self.filter_action == 'between':
-            # Both min and max: use >= and <= (inclusive)
-            return (Q(**{f"{self.db_field_name}__gte": self.filter_values.get('min')}) &
-                    Q(**{f"{self.db_field_name}__lte": self.filter_values.get('max')}))
-        else:
-            # Min-only (gte) or max-only (lte)
-            comp = 'min' if self.filter_action == 'gte' else 'max'
-            return Q(**{f"{self.db_field_name}__{self.filter_action}": self.filter_values[comp]})
+        query = Q()
+        if 'min' in self.filter_values:
+            query &= Q(**{f"{self.db_field_name}__gte": self.filter_values['min']})
+        if 'max' in self.filter_values:
+            query &= Q(**{f"{self.db_field_name}__lte": self.filter_values['max']})
+        return query
 
 class BooleanFilter(FilterRequirement):
     """Represents a boolean filter requirement for a specific database field.
 
-    It supports filtering based on a boolean value.
+    Matches a single boolean value, or any of a collection of them (an empty collection matches no rows).
     """
 
     def __init__(self, db_field_name, filter_value):
-        """Initializes a BooleanFilter instance with the specified database field name and filter values."""
+        """Initializes a BooleanFilter instance with the specified database field name and a boolean or collection of booleans."""
         super().__init__(db_field_name, 'boolean')
 
-        self.filter_values = filter_value
-        self.filter_action = 'equals'
+        self.filter_values = filter_value if isinstance(filter_value, bool) else sorted(set(filter_value))
 
     def format_query(self):
         """Converts filter values into a Django Q object for querying the database"""
-        if(self.filter_action == 'equals'):
+        if isinstance(self.filter_values, bool):
             return Q(**{f"{self.db_field_name}": self.filter_values})
-        else:
-            raise ValueError(f"Invalid filter action for BooleanFilter: {self.filter_action}")
+        return Q(**{f"{self.db_field_name}__in": self.filter_values})
