@@ -1,39 +1,34 @@
 from django.conf.urls import url
-from django.views.generic import TemplateView
-from table_provider.views import GpcrStructureStatisticsSummaryTable, PdbStructureSummaryTable, ConfigurationFactoryView
 from django.views.decorators.cache import cache_page
+from table_provider.views import GpcrStructureStatisticsSummaryTable, PdbStructureSummaryTable, ConfigurationFactoryView
+
+
+def datatable_urls(path, view_class, name, cached_path=None):
+    """URL patterns for every endpoint of a DataTablesView table, rooted at `path`.
+
+    path/                         rows (non-cached, for server-side processing)
+    cached_path/                  rows (cached, for client-side processing), if given
+    path/options/<column>         distinct values of a column (select filters), or checkbox rows for "checkbox"
+    path/range/<column>           min/max of a numeric column
+    path/countdistinct            distinct value counts per column
+    """
+    path = path.strip('/')
+    patterns = [url(r'^%s/?$' % path, view_class.as_view(), name=name)]
+    if cached_path:
+        patterns.append(url(r'^%s/?$' % cached_path.strip('/'), cache_page(60 * 60 * 24)(view_class.as_view()), name=name + '_cached'))
+    patterns += [
+        url(r'^%s/options/(?P<column>[^/]+)/?$' % path, view_class.as_view(action='options'), name=name + '_options'),
+        url(r'^%s/range/(?P<column>[^/]+)/?$' % path, view_class.as_view(action='range'), name=name + '_range'),
+        url(r'^%s/countdistinct/?$' % path, view_class.as_view(action='countdistinct'), name=name + '_count_distinct'),
+    ]
+    return patterns
+
 
 urlpatterns = [
-    ###################################
-    # GPCR Structure Statistics Table #
-    ###################################
-    
-    #DataTables/TableManager data source - Non-cached URL for server-side processing
-    url(r'^structure_statistics_table/gpcr/?$', (GpcrStructureStatisticsSummaryTable.as_view()), name='structure_statistics_table'),
-    #DataTables/TableManager data source - Cached URL for client side processing
-    url(r'^structure_statistics_table_cached/gpcr/?$', cache_page(60*60*24)(GpcrStructureStatisticsSummaryTable.as_view()), name='structure_statistics_table_cached'),  
-
-    #AJAX source for dropdown select options for filtering various columns in the GPCR Structure Statistics Table
-    url(r'^structure_statistics_table/gpcr/options/(?P<column>[^/]+)/?$', (GpcrStructureStatisticsSummaryTable.get_select_options), name='structure_statistics_table_options'),
-
-    ##########################
-    # PDB Structure Table    #
-    ##########################
-
-    #DataTables/TableManager data source - Non-cached URL for server-side processing
-    url(r'^pdb_data_table/?$', (PdbStructureSummaryTable.as_view()), name='pdb_structure_table'),
-    #DataTables/TableManager data source - Cached URL for client side processing
-    url(r'^pdb_data_table_cached/?$', cache_page(60*60*24)(PdbStructureSummaryTable.as_view()), name='pdb_structure_table_cached'),
-
-    #AJAX source for dropdown select options for filtering various columns in the PDB Structure Table
-    url(r'^pdb_data_table/options/(?P<column>[^/]+)/?$', (PdbStructureSummaryTable.get_select_options), name='pdb_structure_table_options'),
-
-    #AJAX request for numeric range (min, max) of data for a given column in the PDB Structure Table
-    url(r'^pdb_data_table/range/(?P<column>[^/]+)/?$', (PdbStructureSummaryTable.get_numeric_range), name='pdb_structure_table_options'),
-
-    #AJAX request for counts of distinct values for all columns in the PDB Structure Table 
-    url(r'^pdb_data_table/countdistinct/?$', (PdbStructureSummaryTable.get_count_distinct_values), name='pdb_structure_table_count_distinct'),
-
+    *datatable_urls('structure_statistics_table/gpcr', GpcrStructureStatisticsSummaryTable, 'structure_statistics_table',
+                    cached_path='structure_statistics_table_cached/gpcr'),
+    *datatable_urls('pdb_data_table', PdbStructureSummaryTable, 'pdb_structure_table',
+                    cached_path='pdb_data_table_cached'),
 
     ######################################
     # TableManager configuration factory #

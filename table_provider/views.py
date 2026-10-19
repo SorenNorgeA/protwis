@@ -12,11 +12,9 @@ from rest_framework.pagination import LimitOffsetPagination
 #Table provider imports
 from table_provider.configuration_provider.configuration_factory import ColumnConfigurationFactory, DataTablesConfigurationFactory
 from table_provider.models import GpcrStructureStatisticsTable, PdbTable
-from table_provider.serializers import GpcrStatisticsSummarySerializer, PdbStructureCheckboxSerializer, PdbStructureSummarySerializer
+from table_provider.serializers import GpcrStatisticsSummarySerializer, PdbStructureSummarySerializer
 from table_provider.serverside.filters import FilterSet, FilterError, TextFilter, BooleanFilter
 from table_provider.serverside.querystringprocessing import DatatablesQueryStringProcessor, QueryStringProcessingError
-from structure.tables.structure_coverage_statistics_query import GpcrStructureCoverageStatisticsQuery
-from contactnetwork.tables.pdb_table_query import PdbTableDataSource
 
 #Pagination handler for dataTables server side processing
 class DataTablesLimitOffsetPagination(LimitOffsetPagination):
@@ -48,176 +46,130 @@ def _parse_draw(url_params):
     except (TypeError, ValueError):
         raise ParseError("Invalid draw parameter: expected an integer")
 
-class GpcrStructureStatisticsSummaryTable(generics.ListAPIView):
-    """API endpoint for summary statistics for GPCR entries"""
+class DataTablesView(generics.ListAPIView):
+    """Generic DataTables / TableManager data source for a flat table model.
 
-    #############
-    # API setup #
-    #############
+    Subclasses set `model` and `serializer_class` (a DataTablesSerializerMixin serializer), and may set `checkbox_fields`
+    and override `scope_queryset`. The same class serves every endpoint of a table; `as_view(action=...)` selects which one
+    (see `datatable_urls` in urls.py):
+      list          - table rows (DataTables server-side format when `draw` is sent, otherwise {"data": [...]})
+      options       - distinct values of a column, or the checkbox rows for the pseudo column "checkbox"
+      range         - min/max of a numeric column
+      countdistinct - distinct value counts per column, for the scoped table and for the filtered table
+    """
 
     schema = None
-    serializer_class = GpcrStatisticsSummarySerializer
     pagination_class = DataTablesLimitOffsetPagination
 
+    model = None
+    checkbox_fields = ()  # model fields the serializer's checkbox column reads, to avoid loading whole rows
+    action = 'list'
+
+    def scope_queryset(self, request):
+        """Rows this endpoint may expose before any user filters apply (e.g. restricted by request parameters)."""
+        return self.model.objects.all()
+
     def get_queryset(self):
+        return apply_filterset(self.scope_queryset(self.request), FilterSet(self.request, self.serializer_class))
+
+    def get(self, request, *args, **kwargs):
+        handlers = {
+            'list': self.list,
+            'options': self.options,
+            'range': self.numeric_range,
+            'countdistinct': self.count_distinct,
+        }
         try:
-            filters = FilterSet(self.request, GpcrStatisticsSummarySerializer)
-        except FilterError as e:
-            raise ParseError(str(e))
-        queryset = self.statistics_table_fetch(filters)
-        return queryset
-
-    def list(self, request, *args, **kwargs):
-
-        unfilteredCount = GpcrStructureStatisticsTable.objects.count()
-
-        try:
-            url_params = DatatablesQueryStringProcessor(self.request).query_set
-        except QueryStringProcessingError as e:
+            return handlers[self.action](request, *args, **kwargs)
+        except (FilterError, QueryStringProcessingError) as e:
             return JsonResponse({'error': str(e)}, status=400)
 
+    def list(self, request, *args, **kwargs):
+        url_params = DatatablesQueryStringProcessor(request).query_set
         queryset = self.get_queryset()
 
-        # server side datatables processing response format
-        if 'draw' in url_params:
+        if 'draw' not in url_params:
+            # Client side processing. Wrapped in "data" for consistency with the server side format.
+            return Response({"data": self.get_serializer(queryset, many=True).data})
 
-            response = {}
+        page = self.paginate_queryset(queryset)
+        rows = page if page is not None else queryset
+        return JsonResponse({
+            "draw": _parse_draw(url_params),
+            "recordsTotal": self.scope_queryset(request).count(),
+            "recordsFiltered": queryset.count(),
+            "data": self.get_serializer(rows, many=True).data,
+        })
 
-            filteredCount = queryset.count()
-
-            page = self.paginate_queryset(queryset)
-            rows = page if page is not None else queryset
-
-            serializer = self.get_serializer(rows, many=True)
-
-            response["draw"] = _parse_draw(url_params)
-            response["recordsTotal"] = unfilteredCount
-            response["recordsFiltered"] = filteredCount
-            response["data"] = serializer.data
-
-            return JsonResponse(response)
-
-        else:
-            # client side datatables processing response format
-            serializer = self.get_serializer(queryset, many=True)
-            # for consistency with server side processing response format,
-            # wrap data in "data" key, even though client side processing doesn't require this
-            response = {}
-            response["data"] = serializer.data
-            return Response(response)
-
-    def statistics_table_fetch(self, filters):
-
-        return apply_filterset(GpcrStructureStatisticsTable.objects.all(), filters)
-
-    @staticmethod
-    def get_select_options(request, column):
-        # Only columns the serializer exposes may be queried; map them to their database column
-        sources = GpcrStatisticsSummarySerializer.source_mapping()
+    def _source_column(self, column):
+        """Database column behind a serializer column; only columns the serializer exposes may be queried."""
+        sources = self.serializer_class.source_mapping()
         if column not in sources:
-            return JsonResponse({'error': f'Invalid column requested: {column}'}, status=400)
-        column = sources[column]
+            raise FilterError(f'Invalid column requested: {column}')
+        return sources[column]
+
+    def options(self, request, column):
+        source = self._source_column(column)
+        filtered = self.get_queryset()
+
+        if column == "checkbox":
+            # Only the checkbox column is serialized, so any serializer declaring a `checkbox` field supports this
+            rows = filtered.only(*self.checkbox_fields) if self.checkbox_fields else filtered
+            return JsonResponse(self.get_serializer().serialize_column('checkbox', rows), safe=False)
 
         try:
-            queryset = GpcrStructureStatisticsTable.objects.values_list(column, flat=True).distinct().order_by(column)
+            values = filtered.values_list(source, flat=True).distinct().order_by(source)
+            return JsonResponse(list(values), safe=False)
         except FieldError:
-            return JsonResponse({'error': f'Invalid column requested: {column}'}, status=400)
+            raise FilterError(f'Invalid column requested: {column}')
 
-        return JsonResponse(list(queryset), safe=False)
+    def numeric_range(self, request, column):
+        source = self._source_column(column)
+        if self.serializer_class.column_datatypes()[column] != 'numeric':
+            raise FilterError(f'Column {column} is not a numeric column')
 
-    def build_statistics_summary_table(self):
-        stat_data_model = [ GpcrStructureStatisticsTable(**data_item) for data_item in GpcrStructureCoverageStatisticsQuery() ]
-        GpcrStructureStatisticsTable.objects.bulk_create(stat_data_model, batch_size=10000)
+        # Scoped but not user filtered, so a gradient stays stable while the user filters the table
+        try:
+            bounds = self.scope_queryset(request).aggregate(min=Min(source), max=Max(source))
+        except FieldError:
+            raise FilterError(f'Invalid column requested: {column}')
+        return JsonResponse(bounds, safe=False)
+
+    def count_distinct(self, request):
+        base = self.scope_queryset(request)
+        filtered = self.get_queryset()
+
+        # One aggregate query per queryset, keyed by serializer field name (the table's json_id).
+        # Fields with no database column (e.g. checkbox) are skipped.
+        aggregates = {}
+        for name, source in self.serializer_class.source_mapping().items():
+            try:
+                self.model._meta.get_field(source)
+            except FieldDoesNotExist:
+                continue
+            aggregates[name] = Count(source, distinct=True)
+
+        return JsonResponse({
+            'base': base.aggregate(**aggregates),
+            'filtered': filtered.aggregate(**aggregates),
+        }, safe=False)
 
 
-class PdbStructureSummaryTable(generics.ListAPIView):
+class GpcrStructureStatisticsSummaryTable(DataTablesView):
+    """API endpoint for summary statistics for GPCR entries"""
+
+    model = GpcrStructureStatisticsTable
+    serializer_class = GpcrStatisticsSummarySerializer
+
+
+class PdbStructureSummaryTable(DataTablesView):
     """API endpoint for PDB structure browser data"""
 
-    #############
-    # API setup #
-    #############
-
+    model = PdbTable
     serializer_class = PdbStructureSummarySerializer
-    pagination_class = DataTablesLimitOffsetPagination
+    checkbox_fields = ('id', 'pdb_id')
 
-    def get_queryset(self):
-        """Fetches the PDB structure summary table queryset based on the request parameters and applied filters."""
-        try:
-            filterset = FilterSet(self.request, PdbStructureSummarySerializer)
-        except FilterError as e:
-            raise ParseError(str(e))
-        return apply_filterset(self._scoped_queryset(self.request), filterset)
-
-    def get_queryset_base(self):
-        """Returns the unfiltered queryset count for the PDB structure summary table, based on the effector and exclude_non_interacting parameters."""
-        return self._scoped_queryset(self.request) 
-
-    def list(self, request, *args, **kwargs):
-
-        unfilteredCount = self.get_queryset_base().count()
-
-        try:
-            url_params = DatatablesQueryStringProcessor(self.request).query_set
-        except QueryStringProcessingError as e:
-            return JsonResponse({'error': str(e)}, status=400)
-
-        queryset = self.get_queryset()
-
-        # server side datatables processing response format
-        if 'draw' in url_params:
-
-            response = {}
-
-            filteredCount = queryset.count()
-
-            page = self.paginate_queryset(queryset)
-            rows = page if page is not None else queryset
-
-            serializer = self.get_serializer(rows, many=True)
-
-            response["draw"] = _parse_draw(url_params)
-            response["recordsTotal"] = unfilteredCount
-            response["recordsFiltered"] = filteredCount
-            response["data"] = serializer.data
-
-            return JsonResponse(response)
-
-        else:
-            # client side datatables processing response format
-            serializer = self.get_serializer(queryset, many=True)
-            # for consistency with server side processing response format,
-            # wrap data in "data" key, even though client side processing doesn't require this
-            response = {}
-            response["data"] = serializer.data
-            return Response(response)
-
-    @staticmethod
-    def get_select_options(request, column):
-        """Get the unique values for a given column in the PdbTable."""
-        # Only columns the serializer exposes may be queried; map them to their database column
-        sources = PdbStructureSummarySerializer.source_mapping()
-        if column not in sources:
-            return JsonResponse({'error': f'Invalid column requested: {column}'}, status=400)
-        column = sources[column]
-
-        try:
-            base = PdbStructureSummaryTable._scoped_queryset(request)
-            filtered = apply_filterset(base, FilterSet(request, PdbStructureSummarySerializer))
-            
-            if column == "checkbox":
-                serializer = PdbStructureCheckboxSerializer(filtered.only('id', 'pdb_id'), many=True)
-                return JsonResponse(serializer.data, safe=False)
-            else:
-                queryset = filtered.values_list(column, flat=True).distinct().order_by(column)
-                return JsonResponse(list(queryset), safe=False)
-            
-        except FieldError:
-            return JsonResponse({'error': f'Invalid column requested: {column}'}, status=400)
-        except FilterError as e:
-            return JsonResponse({'error': str(e)}, status=400)
-
-    @staticmethod
-    def _scoped_queryset(request):
+    def scope_queryset(self, request):
         """PdbTable restricted by effector / exclude_non_interacting only (no user filters)."""
         effector = request.GET.get('effector', 'no_effector')
         exclude_non_interacting = request.GET.get('exclude_non_interacting') == 'true'
@@ -226,64 +178,6 @@ class PdbStructureSummaryTable(generics.ListAPIView):
         if exclude_non_interacting:
             queryset = queryset.filter(BooleanFilter('is_complex', True).format_query())
         return queryset
-
-    @staticmethod
-    def get_count_distinct_values(request):
-        base = PdbStructureSummaryTable._scoped_queryset(request)
-        try:
-            filterset = FilterSet(request, PdbStructureSummarySerializer)
-        except FilterError as e:
-            return JsonResponse({'error': str(e)}, status=400)
-        filtered = apply_filterset(base, filterset)
-
-        # One aggregate query per queryset, counting distinct non-null values in the database.
-        # Results are keyed by serializer field name (the table's json_id), skipping fields with no
-        # database column (e.g. checkbox).
-        aggregates = {}
-        for name, source in PdbStructureSummarySerializer.source_mapping().items():
-            try:
-                PdbTable._meta.get_field(source)
-            except FieldDoesNotExist:
-                continue
-            aggregates[name] = Count(source, distinct=True)
-
-        unique_values_by_column = {
-            'base': base.aggregate(**aggregates),
-            'filtered': filtered.aggregate(**aggregates),
-        }
-
-        return JsonResponse(unique_values_by_column, safe=False)
-
-    @staticmethod
-    def get_numeric_range(request, column):
-        # Only columns the serializer exposes may be queried; map them to their database column
-        sources = PdbStructureSummarySerializer.source_mapping()
-        if column not in sources:
-            return JsonResponse({'error': f'Invalid column requested: {column}'}, status=400)
-        is_numeric = PdbStructureSummarySerializer.column_datatypes()[column] == 'numeric'
-        column = sources[column]
-
-        if is_numeric:
-            try:
-                # Scope by effector / exclude_non_interacting like every other PDB endpoint, but not by user filters,
-                # so the gradient stays stable while the user filters the table.
-                queryset = PdbStructureSummaryTable._scoped_queryset(request).aggregate(min=Min(column), max=Max(column))
-            except FieldError:
-                return JsonResponse({'error': f'Invalid column requested: {column}'}, status=400)
-        else:
-            return JsonResponse({'error': f'Column {column} is not a numeric column'}, status=400)
-
-        return JsonResponse(queryset, safe=False)
-
-
-    def build_pdb_structure_table(self):
-        """Builds the PDB structure summary table by fetching data from the PdbTableDataSource and bulk creating PdbTable instances."""        
-        pdb_data_model = []
-        for entries in PdbTableDataSource().values():
-            for entry in entries.values():
-                pdb_data_model.append(PdbTable(**entry))
-
-        PdbTable.objects.bulk_create(pdb_data_model, batch_size=10000)
 
 
 class ConfigurationFactoryView(views.APIView):

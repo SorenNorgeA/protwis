@@ -60,6 +60,11 @@ class DataTablesSerializerMixin:
                     f"{cls.__name__}.{name}: unsupported model field type {type(model_field).__name__}; declare its datatype in Meta.datatypes")
         return result
 
+    def serialize_column(self, name, instances):
+        """Render a single column for many rows, as [{name: value}, ...], without serializing the other columns."""
+        field = self.fields[name]
+        return [{name: field.to_representation(instance)} for instance in instances]
+
     def _web_resource(self, slug):
         # Cached per serializer instance; with many=True one instance serialises every row
         cache = self.__dict__.setdefault('_web_resources', {})
@@ -190,14 +195,6 @@ class PdbStructureSummarySerializer(DataTablesSerializerMixin, serializers.Seria
 
     def get_pdb_id(self, obj):
         return self.weblink_anchor(obj.pdb_id, obj.pdb_id, 'pdb')
-
-
-class PdbStructureCheckboxSerializer(PdbStructureSummarySerializer):
-    """Only emits the checkbox column (id + pdb_id) for each row."""
-
-    def get_fields(self):
-        fields = super().get_fields()
-        return {'checkbox': fields['checkbox']}
 
 
 # Serializer behind each table name used in the configuration files (<table_name>__<variant>.json)
