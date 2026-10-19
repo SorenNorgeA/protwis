@@ -103,6 +103,15 @@
       </div>
     </div>
 
+    {% if structuresim_cross_class %}
+    <!-- Multi-class warning badge (same as the Data mapper cluster's #cluster-multiclass-warning) -->
+    <span id="cluster-multiclass-warning" class="cluster-multiclass-badge"
+          data-toggle="tooltip" data-placement="bottom" data-container="body"
+          title="Receptors from multiple classes detected. The tSNE layout is computed from pairwise sequence or structure similarity scores (per the selected source) across the GPCR superfamily. By the nature of tSNE, the 2D projection preserves local neighbourhood structure but can distort global distances — even within a single class, spatial relationships are a useful approximation rather than a precise measure. Across class boundaries this effect is amplified: inter-class distances can be compressed or stretched unpredictably, so proximity between receptors from different classes should not be taken as evidence of functional or evolutionary relatedness and should be interpreted with particular caution.">
+      <span class="cluster-warn-icon">&#9888;</span> Cross-class caution
+    </span>
+    {% endif %}
+
   </div>
 
   <div id="ssLoaderHost" class="ss-loader-host" aria-hidden="true"></div>
@@ -687,6 +696,16 @@
 .ss-modal .ss-modal-body{ padding: 14px 16px 18px; max-height: 70vh; overflow:auto; }
 .ss-modal footer{ padding: 10px 16px; border-top:1px solid #e6e6e6; text-align:right; }
 
+/* Cross-class caution badge -- copied from static/home/css/data_mapper/core.css (Data mapper cluster) */
+.cluster-multiclass-badge {
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px;
+  background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;
+  font-size: 12px; color: #856404; font-weight: 600; cursor: default;
+  user-select: none; white-space: nowrap; line-height: 1.35; vertical-align: middle;
+}
+.cluster-multiclass-badge .cluster-warn-icon { font-size: 13px; }
+.tooltip.cluster-warning-tooltip .tooltip-inner { max-width: 360px; text-align: left; font-size: 12px; line-height: 1.5; }
+
 </style>
 {% if structuresim_embed_mode %}
 <style>
@@ -712,6 +731,16 @@ body > #content.container > #gpcrdb_alert_placeholder {
 <script src="{% static 'home/js/spectrum_v1_8_1.js' %}"></script>
 <script src="{% static 'home/js/select2_4.1.0-rc.0_full.js' %}"></script>
 <script src="{% static 'home/js/BusyLoad.js' %}"></script>
+<script>
+// Cross-class caution badge tooltip (same setup as mapper_cluster_page.js).
+$(function () {
+  $('#cluster-multiclass-warning').tooltip({
+    template: '<div class="tooltip cluster-warning-tooltip" role="tooltip"><div class="tooltip-arrow"></div><div class="tooltip-inner"></div></div>',
+    placement: 'bottom',
+    container: 'body'
+  });
+});
+</script>
 <script>
 (async function () {
   const isClassScopedVisualization = !!"{{ structuresim_scope_class|escapejs }}";

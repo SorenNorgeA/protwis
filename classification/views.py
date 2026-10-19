@@ -941,31 +941,25 @@ class ClassificationTreeVisualizationDetail(ClassificationVisualizationMixin, Te
             raise Http404(str(e))
 
         class_keys = selection_info["class_keys"]
-        has_cluster = len(class_keys) == 1 and selection_info["receptor_count"] >= 2
+        has_cluster = selection_info["receptor_count"] >= 2
         cluster_url = ""
         if has_cluster:
-            cluster_query = urlencode({
-                "class": class_keys[0],
-                "filter_type": selection_info["type"],
-                "filter_selection": selection_info["selection"],
-                "embed": "1",
-            })
-            cluster_url = "{}?{}".format(reverse("classification-structuresim"), cluster_query)
+            cluster_params = OrderedDict()
+            # Single class: that class's own embedding. Several classes: no `class`, so StructureSim
+            # uses the all-receptor (global) embedding restricted to this selection, and shows the
+            # cross-class caution badge.
+            if len(class_keys) == 1:
+                cluster_params["class"] = class_keys[0]
+            cluster_params["filter_type"] = selection_info["type"]
+            cluster_params["filter_selection"] = selection_info["selection"]
+            cluster_params["embed"] = "1"
+            cluster_url = "{}?{}".format(reverse("classification-structuresim"), urlencode(cluster_params))
 
         cluster_note = ""
         if not has_cluster:
-            if len(class_keys) > 1:
-                cluster_note = (
-                    "Cluster is unavailable because this selection spans multiple GPCR classes."
-                )
-            elif selection_info["receptor_count"] < 2:
-                cluster_note = (
-                    "Cluster is unavailable because this selection has fewer than two receptors."
-                )
-            else:
-                cluster_note = (
-                    "Cluster is unavailable because this selection could not be mapped to a single GPCR class."
-                )
+            cluster_note = (
+                "Cluster is unavailable because this selection has fewer than two receptors."
+            )
 
         tree_view = Classification_tree()
         tree_ctx, tree_sets = tree_view._build_tree_datasets()
@@ -3620,16 +3614,20 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
             },
         }
         # DB-only mode: coordinates must exist; otherwise instruct user to build them.
+        # The structure datasets are only required for the unfiltered all-classes view -- a filtered
+        # (e.g. cross-class modality/chemotype) selection may legitimately have no structures; the
+        # page then just disables those sources.
+        require_structures = (not is_class_scoped) and not filter_entry_names
         missing = []
         if not (payload.get("sequence", {}).get("n") or 0):
             missing.append("sequence")
         if (
-            (not is_class_scoped)
+            require_structures
             and not (payload.get("structure", {}).get("inactive", {}).get("n") or 0)
         ):
             missing.append("structure_inactive")
         if (
-            (not is_class_scoped)
+            require_structures
             and not (payload.get("structure", {}).get("active", {}).get("n") or 0)
         ):
             missing.append("structure_active")
@@ -3720,4 +3718,8 @@ class StructureSim(ClassificationVisualizationMixin, TemplateView):
             else (scope["config"]["title"] if scope["config"] else "All classes")
         )
         ctx["structuresim_embed_mode"] = str(self.request.GET.get("embed") or "").strip().lower() in {"1", "true", "yes"}
+        # All-classes embedding showing receptors from more than one class -> cross-class caution badge.
+        ctx["structuresim_cross_class"] = scope["class_key"] is None and (
+            tree_filter is None or len(tree_filter["class_keys"]) > 1
+        )
         return ctx
