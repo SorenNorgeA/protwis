@@ -198,14 +198,11 @@ class TableManager {
   setupCategoryCountsHeader(categoryCountsHeaderRow){
     this.createCategoryCountHeaderCells(categoryCountsHeaderRow);      
     
-    // Set up an event listener for DataTables search events to update the 
-    // category counts whenever a search is performed on the table.
-    this.dataTableReference.on("search", (e, settings) => { 
-        this._handleColumnUniqueValueCounts(settings);
-    })
+    // Update the category counts whenever the table's search changes
+    this.dataSource.onSearchChange(() => this._handleColumnUniqueValueCounts());
 
     //Trigger initial count update after table is initialized and data is loaded
-    this.dataLoadedCallBacks.push(() => { this._handleColumnUniqueValueCounts(this.dataTableReference.settings()[0]); });    
+    this.dataLoadedCallBacks.push(() => this._handleColumnUniqueValueCounts());
   }
 
   setupDatTablesEventPublishing() {
@@ -228,8 +225,9 @@ class TableManager {
   }
 
   setupCheckboxEventSubscriptions() {
-      // Subscribe to the DataTableSearch event to update the currentSearchCheckBoxes state whenever a search is performed on the table.
-      this.eventPubSub.subscribe("DataTableSearch", () => this.state.masterCheckbox.updateCheckBoxSearchSet());
+      // Update the currentSearchCheckBoxes state whenever the table's search changes. This goes through the data source
+      // rather than the DataTableSearch event, which fires server-side before the new search is sent.
+      this.dataSource.onSearchChange(() => this.state.masterCheckbox.updateCheckBoxSearchSet());
       // Trigger an initial update of the currentSearchCheckBoxes state after the table is initialized and data is loaded, to ensure the state is accurate from the start.
       this.dataLoadedCallBacks.push( () => this.state.masterCheckbox.updateCheckBoxSearchSet());
 
@@ -244,12 +242,12 @@ class TableManager {
       this.eventPubSub.subscribe("checkboxStateChanged", () => this.state.masterCheckbox.synchroniseCheckedState(this));
   }
 
-  async _handleColumnUniqueValueCounts(settings){
+  async _handleColumnUniqueValueCounts(){
     const requestId = ++this.categoryCountRequestId;
     let counts;
 
     try {
-      counts = await this.dataSource.getDistinctCounts(settings);
+      counts = await this.dataSource.getDistinctCounts();
     } catch (error) {
       console.error("Fetching unique value counts failed:", error);
       return;
@@ -984,98 +982,4 @@ class FetchCache {
   }
 }
 
-//------------------------------//
-//                              //
-// DataTables Parameter Builder //
-//                              //
-//------------------------------//
-
-class DataTablesParameterBuilder {
-  /**
-   * Builds server-side processing parameters in DataTables format
-   * @param {Object} settings - DataTables settings object (oSettings or obtained via dataTable.settings())
-   * @param {number} draw - The draw request number
-   * @param {number} start - Pagination: starting row index
-   * @param {number} length - Pagination: number of rows per page
-   * @returns {Object} Object with queryString and params properties
-   */
-  static buildServerSideParams(settings, draw, start, length) {
-    const params = {};
-
-    // Add draw counter
-    params['draw'] = draw;
-
-    // Add pagination
-    params['start'] = start;
-    params['length'] = length;
-
-    // Add global search
-    if (settings.oPreviousSearch && settings.oPreviousSearch.sSearch) {
-      params['search[value]'] = settings.oPreviousSearch.sSearch;
-      params['search[regex]'] = settings.oPreviousSearch.bRegex ? 'true' : 'false';
-    } else {
-      params['search[value]'] = '';
-      params['search[regex]'] = 'false';
-    }
-
-    // Add column definitions and per-column search
-    if (settings.aoColumns) {
-      settings.aoColumns.forEach((column, index) => {
-        // Column metadata
-        params[`columns[${index}][data]`] = column.data || '';
-        params[`columns[${index}][name]`] = column.sName || '';
-        params[`columns[${index}][searchable]`] = column.bSearchable ? 'true' : 'false';
-        params[`columns[${index}][orderable]`] = column.bSortable ? 'true' : 'false';
-
-        // Per-column search (from aoPreSearchCols)
-        const searchCol = settings.aoPreSearchCols && settings.aoPreSearchCols[index]
-          ? settings.aoPreSearchCols[index]
-          : { search: '', regex: false };
-
-        params[`columns[${index}][search][value]`] = searchCol.search || '';
-        params[`columns[${index}][search][regex]`] = searchCol.regex ? 'true' : 'false';
-      });
-    }
-
-    // Add ordering (sort) information
-    if (settings.aaSorting && settings.aaSorting.length > 0) {
-      settings.aaSorting.forEach((sort, index) => {
-        params[`order[${index}][column]`] = sort[0]; // column index
-        params[`order[${index}][dir]`] = sort[1];    // 'asc' or 'desc'
-      });
-    }
-
-    return {
-      params: params,
-      queryString: this.serializeParams(params)
-    };
-  }
-
-  /**
-   * Converts parameter object to URL query string
-   * @param {Object} params - Parameters object
-   * @returns {string} URL-encoded query string (without leading ?)
-   */
-  static serializeParams(params) {
-    return Object.entries(params)
-      .map(([key, value]) => {
-        return `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
-      })
-      .join('&');
-  }
-
-  /**
-   * Converts parameter object to URLSearchParams (modern approach)
-   * @param {Object} params - Parameters object
-   * @returns {URLSearchParams} URLSearchParams object
-   */
-  static toURLSearchParams(params) {
-    const searchParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      searchParams.append(key, value);
-    });
-    return searchParams;
-  }
-}
-
-export { TableManager, DataTablesParameterBuilder };
+export { TableManager };

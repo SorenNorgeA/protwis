@@ -35,38 +35,28 @@ class ClientDataSource extends DataSourceBase {
     return Number.isFinite(min) && Number.isFinite(max) ? { min: min, max: max } : null;
   }
 
+  // DataTables fires search whenever it re-filters the loaded rows, after which the rows({search: "applied"}) used by
+  // the data methods are up to date
+  onSearchChange(handler) {
+    this._dataTable.on("search.dt", () => handler());
+  }
+
   // Computed from the loaded rows each time: cheap, and always reflects global search and fixed search filters
-  async getDistinctCounts(settings) {
+  async getDistinctCounts() {
     const table = this._dataTable
 
-    // Get all rows (base dataset) and filtered rows
-    const baseRows = table.rows().data().toArray()
-    const filteredRows = table.rows({search: 'applied'}).data().toArray()
-
-    // Get column information
-    const columnSettings = table.settings()[0].aoColumns
-
-    // Helper function to count unique values in a column across rows
-    const countUniqueInColumn = (rows, columnInfo) => {
+    // Helper function to count unique values in a column's cell data
+    const countUnique = (values) => {
         const uniqueValues = new Set()
 
-        rows.forEach((rowData) => {
-            let value
-
-            // Handle different data structures: object vs array
-            if (typeof rowData === 'object' && !Array.isArray(rowData)) {
-                value = rowData[columnInfo.data] || rowData[columnInfo.name]
-            } else if (Array.isArray(rowData)) {
-                value = rowData[columnInfo.index] || rowData[columnInfo.columnIndex]
-            }
-
+        values.forEach((value) => {
             // Only count non-empty values
             if (value !== null && value !== undefined && value !== '') {
               // Convert value to string, or JSON string if it's an object
               // (there is a risk of the same objects having different string representation due to property order,
               // but this is a reasonable compromise for counting unique values quicky -- sorting object keys for every cell
               // would be too slow for large datasets)
-                value = typeof value == 'object' && value !== null ?  JSON.stringify(value) : String(value)
+                value = typeof value == 'object' ?  JSON.stringify(value) : String(value)
                 uniqueValues.add(value)
             }
         })
@@ -74,18 +64,19 @@ class ClientDataSource extends DataSourceBase {
         return uniqueValues.size
     }
 
-    // Calculate unique counts for each column in both base and filtered datasets
+    // Calculate unique counts for each column in both base and filtered datasets, keyed by the column's data source
+    // (the json_id for columns generated from the column specifications)
     const uniqueValuesByColumn = {
         'base': {},
         'filtered': {}
     }
 
-    columnSettings.forEach((colInfo) => {
-        const columnName = colInfo.data || colInfo.name || colInfo.title
+    table.columns().every(function () {
+        const columnName = this.dataSrc()
 
-        if (columnName && columnName !== 'checkbox') { // Exclude checkbox columns from unique value counts
-            uniqueValuesByColumn.base[columnName] = countUniqueInColumn(baseRows, colInfo)
-            uniqueValuesByColumn.filtered[columnName] = countUniqueInColumn(filteredRows, colInfo)
+        if ((typeof columnName === 'string' || typeof columnName === 'number') && columnName !== 'checkbox') { // Exclude checkbox columns from unique value counts
+            uniqueValuesByColumn.base[columnName] = countUnique(this.data().toArray())
+            uniqueValuesByColumn.filtered[columnName] = countUnique(table.column(this.index(), { search: 'applied' }).data().toArray())
         }
     })
 

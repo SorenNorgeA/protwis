@@ -1,9 +1,9 @@
 // Data source for DataTables server-side processing.
 // Column data comes from endpoints at fixed extensions of the table's AJAX URL (PATHS), and column filters are sent
-// to the server as JSON in the column search value.
+// to the server as JSON in the column search value. Requests that depend on the current search send the parameters
+// of the table's last data request (dt.ajax.params()), so they match the rows the table shows.
 
 import { DataSourceBase } from "./datasourcebase.js";
-import { DataTablesParameterBuilder } from "../tablemanager.js";
 
 class ServerDataSource extends DataSourceBase {
 
@@ -14,8 +14,29 @@ class ServerDataSource extends DataSourceBase {
     counts: () => `/countdistinct`,
   };
 
+  // Data request parameters that don't affect which rows match the search
+  static NON_SEARCH_PARAMS = /^(draw|start|length|order\[.*)$/;
+
   get isServerSide() {
     return true;
+  }
+
+  get _dataTable() {
+    return this.tableManagerReference.dataTableReference;
+  }
+
+  // DataTables fires search before it builds the request for the new search, so ajax.params() would still hold the
+  // previous request's parameters. preXhr fires once they are set; requests that only page or reorder the rows
+  // (same search query) are skipped.
+  onSearchChange(handler) {
+    let lastSearchQuery = this._currentSearchQuery();
+    this._dataTable.on("preXhr.dt", () => {
+      const searchQuery = this._currentSearchQuery();
+      if (searchQuery !== lastSearchQuery) {
+        lastSearchQuery = searchQuery;
+        handler();
+      }
+    });
   }
 
   async getOptions(column) {
@@ -61,9 +82,9 @@ class ServerDataSource extends DataSourceBase {
     }
   }
 
-  async getDistinctCounts(settings) {
-    // Key on the complete request (endpoint plus every search/order parameter) so any change that alters the counts misses the cache
-    const requestUrl = this._url(ServerDataSource.PATHS.counts(), this._currentSearchQuery(settings));
+  async getDistinctCounts() {
+    // Key on the complete request (endpoint plus every search parameter) so any change that alters the counts misses the cache
+    const requestUrl = this._url(ServerDataSource.PATHS.counts(), this._currentSearchQuery());
     const cacheKey = { type: 'columnCounts', url: requestUrl };
 
     let counts = this.tableManagerReference.cache.get(cacheKey);
@@ -77,8 +98,7 @@ class ServerDataSource extends DataSourceBase {
   async getSearchSetRows(column, signal) {
     // The search set uses the column's options endpoint with the current search parameters: for the checkbox
     // column the server returns each matching row's checkbox data ({json_id: {row_id, data}}) instead of distinct values.
-    const settings = this.tableManagerReference.dataTableReference.settings()[0];
-    const rows = await this._fetchJson(this._url(ServerDataSource.PATHS.options(column.json_id), this._currentSearchQuery(settings)), signal);
+    const rows = await this._fetchJson(this._url(ServerDataSource.PATHS.options(column.json_id), this._currentSearchQuery()), signal);
     return rows.map((row) => row[column.json_id]);
   }
 
@@ -105,13 +125,26 @@ class ServerDataSource extends DataSourceBase {
     return { value: value, regex: false, key: value };
   }
 
-  // The current search, order and column parameters as a query string, without paging (start and length 0)
-  _currentSearchQuery(settings) {
-    return DataTablesParameterBuilder.buildServerSideParams(settings, 0, 0, 0).queryString;
+  // The last data request's parameters as a query string, encoded as DataTables sent them (jQuery's $.param, after any
+  // ajax.data additions such as the PDB table's effector), without the draw, paging and ordering parameters.
+  // Empty before the first request.
+  _currentSearchQuery() {
+    const params = this._dataTable.ajax.params();
+    if (params == null) {
+      return "";
+    }
+
+    const query = new URLSearchParams(typeof params === "string" ? params : $.param(params));
+    for (const key of [...query.keys()]) {
+      if (ServerDataSource.NON_SEARCH_PARAMS.test(key)) {
+        query.delete(key);
+      }
+    }
+    return query.toString();
   }
 
   _url(path, queryString) {
-    const url = this.tableManagerReference.dataTableReference.ajax.url() + path;
+    const url = this._dataTable.ajax.url() + path;
     return queryString ? url + "?" + queryString : url;
   }
 

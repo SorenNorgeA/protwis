@@ -26,8 +26,14 @@ class DataSourceBase {
     throw new Error("getRange not implemented");
   }
 
+  // Calls handler whenever the table's search (global or column) changes, at a point where the data methods already
+  // answer for the new search.
+  onSearchChange(handler) {
+    throw new Error("onSearchChange not implemented");
+  }
+
   // Distinct value counts per column, {base: {json_id: count}, filtered: {json_id: count}}.
-  async getDistinctCounts(settings) {
+  async getDistinctCounts() {
     throw new Error("getDistinctCounts not implemented");
   }
 
