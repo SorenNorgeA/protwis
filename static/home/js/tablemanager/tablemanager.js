@@ -537,7 +537,7 @@ class TableManager {
         this._annotateColumnGroupBoundaries(filterTh, col, this.columns);
 
         if (col.allow_filter) {
-          let filterInterface = col.createFilterInterface(this);
+          let filterInterface = col.type.createFilterInterface(this);
           
           //Fetch any registered injectors for this column's json_id and apply them to the filter interface
           if(col.filterHeaderInjector) {
@@ -737,8 +737,8 @@ class TableManager {
   */
   columnToDataTableColDef(column) {
     const colDef = { data: column.json_id };
-    colDef.render = (data, type, row, meta) => column.dataTableRenderer(data, type, row, meta, this);
-    colDef.createdCell = (cell, cellData, rowData, rowIndex, colIndex) => column.postCreationTasks(cell, cellData, rowData, rowIndex, colIndex, this);
+    colDef.render = (data, type, row, meta) => column.type.dataTableRenderer(data, type, row, meta, this);
+    colDef.createdCell = (cell, cellData, rowData, rowIndex, colIndex) => column.type.postCreationTasks(cell, cellData, rowData, rowIndex, colIndex, this);
     colDef.visible = column.visible !== false; // Default to true if not specified
     colDef.orderable = column.orderable !== false; // Default to true if not specified
     colDef.name = column.json_id; // Set the name property to the json_id for easier reference

@@ -1,10 +1,14 @@
 // This is the base class for all data types used in the table manager.
 // It provides a common interface and default implementations for methods 
 // that can be overridden by subclasses to provide specific functionality for each data type.
+// Each column owns one data type instance (column.type). The column specification is read through this.column;
+// "this" inside a data type is always the data type instance.
 
 class DataTypeBase {
   // class methods
-  constructor() { }
+  constructor(column) {
+    this.column = column;
+  }
   
   createFilterInterface(tableManagerReference) { 
     // This method should be overridden by subclasses to create the appropriate filter interface for the data type.
@@ -37,8 +41,8 @@ class DataTypeBase {
   injectorProcessing(cell, cellData, rowData, rowIndex, colIndex, tableManagerReference) {
     // This method collects the names of any injector functions specified in the cellInjector property of the column definition
     // and calls them to perform any additional processing or modifications on the cell after it has been created and rendered in the DataTable.
-    if (this.cellInjector){
-      let injectorSet = this.cellInjector.split(';');
+    if (this.column.cellInjector){
+      let injectorSet = this.column.cellInjector.split(';');
       for (let injector of injectorSet){
         injector = injector.trim();
         if (!injector) {
@@ -59,18 +63,19 @@ class DataTypeBase {
   }
 
   cellFormatting(cell, cellData, rowData, rowIndex, colIndex, tableManagerReference) {
-    if (this.cssClassCell) {
-        if(this.cssClassCell.includes("_conditional_")){            
+    const column = this.column;
+    if (column.cssClassCell) {
+        if(column.cssClassCell.includes("_conditional_")){
             let conditionSource = null;
-            if (this.cssClassCellConditionSource) { conditionSource = this.cssClassCellConditionSource.split(';'); }
-            
+            if (column.cssClassCellConditionSource) { conditionSource = column.cssClassCellConditionSource.split(';'); }
+
             let settings = null;
-            if (this.cssClassCellConditionRules) { settings = this.parseSettingsList(this.cssClassCellConditionRules); }
-            
-            let styler = tableManagerReference.cellStyleFactory.getStyler(this.cssClassCell, cell, cellData, rowData, rowIndex, colIndex, conditionSource, tableManagerReference, settings, this.json_id);
+            if (column.cssClassCellConditionRules) { settings = this.parseSettingsList(column.cssClassCellConditionRules); }
+
+            let styler = tableManagerReference.cellStyleFactory.getStyler(column.cssClassCell, cell, cellData, rowData, rowIndex, colIndex, conditionSource, tableManagerReference, settings, column.json_id);
             styler.applyStyle();
         } else {
-            cell.classList.add(this.cssClassCell);
+            cell.classList.add(column.cssClassCell);
         }
     }
   }

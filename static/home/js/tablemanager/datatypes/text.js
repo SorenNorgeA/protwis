@@ -10,8 +10,9 @@ class Text extends DataTypeBase {
             return tableManagerReference.nullValuePlaceholder;
         }
         if (type === "display" && data) {
-            if(this.max_display_length && data.length > this.max_display_length){
-                let truncatedData = data.substring(0, this.max_display_length) + "...";
+            const maxDisplayLength = this.column.max_display_length;
+            if(maxDisplayLength && data.length > maxDisplayLength){
+                let truncatedData = data.substring(0, maxDisplayLength) + "...";
                 const span = document.createElement("span");
                 span.setAttribute("title", data);
                 span.textContent = truncatedData;
@@ -23,26 +24,27 @@ class Text extends DataTypeBase {
     } 
 
     createFilterInterface(tableManagerReference) {
-        if (!this.allow_filter) {
+        const column = this.column;
+        if (!column.allow_filter) {
             return null;
         }
 
         let filterInput = document.createElement("input");
-        filterInput.setAttribute("data-field", this.json_id);
+        filterInput.setAttribute("data-field", column.json_id);
         // Prefix id with table id to avoid collisions when multiple tables have the same column on one page
-        filterInput.setAttribute("id", tableManagerReference.tableId + "_" + this.json_id + "_search");
+        filterInput.setAttribute("id", tableManagerReference.tableId + "_" + column.json_id + "_search");
 
         filterInput.classList.add("col-filter");
         filterInput.classList.add("text-filter");
 
-        if (this.cssClassFilterInput) {
-            filterInput.classList.add(this.cssClassFilterInput);
+        if (column.cssClassFilterInput) {
+            filterInput.classList.add(column.cssClassFilterInput);
         }
 
-        filterInput.addEventListener("blur", (e) => this.blurHandler(e, this, tableManagerReference));
+        filterInput.addEventListener("blur", (e) => this.blurHandler(e, tableManagerReference));
         filterInput.addEventListener("keydown", (e) => {
             if (e.key === "Enter") {
-                this.blurHandler(e, this, tableManagerReference);
+                this.blurHandler(e, tableManagerReference);
             }
         });
 
@@ -50,7 +52,7 @@ class Text extends DataTypeBase {
         wrapper.style.cssText = "position:relative;display:inline-flex;align-items:center;gap:2px;";
         wrapper.appendChild(filterInput);
 
-        if (this.show_symbol_popup) {
+        if (column.show_symbol_popup) {
             const { symbolBtn, popup } = this.createSymbolPopup(filterInput);
             wrapper.appendChild(symbolBtn);
             wrapper.appendChild(popup);
@@ -137,8 +139,8 @@ class Text extends DataTypeBase {
         return v == null ? "" : String(v).replace(/<[^>]*>/g, '');
     }
 
-    // column is passed in because, as an arrow function field, this handler's "this" is the data type instance, not the column
-    blurHandler = async (e, column, tableManagerReference) => {
+    async blurHandler(e, tableManagerReference) {
+        const column = this.column;
 
         // If we are in the process of clearing filters, we don't want to trigger a redraw as it will be done after all filters have been cleared.
         if (tableManagerReference.state.clearingFilters) {

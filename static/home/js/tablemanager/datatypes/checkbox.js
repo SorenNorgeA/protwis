@@ -36,18 +36,23 @@ class Checkbox extends DataTypeBase {
             return;
         }
         
-        // Register the default click handler if an alternative handler has not been specified in the eventRegister.
+        // Resolved once per column and kept on the data type, so the column specification is not modified.
+        // Use the column's eventRegister if specified, otherwise register and use the default click handler.
         if (!this.eventRegister)
         {
-            tableManagerReference.eventRegistry.registerEventHandler('defaultCheckboxClick', this.defaultClickHandler);
-            this.eventRegister = {
-                'click': {
-                    handler: 'defaultCheckboxClick',
-                    enableRowClick: true
-                }
-            };
+            if (this.column.eventRegister) {
+                this.eventRegister = this.column.eventRegister;
+            } else {
+                tableManagerReference.eventRegistry.registerEventHandler('defaultCheckboxClick', this.defaultClickHandler.bind(this));
+                this.eventRegister = {
+                    'click': {
+                        handler: 'defaultCheckboxClick',
+                        enableRowClick: true
+                    }
+                };
+            }
         }
-        
+
         const checkbox = cell.querySelector('input[type="checkbox"]');
         let anyRowClick = false;
 
@@ -82,7 +87,7 @@ class Checkbox extends DataTypeBase {
         }
     }
 
-    defaultClickHandler = (e, cellData, tableManagerReference) => {
+    defaultClickHandler(e, cellData, tableManagerReference) {
         const checkbox = e.target;
         const rowId = Number.parseInt(cellData.row_id);
         
@@ -96,7 +101,7 @@ class Checkbox extends DataTypeBase {
     }
     
     createFilterInterface(tableManagerReference) {
-        if (!this.allow_filter) {
+        if (!this.column.allow_filter) {
             return null;
         }
 

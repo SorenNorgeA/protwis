@@ -25,11 +25,12 @@ class DataTypeFactory {
         this._dataTypes[dataTypeName] = dataTypeClass;
     }
 
-    initialiseDataType(Column) {
-        if (!this._dataTypes[Column.data_type]) {
-            throw new Error(`Data type "${Column.data_type}" is not registered.`);
+    // Create the data type instance owned by the column. The instance keeps a reference to the column to read its specification.
+    createDataType(column) {
+        if (!this._dataTypes[column.data_type]) {
+            throw new Error(`Data type "${column.data_type}" is not registered.`);
         }
-        return new this._dataTypes[Column.data_type](Column);
+        return new this._dataTypes[column.data_type](column);
     }
 }
 

@@ -19,7 +19,7 @@ class TextSelect extends Text {
                         }    
     
     createFilterInterface(tableManagerReference) {
-      if (!this.allow_filter) {
+      if (!this.column.allow_filter) {
         return null;
       }
 
@@ -36,8 +36,8 @@ class TextSelect extends Text {
       // Add function to populate select options as a callback to be run once data is loaded into the table,
       // as we need access to the dataset to determine the unique values for the options.
       tableManagerReference.dataLoadedCallBacks.push(async () => {
-        const options = await tableManagerReference.dataSource.getOptions(this);
-        this._populateTextSelectFilterOptionsFromData(options, this.json_id, filterInput);
+        const options = await tableManagerReference.dataSource.getOptions(this.column);
+        this._populateTextSelectFilterOptionsFromData(options, this.column.json_id, filterInput);
       });
 
       // Add select2 initialization as a callback to be run when document is ready to ensure the relevant DOM element is available.
@@ -49,7 +49,7 @@ class TextSelect extends Text {
       // Add event handler registration to callback for when document is ready.
       // Use the element reference directly instead of looking up by id.
       tableManagerReference.documentReadyCallBacks.push(
-        () => $(filterInput).on('change', (e) => this.onSelectChangeHandler(e, this, tableManagerReference))
+        () => $(filterInput).on('change', (e) => this.onSelectChangeHandler(e, tableManagerReference))
       );
 
       return filterInput;
@@ -58,8 +58,7 @@ class TextSelect extends Text {
     //------------------//
     //  Event Handlers  //
     //------------------//
-    // column is passed in because, as an arrow function field, this handler's "this" is the data type instance, not the column
-    onSelectChangeHandler = (e, column, tableManagerReference) => {
+    onSelectChangeHandler(e, tableManagerReference) {
 
       // If we are in the process of clearing filters, we don't want to trigger 
       // a redraw as it will be done after all filters have been cleared.
@@ -81,21 +80,22 @@ class TextSelect extends Text {
         }));
 
         // Redraws only if the filter has changed
-        dataSource.applyColumnFilter(column, { type: "text", terms: terms });
+        dataSource.applyColumnFilter(this.column, { type: "text", terms: terms });
     }
 
     _createInputForSelectFilter(tableManagerReference) {
+        const column = this.column;
         let filterInput = document.createElement("select");
-        filterInput.setAttribute("data-field", this.json_id);
+        filterInput.setAttribute("data-field", column.json_id);
         // Prefix id with table id to avoid collisions when multiple tables have the same column on one page
-        filterInput.setAttribute("id", tableManagerReference.tableId + "_" + this.json_id + "_search");
-        filterInput.setAttribute("name", tableManagerReference.tableId + "_" + this.json_id + "_select");
+        filterInput.setAttribute("id", tableManagerReference.tableId + "_" + column.json_id + "_search");
+        filterInput.setAttribute("name", tableManagerReference.tableId + "_" + column.json_id + "_select");
 
         filterInput.classList.add("col-filter");
         filterInput.classList.add("select-filter");
 
-        if (this.cssClassFilterInput) {
-          filterInput.classList.add(this.cssClassFilterInput);
+        if (column.cssClassFilterInput) {
+          filterInput.classList.add(column.cssClassFilterInput);
         }
 
         return filterInput;

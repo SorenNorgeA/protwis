@@ -15,25 +15,27 @@ class Numeric extends DataTypeBase {
             if (!Number.isFinite(numericValue)) {
                 return data;
             }
-            if (this.precision !== undefined && !isNaN(this.precision)) {
-                return numericValue.toFixed(this.precision);
+            const precision = this.column.precision;
+            if (precision !== undefined && !isNaN(precision)) {
+                return numericValue.toFixed(precision);
             }
             return data;
         }
         // Search, order and type return
         return data;
     }
-    createFilterInterface(tableManagerReference) {    
+    createFilterInterface(tableManagerReference) {
+        const column = this.column;
         let filterInputMin = document.createElement("input");
-        filterInputMin.setAttribute("data-field", this.json_id);
+        filterInputMin.setAttribute("data-field", column.json_id);
         // Prefix id with table id to avoid collisions when multiple tables have the same column on one page
-        filterInputMin.setAttribute("id", tableManagerReference.tableId + "_" + this.json_id + "_search_min");
+        filterInputMin.setAttribute("id", tableManagerReference.tableId + "_" + column.json_id + "_search_min");
         filterInputMin.setAttribute("placeholder", "Min");
 
         let filterInputMax = document.createElement("input");
-        filterInputMax.setAttribute("data-field", this.json_id);
+        filterInputMax.setAttribute("data-field", column.json_id);
         // Prefix id with table id to avoid collisions when multiple tables have the same column on one page
-        filterInputMax.setAttribute("id", tableManagerReference.tableId + "_" + this.json_id + "_search_max");
+        filterInputMax.setAttribute("id", tableManagerReference.tableId + "_" + column.json_id + "_search_max");
         filterInputMax.setAttribute("placeholder", "Max");
 
         filterInputMin.classList.add("col-filter");
@@ -41,9 +43,9 @@ class Numeric extends DataTypeBase {
         filterInputMax.classList.add("col-filter");
         filterInputMax.classList.add("numericrange-filter");
 
-        if (this.cssClassFilterInput) {
-        filterInputMin.classList.add(this.cssClassFilterInput);
-        filterInputMax.classList.add(this.cssClassFilterInput);
+        if (column.cssClassFilterInput) {
+        filterInputMin.classList.add(column.cssClassFilterInput);
+        filterInputMax.classList.add(column.cssClassFilterInput);
         }
 
         // The range is applied through the data source: as a JSON {"min", "max"} search server-side, or a search function
@@ -53,7 +55,7 @@ class Numeric extends DataTypeBase {
             return Number.isFinite(value) ? value : null;
         };
         const filterChangeListener = () => tableManagerReference.dataSource.applyColumnFilter(
-            this,
+            column,
             { type: "range", min: bound(filterInputMin), max: bound(filterInputMax) }
         );
 
