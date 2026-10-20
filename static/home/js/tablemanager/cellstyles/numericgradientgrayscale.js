@@ -1,14 +1,15 @@
 class NumericGradientGrayscale {
-    constructor(cell, cellData, rowData, rowIndex, colIndex, conditionSource, tableManagerReference, settings, columnJsonId) {
+    constructor(cell, cellData, rowData, rowIndex, colIndex, tableManagerReference, settings, columnJsonId) {
         this.columnJsonId = columnJsonId;
         this.cell = cell;
         this.cellData = cellData;
         this.rowData = rowData;
         this.rowIndex = rowIndex;
         this.colIndex = colIndex;
-        this.conditionSource = conditionSource;
         this.tableManagerReference = tableManagerReference;
         this.settings = settings;
+        this.conditionSource = settings.source || columnJsonId; // Default to columnJsonId if source is not provided
+        this.conditionSource = Array.isArray(this.conditionSource) ? this.conditionSource : [this.conditionSource]; // Ensure source is an array
     }
 
     applyStyle() {

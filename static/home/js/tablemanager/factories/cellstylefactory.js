@@ -12,8 +12,6 @@ class CellStyleFactory {
     _cellStylers = {};
 
     constructor() {
-        this.registerCellStyler("_conditional_gradient_greyscale_", NumericGradientGrayscale);
-        this.registerCellStyler("_conditional_categorical_", Categorical);
         this.registerCellStyler("categorical", Categorical);
         this.registerCellStyler("gradient_greyscale", NumericGradientGrayscale);
     }
@@ -33,27 +31,7 @@ class CellStyleFactory {
             throw new Error(`Style provider "${type}" is not registered.`);
         }
 
-        let conditionSource, settings;
-
-        if (type === 'categorical') {
-            conditionSource = styleConfig.source;
-            settings = styleConfig.rules || {};
-        } else if (type === 'gradient_greyscale') {
-            styleConfig.source = styleConfig.source || columnJsonId; // Default to columnJsonId if source is not provided
-            styleConfig.source = Array.isArray(styleConfig.source) ? styleConfig.source : [styleConfig.source]; // Ensure source is an array
-                
-            conditionSource = styleConfig.source || columnJsonId;
-            settings = {
-                shadingMin: styleConfig.shadingMin,
-                shadingMax: styleConfig.shadingMax,
-                valueClampMin: styleConfig.valueClampMin,
-                valueClampMax: styleConfig.valueClampMax
-            };
-        } else {
-            throw new Error(`Unknown cellStyle type: ${type}`);
-        }
-
-        return new this._cellStylers[type](cell, cellData, rowData, rowIndex, colIndex, conditionSource, tableManagerReference, settings, columnJsonId);
+        return new this._cellStylers[type](cell, cellData, rowData, rowIndex, colIndex, tableManagerReference, styleConfig, columnJsonId);
     }
 }
 
