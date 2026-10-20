@@ -25,5 +25,5 @@
   "lengthMenu": [ [10, 25, 50], [10, 25, 50] ],
   "nullValuePlaceholder": "-",
   "showCategoryCounts": true,
-  "buttonFactory": [ "excel_default", "clear_filters_default"]
+  "buttonFactory": [ "excel_default", "clear_filters_default", "closest_to_human_toggle", "best_resolution_toggle" ]
 }

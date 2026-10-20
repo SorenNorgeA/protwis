@@ -200,7 +200,9 @@ class TableManager {
     if (dataTableOptions.buttonFactory) {
       dataTableOptions.buttonFactory.forEach((buttonTypeName, idx) => {
         const button = this.buttonFactory.getButtonType(buttonTypeName, this);
-        button.attach(idx);
+        if (button) {
+          button.attach(idx);
+        }
       })
     };
     }

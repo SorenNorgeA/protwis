@@ -1,5 +1,7 @@
 import { ExcelDefault } from "../buttons/exceldefault.js";
 import { ClearFiltersDefault } from "../buttons/clearfiltersdefault.js";
+import { ShowBestResolution } from "../buttons/showbestresolution.js";
+import { ShowClosestToHuman } from "../buttons/showclosesttohuman.js";
 
 
 // This class is responsible for managing the different data types used in the table manager. 
@@ -14,6 +16,8 @@ class ButtonFactory {
     constructor() {
         this.registerButtonType("excel_default", ExcelDefault);
         this.registerButtonType("clear_filters_default", ClearFiltersDefault);
+        this.registerButtonType("best_resolution_toggle", ShowBestResolution);
+        this.registerButtonType("closest_to_human_toggle", ShowClosestToHuman);
     }
 
     registerButtonType(buttonName, buttonClass) {
@@ -22,7 +26,8 @@ class ButtonFactory {
 
     getButtonType(buttonTypeName, tableManagerReference) {
         if (!this._buttonTypes[buttonTypeName]) {
-            throw new Error(`Button "${buttonTypeName}" is not registered.`);
+            console.error(`Button type "${buttonTypeName}" is not registered with TableManager.`);
+            return undefined;
         }
         return new this._buttonTypes[buttonTypeName](tableManagerReference);
     }
