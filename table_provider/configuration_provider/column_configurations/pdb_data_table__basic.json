@@ -28,9 +28,14 @@
     "data_type": "numeric",
     "precision": 1,
     "allow_filter": true,
-    "cssClassCell": "_conditional_categorical_",
-    "cssClassCellConditionSource": "resolution_best",
-    "cssClassCellConditionRules": "true:bestTrue;false:bestFalse",
+    "cellStyle": {
+      "type": "categorical",
+      "source": "resolution_best",
+      "rules": {
+        "true": "bestTrue",
+        "false": "bestFalse"
+      }
+    },
     "filterHeaderInjector": "show_best_resolution_toggle"
   },
    {
@@ -90,9 +95,14 @@
     "title": "Species",
     "data_type": "textselect",
     "allow_filter": true,
-    "cssClassCell": "_conditional_categorical_",
-    "cssClassCellConditionSource": "closest_to_human",
-    "cssClassCellConditionRules": "true:bestTrue;false:bestFalse",
+    "cellStyle": {
+      "type": "categorical",
+      "source": "closest_to_human",
+      "rules": {
+        "true": "bestTrue",
+        "false": "bestFalse"
+      }
+    },
     "filterHeaderInjector": "show_closest_to_human_toggle"
   },
     {
@@ -133,9 +143,14 @@
     "data_type": "numeric",
     "precision": 0,
     "allow_filter": true,
-    "cssClassCell": "_conditional_gradient_greyscale_",
-    "cssClassCellConditionSource": "tm6_angle",
-    "cssClassCellConditionRules": "shadingMin:0;shadingMax:30;valueClampMax:100;valueClampMin:30"
+    "cellStyle": {
+      "type": "gradient_greyscale",
+      "source": "tm6_angle",
+      "shadingMin": 0,
+      "shadingMax": 30,
+      "valueClampMin": 30,
+      "valueClampMax": 100
+    }
   },
     {
     "column_group": "Signalling Protein",

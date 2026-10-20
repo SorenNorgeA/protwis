@@ -569,9 +569,16 @@ class TableManager {
 
         //Fetch any registered injectors for this column's json_id and apply them to the filter interface
         if(col.filterHeaderInjector) {
-          let filterInjectorFunction = this.filterHeaderInjectors.getInjector(col.filterHeaderInjector);
-          if (filterInjectorFunction) {
-            filterInterface = filterInjectorFunction(!Array.isArray(filterInterface) ? [filterInterface] : filterInterface);
+          const injectorNames = Array.isArray(col.filterHeaderInjector)
+            ? col.filterHeaderInjector
+            : [col.filterHeaderInjector];
+
+          for (const injectorName of injectorNames) {
+            if (!injectorName) continue;
+            let filterInjectorFunction = this.filterHeaderInjectors.getInjector(injectorName);
+            if (filterInjectorFunction) {
+              filterInterface = filterInjectorFunction(!Array.isArray(filterInterface) ? [filterInterface] : filterInterface);
+            }
           }
         }
 

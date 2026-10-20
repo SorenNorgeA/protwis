@@ -51,18 +51,19 @@ class DataTypeBase {
   }
 
   injectorProcessing(cell, cellData, rowData, rowIndex, colIndex, tableManagerReference) {
-    // This method collects the names of any injector functions specified in the cellInjector property of the column definition
+    // This method collects the names of any injector functions specified in the cellInjectors property of the column definition
     // and calls them to perform any additional processing or modifications on the cell after it has been created and rendered in the DataTable.
-    if (this.column.cellInjector){
-      let injectorSet = this.column.cellInjector.split(';');
-      for (let injector of injectorSet){
-        injector = injector.trim();
-        if (!injector) {
+    if (this.column.cellInjectors) {
+      const injectorNames = Array.isArray(this.column.cellInjectors) ? this.column.cellInjectors : [];
+
+      for (let injectorName of injectorNames) {
+        injectorName = injectorName.trim();
+        if (!injectorName) {
           continue;
         }
-        let injectorFunction = tableManagerReference.cellInjectors.getInjector(injector);
-        if (injectorFunction == undefined) {
-          console.error(`Injector function ${injector} not found in cellInjectors registry.`);
+        let injectorFunction = tableManagerReference.cellInjectors.getInjector(injectorName);
+        if (injectorFunction === undefined) {
+          console.error(`Injector function ${injectorName} not found in cellInjectors registry.`);
           continue;
         }
         injectorFunction(cell, cellData, rowData, rowIndex, colIndex, tableManagerReference);
@@ -76,19 +77,23 @@ class DataTypeBase {
 
   cellFormatting(cell, cellData, rowData, rowIndex, colIndex, tableManagerReference) {
     const column = this.column;
-    if (column.cssClassCell) {
-        if(column.cssClassCell.includes("_conditional_")){
-            let conditionSource = null;
-            if (column.cssClassCellConditionSource) { conditionSource = column.cssClassCellConditionSource.split(';'); }
 
-            let settings = null;
-            if (column.cssClassCellConditionRules) { settings = this.parseSettingsList(column.cssClassCellConditionRules); }
-
-            let styler = tableManagerReference.cellStyleFactory.getStyler(column.cssClassCell, cell, cellData, rowData, rowIndex, colIndex, conditionSource, tableManagerReference, settings, column.json_id);
-            styler.applyStyle();
-        } else {
-            cell.classList.add(column.cssClassCell);
-        }
+    // Handle new cellStyle JSON format
+    if (column.cellStyle && typeof column.cellStyle === 'object') {
+      const styler = tableManagerReference.cellStyleFactory.getStyler(
+        column.cellStyle,
+        cell,
+        cellData,
+        rowData,
+        rowIndex,
+        colIndex,
+        tableManagerReference,
+        column.json_id
+      );
+      styler.applyStyle();
+    } else if (column.cssClassCell && typeof column.cssClassCell === 'string') {
+      // Static CSS class
+      cell.classList.add(column.cssClassCell);
     }
   }
 

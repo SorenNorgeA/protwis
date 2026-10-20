@@ -2,10 +2,10 @@ import { NumericGradientGrayscale } from "../cellstyles/numericgradientgrayscale
 import { Categorical } from "../cellstyles/categorical.js";
 
 
-// This class is responsible for managing the different data types used in the table manager. 
-// It facilitate dynamic initialization of data types by calling the constructor for the 
-// data type class associated with the data_type string supplied in the column specification.
-// New data types can be registered with the factory, allowing for easy extension of the table manager's 
+// This class is responsible for managing the different cell style types used in the table manager.
+// It facilitates dynamic initialization of cell stylists by calling the constructor for the
+// cell style class associated with the style type (e.g. 'categorical', 'gradient_greyscale').
+// New cell styles can be registered with the factory, allowing for easy extension of the table manager's
 // capabilities without modifying the core codebase.
 
 class CellStyleFactory {
@@ -14,17 +14,46 @@ class CellStyleFactory {
     constructor() {
         this.registerCellStyler("_conditional_gradient_greyscale_", NumericGradientGrayscale);
         this.registerCellStyler("_conditional_categorical_", Categorical);
+        this.registerCellStyler("categorical", Categorical);
+        this.registerCellStyler("gradient_greyscale", NumericGradientGrayscale);
     }
 
     registerCellStyler(cellStyleName, cellStyleClass) {
         this._cellStylers[cellStyleName] = cellStyleClass;
     }
 
-    getStyler(styleName, cell, cellData, rowData, rowIndex, colIndex, conditionSource, tableManagerReference, settings, columnJsonId) {
-        if (!this._cellStylers[styleName]) {
-            throw new Error(`Style provider "${styleName}" is not registered.`);
+    getStyler(styleConfig, cell, cellData, rowData, rowIndex, colIndex, tableManagerReference, columnJsonId) {
+
+        if (!styleConfig.type) {
+            throw new Error('cellStyle missing required "type" field');
         }
-        return new this._cellStylers[styleName](cell, cellData, rowData, rowIndex, colIndex, conditionSource, tableManagerReference, settings, columnJsonId);
+
+        const { type } = styleConfig;
+        if (!this._cellStylers[type]) {
+            throw new Error(`Style provider "${type}" is not registered.`);
+        }
+
+        let conditionSource, settings;
+
+        if (type === 'categorical') {
+            conditionSource = styleConfig.source;
+            settings = styleConfig.rules || {};
+        } else if (type === 'gradient_greyscale') {
+            styleConfig.source = styleConfig.source || columnJsonId; // Default to columnJsonId if source is not provided
+            styleConfig.source = Array.isArray(styleConfig.source) ? styleConfig.source : [styleConfig.source]; // Ensure source is an array
+                
+            conditionSource = styleConfig.source || columnJsonId;
+            settings = {
+                shadingMin: styleConfig.shadingMin,
+                shadingMax: styleConfig.shadingMax,
+                valueClampMin: styleConfig.valueClampMin,
+                valueClampMax: styleConfig.valueClampMax
+            };
+        } else {
+            throw new Error(`Unknown cellStyle type: ${type}`);
+        }
+
+        return new this._cellStylers[type](cell, cellData, rowData, rowIndex, colIndex, conditionSource, tableManagerReference, settings, columnJsonId);
     }
 }
 
