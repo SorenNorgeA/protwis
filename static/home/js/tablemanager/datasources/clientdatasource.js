@@ -9,12 +9,17 @@ class ClientDataSource extends DataSourceBase {
     return this.tableManagerReference.dataTableReference;
   }
 
+  // The data methods read the rows loaded into the DataTable, so each waits for the initial data first (it may be
+  // called earlier, e.g. by a cell style while the first rows are rendered).
+
   async getOptions(column) {
+    await this.tableManagerReference.ready;
     const data = this._dataTable.column(column.col_idx).data().toArray();
     return Array.from(new Set(data)).sort();
   }
 
   async getRange(sources) {
+    await this.tableManagerReference.ready;
     let min = Number.POSITIVE_INFINITY;
     let max = Number.NEGATIVE_INFINITY;
 
@@ -43,6 +48,7 @@ class ClientDataSource extends DataSourceBase {
 
   // Computed from the loaded rows each time: cheap, and always reflects global search and fixed search filters
   async getDistinctCounts() {
+    await this.tableManagerReference.ready;
     const table = this._dataTable
 
     // Helper function to count unique values in a column's cell data
@@ -84,6 +90,7 @@ class ClientDataSource extends DataSourceBase {
   }
 
   async getSearchSetRows(column, signal) {
+    await this.tableManagerReference.ready;
     return this._dataTable.rows({ search: "applied" }).data().toArray().map((rowData) => rowData[column.json_id]);
   }
 

@@ -40,18 +40,27 @@ class TableManager {
     // FetchCache instance used for caching results of server-side fetches
     this.cache = new FetchCache();
 
-    // Category count header cells ({ col, th }), all updated together by a single handler
+    // Category count labels ({ col, label }), all updated together by a single handler
     this.categoryCountCells = [];
     // Incremented per count request so a superseded (slower) response can't overwrite a newer one
     this.categoryCountRequestId = 0;
 
+    // Header cells ({ col, th }) in the primary, category count and filter rows that carry column group boundary borders.
+    // The borders depend on which columns are visible, so they are recomputed whenever column visibility changes.
+    this.groupBoundaryCells = [];
+
     this.columns = this.initialiseColumns(columnSpecification);
     this.tableId = tableId;
-    
-    //Array to store functions that need to be run after data is loaded into the table, 
-    // e.g. to populate filter interfaces that require access to the dataset to determine their options (e.g. select dropdowns populated with unique values from the dataset)
-    this.dataLoadedCallBacks = []; 
-    this.documentReadyCallBacks = []; 
+
+    // Resolves with the DataTables API once the table is initialised and its initial data loaded; rejects if
+    // initialisation fails. Setup that needs the data (filter options, counts, the checkbox search set) waits for it,
+    // so it never depends on when DataTables fires its init event relative to the TableManager's own setup.
+    this.ready = new Promise((resolve, reject) => {
+      this._resolveReady = resolve;
+      this._rejectReady = reject;
+    });
+    // initialiseDataTable reports failures itself; this stops a rejection nobody awaits from also being reported as unhandled
+    this.ready.catch(() => {});
 
     // A general purpose state object that can be used to store any additional information or state that may be needed by the TableManager or its associated components.
     this.state = {};
@@ -77,11 +86,16 @@ class TableManager {
 
   /**
    * This method initializes the DataTable with the provided options, setting up the table structure, headers, and filters based on the column specifications.
-   * It also handles the execution of callbacks for data loading and document readiness, ensuring that filter interfaces are properly populated and initialized.
+   * Initialisation runs in a fixed order:
+   *  1. The whole table header (super-header, title, category count and filter rows) is built, so DataTables knows every row.
+   *  2. The DataTable is created.
+   *  3. Setup that needs the DataTables API but not the data (data type afterTableCreated hooks, event publishing, buttons).
+   *  4. Once the initial data is loaded (this.ready), setup that needs the data (data type afterDataLoaded hooks,
+   *     category counts, the checkbox search set), followed by the subscriptions that keep it up to date.
    * @param {Object} dataTableOptions -  Object containing the configuration options for initializing the DataTable, including column definitions, server-side processing settings, and any custom callbacks.
    */
-  initialiseDataTable(dataTableOptions) {   
-    
+  initialiseDataTable(dataTableOptions) {
+
     try {
       if (this._columnIndexesAbsent()) {
         // If no columns have col_idx, we assume they are in the correct order and assign col_idx based on their position in the array
@@ -91,8 +105,9 @@ class TableManager {
       }
     } catch (error) {
       alert(
-        "Error in column specifications during DataTable initialisation:" + error.message        
+        "Error in column specifications during DataTable initialisation:" + error.message
       );
+      this._rejectReady(error);
       return;
     }
 
@@ -103,10 +118,13 @@ class TableManager {
     // DataTable is created, as cells can be rendered (and styled) during initialisation
     this.dataSource = dataTableOptions.serverSide === true ? new ServerDataSource(this) : new ClientDataSource(this);
 
-    //Returns [table, tableHead,  primaryHeaderRow, tableBody] HTML object references after adding them to DOM
-    let tableComponents = this.createPrimaryTableStructure();
-
-    this.populateColumnTitleHeaders(tableComponents.primaryHeaderRow);
+    // -- 1. Table structure -- //
+    // Every header row is in place before DataTables reads the header, so it lays them all out: it removes the cells of
+    // hidden columns, adjusts the super-header colspans and keeps the rows aligned when column visibility changes.
+    const tableComponents = this.createTableStructure(dataTableOptions);
+    // Index of the primary header row within the table header; the rows above it are super-headers, the rows below
+    // it (category counts, filters) are controls rather than headings
+    this.titleRowIndex = tableComponents.titleRowIndex;
 
     if (!dataTableOptions.columns) {
       dataTableOptions.columns = this.columns.map((col) =>
@@ -118,35 +136,23 @@ class TableManager {
       );
     }
 
-    // We need to wait until the initial data has been loaded into the table before populating the filter headers, 
-    // as the filter interfaces (e.g. select dropdowns) may need to be populated with unique values from the dataset which are not available until the data is loaded. 
-    const userInitComplete = dataTableOptions.initComplete; // store any initComplete function that was supplied in config, may be undefined
-    dataTableOptions.initComplete = (settings, json) => {
-      this.dataLoadedCallBacks.forEach((callBack) => callBack());
+    // The column titles, ordering and ordering icons belong to the primary header row. Without this DataTables
+    // attaches ordering to every header row and takes the column title from the last non-empty row.
+    if (dataTableOptions.titleRow === undefined) {
+      dataTableOptions.titleRow = tableComponents.titleRowIndex;
+    }
 
-      // invoke original callback, if one was provided
-      if (typeof userInitComplete === "function") {
-        userInitComplete(settings, json);
-      }
-    }    
-
+    // -- 2. DataTable -- //
+    // Any initComplete function supplied in the config is passed through unchanged; the TableManager's own
+    // data-dependent setup waits for this.ready instead.
     this.dataTableReference = $(`#${this.tableId}`).DataTable(dataTableOptions);
 
-    tableComponents = this.createSecondaryTableStructure(tableComponents, dataTableOptions);
-    this.populateSuperHeaders(tableComponents.superHeaderRow);
-    
-    // If the showCategoryCounts option is enabled, create the category count header cells 
-    // and set up an event listener for DataTables search events to update the counts accordingly.
-    if (dataTableOptions.showCategoryCounts) {
-     this.setupCategoryCountsHeader(tableComponents.categoryCountsHeaderRow)
-    }
-        
-    this.populateFilterHeaders(tableComponents.filterHeaderRow);
+    // -- 3. Setup that needs the DataTables API but not the data -- //
+    this.columns.forEach((col) => col.type.afterTableCreated(this));
 
-    // -- Document ready callbacks -- //
-    //We need to wait until the document is fully loaded before initializing any filter interface plugins (e.g. select2) to ensure the relevant DOM elements are available
-    // so we store the initialization of such plugins as callbacks to be run on document ready, and push them into the documentReadyCallBacks array
-    $(() => { this.documentReadyCallBacks.forEach((callBack) => callBack()); }); //jQuery document ready function syntax
+    // Group boundary borders follow the visible columns
+    this._refreshGroupBoundaries();
+    this.dataTableReference.on("column-visibility.dt", () => this._refreshGroupBoundaries());
 
     // Set up event publishing for DataTables events that may be of interest to subscribers, such as search, order, and page events.
     this.setupDatTablesEventPublishing();
@@ -159,6 +165,34 @@ class TableManager {
     this.assignOddEvenRowClasses(dataTableOptions);
 
     this.runButtonFactory(dataTableOptions);
+
+    // -- 4. Setup that needs the data -- //
+    // ready() runs the function straight away if DataTables already finished initialising inside its constructor
+    // (e.g. data supplied inline), otherwise once the initial data has loaded.
+    this.ready.then(() => this._afterDataLoaded(dataTableOptions));
+    this.dataTableReference.ready(() => this._resolveReady(this.dataTableReference));
+  }
+
+  // Runs once the initial data is loaded. Each piece of data-dependent state is computed once for the loaded data and
+  // then kept up to date by a search change subscription, so no change is missed or handled twice.
+  _afterDataLoaded(dataTableOptions) {
+    this.columns.forEach((col) => {
+      Promise.resolve()
+        .then(() => col.type.afterDataLoaded(this))
+        .catch((error) => console.error(`Data loaded setup failed for column ${col.json_id}:`, error));
+    });
+
+    if (dataTableOptions.showCategoryCounts) {
+      this._handleColumnUniqueValueCounts();
+      this.dataSource.onSearchChange(() => this._handleColumnUniqueValueCounts());
+    }
+
+    if (this.state.masterCheckbox) {
+      // Update the currentSearchCheckBoxes state whenever the table's search changes. This goes through the data source
+      // rather than the DataTableSearch event, which fires server-side before the new search is sent.
+      this.state.masterCheckbox.updateCheckBoxSearchSet();
+      this.dataSource.onSearchChange(() => this.state.masterCheckbox.updateCheckBoxSearchSet());
+    }
   }
 
   runButtonFactory(dataTableOptions) {
@@ -167,9 +201,9 @@ class TableManager {
       dataTableOptions.buttonFactory.forEach((buttonTypeName, idx) => {
         const button = this.buttonFactory.getButtonType(buttonTypeName, this);
         button.attach(idx);
-      })  
+      })
     };
-    }  
+    }
 
   assignOddEvenRowClasses(dataTableOptions) {
 
@@ -195,16 +229,6 @@ class TableManager {
     this.dataTableReference.on("draw.dt", row_class_assigner);
   }
 
-  setupCategoryCountsHeader(categoryCountsHeaderRow){
-    this.createCategoryCountHeaderCells(categoryCountsHeaderRow);      
-    
-    // Update the category counts whenever the table's search changes
-    this.dataSource.onSearchChange(() => this._handleColumnUniqueValueCounts());
-
-    //Trigger initial count update after table is initialized and data is loaded
-    this.dataLoadedCallBacks.push(() => this._handleColumnUniqueValueCounts());
-  }
-
   setupDatTablesEventPublishing() {
     //Add event listeners to the DataTable for various events (search, draw, order, page) and publish corresponding events via the eventPubSub instance.
     this.dataTableReference.on("search.dt", (e, settings) => {
@@ -225,11 +249,7 @@ class TableManager {
   }
 
   setupCheckboxEventSubscriptions() {
-      // Update the currentSearchCheckBoxes state whenever the table's search changes. This goes through the data source
-      // rather than the DataTableSearch event, which fires server-side before the new search is sent.
-      this.dataSource.onSearchChange(() => this.state.masterCheckbox.updateCheckBoxSearchSet());
-      // Trigger an initial update of the currentSearchCheckBoxes state after the table is initialized and data is loaded, to ensure the state is accurate from the start.
-      this.dataLoadedCallBacks.push( () => this.state.masterCheckbox.updateCheckBoxSearchSet());
+      // The currentSearchCheckBoxes state needs the data, so it is set up in _afterDataLoaded.
 
       // Subscribe to the DataTableDraw event to synchronise the checkboxes in the rendered rows with the activeCheckBoxes 
       // state whenever the table is redrawn (e.g. after a search, order, or page change).
@@ -262,10 +282,16 @@ class TableManager {
   }
 
 /**
- * Populates the primary table structure by creating and appending the table header, primary header row, and table body elements to the specified HTML table element.
- * @returns - A dictionary-like object containing references to the table, table header, primary header row, and table body HTML elements
+ * Builds the complete table structure before the DataTable is created: the table header with all of its rows
+ * (super-header, primary header, category count and filter rows, in that order) and the table body.
+ * Every header row has one cell per column, hidden columns included, because DataTables lays the header out over all
+ * columns and removes the cells of hidden columns itself. Rows other than the primary header row are marked
+ * data-dt-order="disable" so DataTables adds no ordering icons or listeners to them.
+ * @param {Object} dataTableOptions - The options for the DataTable.
+ * @returns - A dictionary-like object containing references to the table, table header, header rows and table body
+ *   HTML elements, and titleRowIndex, the index of the primary header row within the table header.
  */
-  createPrimaryTableStructure() {
+  createTableStructure(dataTableOptions) {
     let table = document.getElementById(this.tableId);
 
     if(!table) {
@@ -274,14 +300,42 @@ class TableManager {
 
     let tableHead = this._createTableHeaderSection();
 
+    let superHeaderRow = null;
+    if (this._hasSuperHeaders()) {
+      this.superHeaderRowId = this.tableId + "_superHeaders";
+      superHeaderRow = this._createSuperHeaderRow(this.superHeaderRowId);
+      superHeaderRow.dataset.dtOrder = "disable";
+      tableHead.append(superHeaderRow);
+      this.populateSuperHeaders(superHeaderRow);
+    }
+
     let primaryHeaderRow = document.createElement("tr");
     this.primaryHeaderRowId = this.tableId + "_primaryHeaders";
     primaryHeaderRow.id = this.primaryHeaderRowId;
+    const titleRowIndex = tableHead.rows.length;
     tableHead.append(primaryHeaderRow);
+    this.populateColumnTitleHeaders(primaryHeaderRow);
+
+    let categoryCountsHeaderRow = null;
+    if (dataTableOptions.showCategoryCounts) {
+      this.categoryCountHeaderRowId = this.tableId + "_categoryCounts";
+      categoryCountsHeaderRow = this._createCategoryCountHeaderRow(this.categoryCountHeaderRowId);
+      categoryCountsHeaderRow.dataset.dtOrder = "disable";
+      tableHead.append(categoryCountsHeaderRow);
+      this.createCategoryCountHeaderCells(categoryCountsHeaderRow);
+    }
+
+    let filterHeaderRow = null;
+    if (this._hasFilters()) {
+      this.filterHeaderRowId = this.tableId + "_filterHeaders";
+      filterHeaderRow = this._createFilterHeaderRow(this.filterHeaderRowId);
+      filterHeaderRow.dataset.dtOrder = "disable";
+      tableHead.append(filterHeaderRow);
+      this.populateFilterHeaders(filterHeaderRow);
+    }
 
     let tableBody = document.createElement("tbody");
     tableBody.id = this.tableId + "_body";
-    table.prepend(tableBody);
 
     table.prepend(tableHead);
     table.append(tableBody);
@@ -289,44 +343,12 @@ class TableManager {
     return {
       table: table,
       tableHead: tableHead,
-      primaryHeaderRow: primaryHeaderRow,
-      tableBody: tableBody,
-    };
-  }
-
-  /**
-   * Creates the secondary table structure by adding super-headers and filter headers to the table.
-   * @param {Object} TableComponents - A dictionary-like object containing references to the table, table header, primary header row, and table body HTML elements.
-   * @param {Object} dataTableOptions - The options for the DataTable.
-   * @returns {Object} - The updated table components with secondary structure added.
-   */
-  createSecondaryTableStructure(TableComponents, dataTableOptions) {
-    let superHeaderRow = null;
-    if (this._hasSuperHeaders()) {
-      this.superHeaderRowId = this.tableId + "_superHeaders";
-      superHeaderRow = this._createSuperHeaderRow(this.superHeaderRowId);
-      TableComponents.tableHead.prepend(superHeaderRow);
-    }
-
-    let categoryCountsHeaderRow = null;
-    if (dataTableOptions.showCategoryCounts) {
-      this.categoryCountHeaderRowId = this.tableId + "_categoryCounts";
-      categoryCountsHeaderRow = this._createCategoryCountHeaderRow(this.categoryCountHeaderRowId);
-      TableComponents.tableHead.append(categoryCountsHeaderRow);
-    }
-
-    let filterHeaderRow = null;
-    if (this._hasFilters()) {
-      this.filterHeaderRowId = this.tableId + "_filterHeaders";
-      filterHeaderRow = this._createFilterHeaderRow(this.filterHeaderRowId);
-      TableComponents.tableHead.append(filterHeaderRow);
-    }
-
-    return {
-      ...TableComponents,
       superHeaderRow: superHeaderRow,
+      primaryHeaderRow: primaryHeaderRow,
       categoryCountsHeaderRow: categoryCountsHeaderRow,
       filterHeaderRow: filterHeaderRow,
+      tableBody: tableBody,
+      titleRowIndex: titleRowIndex,
     };
   }
 
@@ -344,33 +366,43 @@ class TableManager {
     return tableHead;
   }
 
+  // Registers a header cell whose column group boundary borders are maintained by _refreshGroupBoundaries.
+  _registerGroupBoundaryCell(headerCell, column) {
+    if (column.column_group) {
+      this.groupBoundaryCells.push({ col: column, th: headerCell });
+    }
+  }
+
+  // Recomputes the group boundary borders of every registered header cell from the DataTable's current column visibility.
+  _refreshGroupBoundaries() {
+    const isVisible = (col) => this.dataTableReference.column(col.col_idx).visible();
+    this.groupBoundaryCells.forEach(({ col, th }) => this._annotateColumnGroupBoundaries(th, col, this.columns, isVisible));
+  }
+
   /**
    * Annotates the boundaries of column groups in the table header.
    * @param {HTMLElement} headerCell - The header cell to annotate.
    * @param {Object} currentColumn - The current column being processed.
    * @param {Array} tableColumns - The array of all columns in the table.
+   * @param {Function} isVisible - Returns whether a column is currently visible.
    */
-  _annotateColumnGroupBoundaries(headerCell, currentColumn, tableColumns){
+  _annotateColumnGroupBoundaries(headerCell, currentColumn, tableColumns, isVisible){
     if (currentColumn.column_group) {
       // Find the nearest visible column before this one (skipping hidden columns in the same group)
       let prev_col = tableColumns
-        .filter((c) => c.col_idx < currentColumn.col_idx && c.visible !== false)
+        .filter((c) => c.col_idx < currentColumn.col_idx && isVisible(c))
         .sort((a, b) => b.col_idx - a.col_idx)[0];
 
       // Find the nearest visible column after this one (skipping hidden columns in the same group)
       let next_col = tableColumns
-        .filter((c) => c.col_idx > currentColumn.col_idx && c.visible !== false)
+        .filter((c) => c.col_idx > currentColumn.col_idx && isVisible(c))
         .sort((a, b) => a.col_idx - b.col_idx)[0];
 
       // Left boundary: if no visible previous column or it's in a different group
-      if (!prev_col || prev_col.column_group !== currentColumn.column_group) {
-        headerCell.classList.add("col_group_boundary_left");
-      }
+      headerCell.classList.toggle("col_group_boundary_left", !prev_col || prev_col.column_group !== currentColumn.column_group);
 
       // Right boundary: if no visible next column or it's in a different group
-      if (!next_col || next_col.column_group !== currentColumn.column_group) {
-        headerCell.classList.add("col_group_boundary_right");
-      }
+      headerCell.classList.toggle("col_group_boundary_right", !next_col || next_col.column_group !== currentColumn.column_group);
     }
   }
 
@@ -437,9 +469,11 @@ class TableManager {
   }
 
   /**
-   * Computes the required colspan values for super-headers based on the column_group properties of the column specifications
-   * @param {Array} columnsSpecifications 
-   * @returns - An array of { name, colspan } objects in col_idx order, e.g. [{ name: 'Classification', colspan: 5 }, { name: 'State', colspan: 3 }, ...] 
+   * Computes the required colspan values for super-headers based on the column_group properties of the column specifications.
+   * Colspans count every column, hidden ones included: DataTables lays the header out over all columns and shrinks the
+   * colspans (or removes the cell of an entirely hidden group) to match the visible columns itself.
+   * @param {Array} columnsSpecifications
+   * @returns - An array of { name, colspan } objects in col_idx order, e.g. [{ name: 'Classification', colspan: 5 }, { name: 'State', colspan: 3 }, ...]
    */
   _getSuperHeaderStructure(columnsSpecifications) {
     try {
@@ -457,17 +491,13 @@ class TableManager {
     for (const col of columnsSpecifications) {
       const last = groups[groups.length - 1];
       if (last && last.name === col.column_group) {
-        if (col.visible !== false) {
-          last.colspan++;
-        }
+        last.colspan++;
       } else {
-        // Start a new group. Count only if the first column is visible; otherwise start at 0.
-        groups.push({ name: col.column_group, colspan: col.visible !== false ? 1 : 0 });
+        groups.push({ name: col.column_group, colspan: 1 });
       }
     }
 
-    // Drop groups with colspan 0 (all columns hidden)
-    return groups.filter(g => g.colspan > 0);
+    return groups;
   }
 
   //-------------------/
@@ -496,8 +526,8 @@ class TableManager {
       } else {
         th.classList.add("primary_header_cell");
       }
-      
-      this._annotateColumnGroupBoundaries(th, col, this.columns);
+
+      this._registerGroupBoundaryCell(th, col);
 
       primaryHeaderRow.append(th);
     });
@@ -519,43 +549,42 @@ class TableManager {
 
   /**
    * Populates the filter header row with filter interface elements for each column that allows filtering.
+   * Hidden columns get a cell (and filter interface) too; DataTables shows it when the column is shown.
    * @param {HTMLElement} filterHeaderRow - The <tr> element representing the filter header row.
    */
   populateFilterHeaders(filterHeaderRow) {
     this.columns.forEach((col) => {
-      if (col.visible !== false) {
-        const filterTh = document.createElement("th");
+      const filterTh = document.createElement("th");
 
-        if (col.cssClassFilterCell) {
-          filterTh.classList.add(col.cssClassFilterCell);
-        } else {
-          filterTh.classList.add("filter_header_cell");
-        }
-
-        this._annotateColumnGroupBoundaries(filterTh, col, this.columns);
-
-        if (col.allow_filter) {
-          let filterInterface = col.type.createFilterInterface(this);
-          
-          //Fetch any registered injectors for this column's json_id and apply them to the filter interface
-          if(col.filterHeaderInjector) {
-            let filterInjectorFunction = this.filterHeaderInjectors.getInjector(col.filterHeaderInjector);
-            if (filterInjectorFunction) { 
-              filterInterface = filterInjectorFunction(!Array.isArray(filterInterface) ? [filterInterface] : filterInterface);            
-            }
-          }
-          
-          if (filterInterface) {
-            //Add filter <input> elements  to filter header cell
-            if (!Array.isArray(filterInterface)) {
-              filterTh.appendChild(filterInterface);
-            } else {
-              filterInterface.forEach((el) => filterTh.appendChild(el));
-            }
-          }
-        }
-        filterHeaderRow.append(filterTh);
+      if (col.cssClassFilterCell) {
+        filterTh.classList.add(col.cssClassFilterCell);
+      } else {
+        filterTh.classList.add("filter_header_cell");
       }
+
+      this._registerGroupBoundaryCell(filterTh, col);
+
+      if (col.allow_filter) {
+        let filterInterface = col.type.createFilterInterface(this);
+
+        //Fetch any registered injectors for this column's json_id and apply them to the filter interface
+        if(col.filterHeaderInjector) {
+          let filterInjectorFunction = this.filterHeaderInjectors.getInjector(col.filterHeaderInjector);
+          if (filterInjectorFunction) {
+            filterInterface = filterInjectorFunction(!Array.isArray(filterInterface) ? [filterInterface] : filterInterface);
+          }
+        }
+
+        if (filterInterface) {
+          //Add filter <input> elements  to filter header cell
+          if (!Array.isArray(filterInterface)) {
+            filterTh.appendChild(filterInterface);
+          } else {
+            filterInterface.forEach((el) => filterTh.appendChild(el));
+          }
+        }
+      }
+      filterHeaderRow.append(filterTh);
     });
   }
 
@@ -575,33 +604,36 @@ class TableManager {
   }
   
   /**
-   * Populates the category count header row with category count cells.
+   * Populates the category count header row with category count cells, one per column (hidden columns included).
    * @param {HTMLElement} categoryCountHeaderRow - The <tr> element representing the category count header row.
    */
   createCategoryCountHeaderCells(categoryCountHeaderRow) {
     this.columns.forEach((col) => {
-      if (col.visible !== false) {
-        const categoryCountTh = document.createElement("th");
-        categoryCountTh.id = "th_categoryCount_" + col.json_id;
+      const categoryCountTh = document.createElement("th");
+      categoryCountTh.id = "th_categoryCount_" + col.json_id;
 
-        if (col.cssClassHeaderCell) {
-          categoryCountTh.classList.add(col.cssClassHeaderCell);
-        } else {
-          categoryCountTh.classList.add("primary_header_cell");
-        }
-
-        this._annotateColumnGroupBoundaries(categoryCountTh, col, this.columns);
-        
-        categoryCountHeaderRow.append(categoryCountTh);
-
-        // Register the cell so that _updateCategoryCountCells can update every count in one pass
-        this.categoryCountCells.push({ col: col, th: categoryCountTh });
+      if (col.cssClassHeaderCell) {
+        categoryCountTh.classList.add(col.cssClassHeaderCell);
+      } else {
+        categoryCountTh.classList.add("primary_header_cell");
       }
+
+      this._registerGroupBoundaryCell(categoryCountTh, col);
+
+      // The count is written to its own element: DataTables wraps the cell's contents in its own markup, which
+      // setting the cell's text would remove
+      const countLabel = document.createElement("span");
+      categoryCountTh.append(countLabel);
+
+      categoryCountHeaderRow.append(categoryCountTh);
+
+      // Register the label so that _updateCategoryCountCells can update every count in one pass
+      this.categoryCountCells.push({ col: col, label: countLabel });
     });
   }
 
   _updateCategoryCountCells(counts) {
-    for (const { col, th } of this.categoryCountCells) {
+    for (const { col, label } of this.categoryCountCells) {
       try
       {
         if(counts['base'][col.json_id])
@@ -609,7 +641,7 @@ class TableManager {
           let baseCount = counts['base'][col.json_id]
           let filterCount = counts['filtered'][col.json_id] || 0; // Default to 0 if undefined (i.e., no rows match the filter)
 
-          th.textContent = filterCount + "/" + baseCount;
+          label.textContent = filterCount + "/" + baseCount;
         }
       } catch {
         console.error("Updating unique value counts failed for column:" + col.json_id)
@@ -735,6 +767,12 @@ class TableManager {
   */
   columnToDataTableColDef(column) {
     const colDef = { data: column.json_id };
+    // DataTables writes the title into the title row cell as HTML, so it is escaped. Without a title DataTables takes
+    // it from the first single-column header cell from the top, which can be a one-column super-header group.
+    // The checkbox column has none, as writing one would replace the master checkbox.
+    if (column.data_type !== "checkbox") {
+      colDef.title = $.fn.dataTable.util.escapeHtml(String(column.title ?? ""));
+    }
     colDef.render = (data, type, row, meta) => column.type.dataTableRenderer(data, type, row, meta, this);
     colDef.createdCell = (cell, cellData, rowData, rowIndex, colIndex) => column.type.postCreationTasks(cell, cellData, rowData, rowIndex, colIndex, this);
     colDef.visible = column.visible !== false; // Default to true if not specified

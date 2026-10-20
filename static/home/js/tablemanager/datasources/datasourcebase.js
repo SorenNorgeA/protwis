@@ -2,7 +2,8 @@
 // A data source hides whether the DataTable uses client-side or server-side processing: the TableManager picks
 // ClientDataSource or ServerDataSource once at initialisation, and data types, cell styles and the TableManager
 // itself ask it for column data and apply column filters through it, without checking the processing mode.
-// All data methods return promises in both modes, so callers can always await them.
+// All data methods return promises in both modes, so callers can always await them. They wait for tableManager.ready
+// (the table's initial data) before reading the table, so they can be called at any point after the data source exists.
 
 class DataSourceBase {
 

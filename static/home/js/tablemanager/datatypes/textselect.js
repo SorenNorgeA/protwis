@@ -27,33 +27,32 @@ class TextSelect extends Text {
       //  HTML Elements  //
       //-----------------//
 
-      let filterInput = this._createInputForSelectFilter(tableManagerReference);
+      // Kept for afterTableCreated and afterDataLoaded, which use the element reference directly
+      // instead of looking it up by id, avoiding collisions across tables.
+      this.filterInput = this._createInputForSelectFilter(tableManagerReference);
 
-      //-----------------------------------------------------------------//
-      /// Callbacks for post processing and event handler registration ////
-      //-----------------------------------------------------------------//
-
-      // Add function to populate select options as a callback to be run once data is loaded into the table,
-      // as we need access to the dataset to determine the unique values for the options.
-      tableManagerReference.dataLoadedCallBacks.push(async () => {
-        const options = await tableManagerReference.dataSource.getOptions(this.column);
-        this._populateTextSelectFilterOptionsFromData(options, this.column.json_id, filterInput);
-      });
-
-      // Add select2 initialization as a callback to be run when document is ready to ensure the relevant DOM element is available.
-      // Use the element reference directly instead of looking up by id, avoiding collisions across tables.
-      tableManagerReference.documentReadyCallBacks.push(
-        () => $(filterInput).select2(this.select2options)
-      );
-
-      // Add event handler registration to callback for when document is ready.
-      // Use the element reference directly instead of looking up by id.
-      tableManagerReference.documentReadyCallBacks.push(
-        () => $(filterInput).on('change', (e) => this.onSelectChangeHandler(e, tableManagerReference))
-      );
-
-      return filterInput;
+      return this.filterInput;
   }
+
+    // select2 is initialised once the header, and so the select, is in the DOM
+    afterTableCreated(tableManagerReference) {
+      if (!this.filterInput) {
+        return;
+      }
+
+      $(this.filterInput).select2(this.select2options);
+      $(this.filterInput).on('change', (e) => this.onSelectChangeHandler(e, tableManagerReference));
+    }
+
+    // The options are the column's distinct values, which need the loaded data client-side
+    async afterDataLoaded(tableManagerReference) {
+      if (!this.filterInput) {
+        return;
+      }
+
+      const options = await tableManagerReference.dataSource.getOptions(this.column);
+      this._populateTextSelectFilterOptionsFromData(options, this.column.json_id, this.filterInput);
+    }
 
     //------------------//
     //  Event Handlers  //

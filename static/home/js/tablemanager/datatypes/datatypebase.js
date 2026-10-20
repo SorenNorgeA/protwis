@@ -10,10 +10,22 @@ class DataTypeBase {
     this.column = column;
   }
   
-  createFilterInterface(tableManagerReference) { 
+  createFilterInterface(tableManagerReference) {
     // This method should be overridden by subclasses to create the appropriate filter interface for the data type.
+    // It runs while the table header is built, before the DataTable exists, so it should only create elements.
+    // Work that needs the DataTable or its data belongs in afterTableCreated or afterDataLoaded.
     // Default implementation returns null, indicating no filter interface is provided, resulting in no filter controls being added/built.
     return false;
+  }
+
+  afterTableCreated(tableManagerReference) {
+    // This method can be overridden by subclasses for setup that needs the DataTable but not its data, e.g. initialising
+    // filter interface plugins such as select2. It runs right after the DataTable is created, with the header in the DOM.
+  }
+
+  afterDataLoaded(tableManagerReference) {
+    // This method can be overridden by subclasses for setup that needs the table's initial data, e.g. populating filter
+    // options. It runs once tableManager.ready has resolved; it may return a promise.
   }
   
   dataTableRenderer(data, type, row, meta, tableManagerReference) {

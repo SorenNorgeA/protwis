@@ -39,7 +39,11 @@ class ServerDataSource extends DataSourceBase {
     });
   }
 
+  // The data methods build their URLs from the DataTable's AJAX URL and last request, so each waits for the table's
+  // initial data first (it may be called earlier, e.g. by a cell style while the first rows are rendered).
+
   async getOptions(column) {
+    await this.tableManagerReference.ready;
     const cacheKey = { type: 'columnOptions', columnId: column.json_id };
 
     // Check cache first
@@ -64,6 +68,7 @@ class ServerDataSource extends DataSourceBase {
   // Never rejects: resolves to null if any range request fails.
   async getRange(sources) {
     try {
+      await this.tableManagerReference.ready;
       const ranges = await Promise.all(sources.map((source) => this._fetchJson(this._url(ServerDataSource.PATHS.range(source)))));
 
       let min = Number.POSITIVE_INFINITY;
@@ -83,6 +88,7 @@ class ServerDataSource extends DataSourceBase {
   }
 
   async getDistinctCounts() {
+    await this.tableManagerReference.ready;
     // Key on the complete request (endpoint plus every search parameter) so any change that alters the counts misses the cache
     const requestUrl = this._url(ServerDataSource.PATHS.counts(), this._currentSearchQuery());
     const cacheKey = { type: 'columnCounts', url: requestUrl };
@@ -96,6 +102,7 @@ class ServerDataSource extends DataSourceBase {
   }
 
   async getSearchSetRows(column, signal) {
+    await this.tableManagerReference.ready;
     // The search set uses the column's options endpoint with the current search parameters: for the checkbox
     // column the server returns each matching row's checkbox data ({json_id: {row_id, data}}) instead of distinct values.
     const rows = await this._fetchJson(this._url(ServerDataSource.PATHS.options(column.json_id), this._currentSearchQuery()), signal);
