@@ -19,7 +19,7 @@ class TableManager {
   **/
   constructor(
     columnSpecification,
-    tableId     
+    tableId
   ) {
     this.dataTypeFactory = new DataTypeFactory();
     this.cellStyleFactory = new CellStyleFactory();

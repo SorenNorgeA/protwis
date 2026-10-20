@@ -1013,47 +1013,13 @@
     <!-- <link rel="stylesheet" href="{% static 'home/css/select2.css' %}" type="text/css" /> -->
     <link rel="stylesheet" href="{% static '/home/css/frameworks/select2/4.1.0/select2.min.css' %}" type="text/css" />
     <link rel="stylesheet" href="{% static '/home/css/frameworks/datatables/datatables_bundle.min-2.3.8.css' %}">
+    <link rel="stylesheet" href="{% static 'home/css/tablemanager.css' %}">
 
     <link href="{% static 'home/css/flareplot-contactbrowser.css' %}" rel="stylesheet">
     <link href="{% static 'home/css/flareplot-selectors.css' %}" rel="stylesheet">
     <link href="{% static 'home/css/flareplot-rangeslider.css' %}" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'home/css/spectrum.css' %}" type="text/css" />
     <style>
-        .bestTrue {
-            color: green; 
-        }
-
-        .bestFalse {
-            color: red; 
-        }
-
-        /* TableManager: styling for the header rows added to the table */
-        .super_header_cell {
-            text-align: center !important;
-            border: 1px solid #000000;
-        }
-
-        .primary_header_cell {
-            border: 1px solid #000000;
-        }
-
-        .filter_header_cell {
-            font-weight: bold;
-            border: 1px solid #000000;
-        }
-        
-        .col-filter.numericrange-filter {
-            width: 60px;
-        }
-
-        .col-filter.text-filter {
-            width: 140px;
-        }
-
-        .wide-note-cell, .wide-note-header {
-            min-width: 150px; !important
-            max-width: 250px;
-        }
 
         th.selector, th.pairselector, th.skip {
             height: 1.5em;
@@ -1061,7 +1027,7 @@
         }
 
         th.selector  span.glyphicon, th.pairselector span.glyphicon {
-          padding-right: 0.1em;
+            padding-right: 0.1em;
         }
 
         span.glyphicon.gray {

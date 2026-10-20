@@ -3,6 +3,27 @@
 
 import { DataTypeBase } from "./datatypebase.js";
 
+// Symbol popups close when the user clicks anywhere else. One document listener serves every popup, and popups
+// that have been removed from the page (e.g. a destroyed table) are dropped from the set as they are found.
+const symbolPopups = new Set();
+let outsideClickListenerAdded = false;
+
+function registerPopupForOutsideClick(popup) {
+    if (!outsideClickListenerAdded) {
+        outsideClickListenerAdded = true;
+        document.addEventListener("click", () => {
+            for (const p of symbolPopups) {
+                if (!p.isConnected) {
+                    symbolPopups.delete(p);
+                } else {
+                    p.classList.remove("tm-open");
+                }
+            }
+        }, true);
+    }
+    symbolPopups.add(popup);
+}
+
 class Text extends DataTypeBase {
 
     dataTableRenderer(data, type, row, meta, tableManagerReference) {
@@ -49,7 +70,7 @@ class Text extends DataTypeBase {
         });
 
         const wrapper = document.createElement("div");
-        wrapper.style.cssText = "position:relative;display:inline-flex;align-items:center;gap:2px;";
+        wrapper.classList.add("tm-text-filter-wrapper");
         wrapper.appendChild(filterInput);
 
         if (column.show_symbol_popup) {
@@ -71,32 +92,14 @@ class Text extends DataTypeBase {
         ];
 
         const popup = document.createElement("div");
-        let popupCss = "display:none;"
-        popupCss += "position:absolute;"
-        popupCss += "z-index:9999;"
-        popupCss += "background:#fff;"
-        popupCss += "border:1px solid #ccc;"
-        popupCss += "border-radius:4px;"
-        popupCss += "padding:4px;"
-        popupCss += "box-shadow:0 2px 6px rgba(0,0,0,0.2);"
-        popupCss += "display:none;"
-        popupCss += "grid-template-columns:repeat(3,1fr);"
-        popupCss += "gap:3px;"
-        popup.style.cssText = popupCss;
+        popup.classList.add("tm-symbol-popup");
 
         greekSymbols.forEach(({ label, name }) => {
             const cell = document.createElement("button");
             cell.type = "button";
             cell.title = name;
             cell.textContent = label;
-            let cellCss = "cursor:pointer;"
-            cellCss += "border:1px solid #ddd;"
-            cellCss += "border-radius:3px;"
-            cellCss += "background:#f8f8f8;"
-            cellCss += "padding:2px 5px;"
-            cellCss += "font-size:1em;"
-            cellCss += "line-height:1.4;"
-            cell.style.cssText = cellCss;
+            cell.classList.add("tm-symbol-popup-item");
             cell.addEventListener("mousedown", (e) => {
                 e.preventDefault();
                 filterInput.value += label;
@@ -108,29 +111,14 @@ class Text extends DataTypeBase {
         const symbolBtn = document.createElement("button");
         symbolBtn.type = "button";
         symbolBtn.textContent = "Ω";
-        let symbolBtnCss = "cursor:pointer;"
-        symbolBtnCss += "border:1px solid #ccc;"
-        symbolBtnCss += "border-radius:3px;"
-        symbolBtnCss += "background:#f0f0f0;"
-        symbolBtnCss += "padding:1px 4px;"
-        symbolBtnCss += "font-size:0.8em;"
-        symbolBtnCss += "white-space:nowrap;"
-        symbolBtn.style.cssText = symbolBtnCss;
-
-        let popupVisible = false;
+        symbolBtn.classList.add("tm-symbol-button");
 
         symbolBtn.addEventListener("click", (e) => {
             e.stopPropagation();
-            popupVisible = !popupVisible;
-            popup.style.display = popupVisible ? "grid" : "none";
+            popup.classList.toggle("tm-open");
         });
 
-        document.addEventListener("click", () => {
-            if (popupVisible) {
-                popupVisible = false;
-                popup.style.display = "none";
-            }
-        }, true);
+        registerPopupForOutsideClick(popup);
 
         return { symbolBtn, popup };
     }
