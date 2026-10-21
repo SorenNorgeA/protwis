@@ -378,17 +378,24 @@ class TableManager {
   // Recomputes the group boundary borders of every registered header cell from the DataTable's current column visibility.
   _refreshGroupBoundaries() {
     const isVisible = (col) => this.dataTableReference.column(col.col_idx).visible();
-    this.groupBoundaryCells.forEach(({ col, th }) => this._annotateColumnGroupBoundaries(th, col, this.columns, isVisible));
+    this.groupBoundaryCells.forEach(({ col, th }) => this.annotateColumnGroupBoundaries(th, col, this.columns, isVisible));
+
+    // Body cells on the current page are looked up rather than registered, so paging does not accumulate references to detached cells
+    const dataTable = this.dataTableReference;
+    dataTable.cells({ page: "current" }).nodes().each((node) => {
+      const col = this.columns[dataTable.cell(node).index().column];
+      this.annotateColumnGroupBoundaries(node, col, this.columns, isVisible);
+    });
   }
 
   /**
-   * Annotates the boundaries of column groups in the table header.
-   * @param {HTMLElement} headerCell - The header cell to annotate.
+   * Annotates the boundaries of column groups in the table header and rows.
+   * @param {HTMLElement} Cell - The cell to annotate.
    * @param {Object} currentColumn - The current column being processed.
    * @param {Array} tableColumns - The array of all columns in the table.
    * @param {Function} isVisible - Returns whether a column is currently visible.
    */
-  _annotateColumnGroupBoundaries(headerCell, currentColumn, tableColumns, isVisible){
+  annotateColumnGroupBoundaries(Cell, currentColumn, tableColumns, isVisible){
     if (currentColumn.column_group) {
       // Find the nearest visible column before this one (skipping hidden columns in the same group)
       let prev_col = tableColumns
@@ -401,10 +408,10 @@ class TableManager {
         .sort((a, b) => a.col_idx - b.col_idx)[0];
 
       // Left boundary: if no visible previous column or it's in a different group
-      headerCell.classList.toggle("col_group_boundary_left", !prev_col || prev_col.column_group !== currentColumn.column_group);
+      Cell.classList.toggle("col_group_boundary_left", !prev_col || prev_col.column_group !== currentColumn.column_group);
 
       // Right boundary: if no visible next column or it's in a different group
-      headerCell.classList.toggle("col_group_boundary_right", !next_col || next_col.column_group !== currentColumn.column_group);
+      Cell.classList.toggle("col_group_boundary_right", !next_col || next_col.column_group !== currentColumn.column_group);
     }
   }
 

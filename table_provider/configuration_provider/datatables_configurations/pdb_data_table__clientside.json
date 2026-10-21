@@ -4,10 +4,10 @@
   "deferRender": true,
   "scrollX": true,
   "layout": {
-    "topEnd": null,
+    "topEnd": "pageLength",
    	"topStart": "buttons"
 	},
-  "fixedColumns": { "left": 1 },
+  "fixedColumns": { "left": 2 },
   "ajax": {
     "url": "/table_provider/pdb_data_table_cached",
     "type": "GET",
@@ -22,7 +22,7 @@
 		"name": "uniprot",
 		"dir": "asc"
 	},
-  "lengthMenu": [ [10, 25, 50], [10, 25, 50] ],
+  "lengthMenu": [10, 25, 50, 100] ,
   "nullValuePlaceholder": "-",
   "showCategoryCounts": true,
   "buttons": [],

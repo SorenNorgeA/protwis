@@ -71,6 +71,7 @@
     "column_group": "Receptor",
     "json_id": "receptor_family_short",
     "title": "Receptor Family",
+    "max_display_length": 15,
     "data_type": "textselect",
     "allow_filter": true   
   },
@@ -202,6 +203,7 @@
     "column_group": "Ligand",
     "json_id": "ligand",
     "title": "Ligand",
+    "max_display_length": 15,
     "data_type": "text",
     "allow_filter": true   
   },

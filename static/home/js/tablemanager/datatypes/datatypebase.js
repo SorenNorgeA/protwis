@@ -95,6 +95,12 @@ class DataTypeBase {
       // Static CSS class
       cell.classList.add(column.cssClassCell);
     }
+
+    // Mirror the column group boundary borders of the header onto the body cell.
+    // The DataTable reference is not assigned until the table has been constructed, so fall back to the column's default visibility.
+    const dataTable = tableManagerReference.dataTableReference;
+    const isVisible = (col) => dataTable ? dataTable.column(col.col_idx).visible() : col.visible !== false;
+    tableManagerReference.annotateColumnGroupBoundaries(cell, column, tableManagerReference.columns, isVisible);
   }
 
   parseSettingsList(settingsList){

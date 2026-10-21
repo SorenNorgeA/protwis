@@ -4,23 +4,23 @@
 
 .super_header_cell {
     text-align: center !important;
-    border: 1px solid #000000;
-}
-
-.col_group_boundary_left {
-    border-left: 1px solid #000000;
-}
-
-.col_group_boundary_right {
-    border-right: 1px solid #000000;
+    border: 1px solid #b3b3b3;    
 }
 
 .primary_header_cell {
-    /* Add any specific styling for primary header cells here */
+    border-bottom: 1px solid #b3b3b3;
 }
 
 .filter_header_cell {
-    /* Add any specific styling for filter header cells here */
+    border-bottom: 1px solid #b3b3b3;
+}
+
+.col_group_boundary_left {
+    border-left: 1px solid #b3b3b3;
+}
+
+.col_group_boundary_right {
+    border-right: 1px solid #b3b3b3;
 }
 
 /* ---------------------- */
@@ -42,6 +42,36 @@
 .wide-note-cell, .wide-note-header {
     min-width: 150px !important;
     max-width: 250px;
+}
+
+/* ---------------------------- */
+/* Styling for alternating rows */
+/* ---------------------------- */
+
+:root {
+    /* global scope */
+  --alternating-row-bg-on: rgb(249 251 255);
+  --alternating-row-bg-off: rgb(255 255 255);
+}
+
+table>tbody>tr.odd_row {
+    background-color: var(--alternating-row-bg-on);
+    border-bottom: 1px solid #bdbcbc;
+}
+
+table>tbody>tr.even_row {
+    background-color: var(--alternating-row-bg-off);
+    border-bottom: 1px solid #bdbcbc;
+}
+
+table.dataTable tbody tr.odd_row>.dtfc-fixed-start,table.dataTable tbody tr.odd_row>.dtfc-fixed-end {
+    z-index: 1;
+    background-color: var(--alternating-row-bg-on)
+}
+
+table.dataTable tbody tr.even_row>.dtfc-fixed-start,table.dataTable tbody tr.even_row>.dtfc-fixed-end {
+    z-index: 1;
+    background-color: var(--alternating-row-bg-off)
 }
 
 /* ----------------------------------- */
