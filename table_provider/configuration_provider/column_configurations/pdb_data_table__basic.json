@@ -28,7 +28,7 @@
     "data_type": "numeric",
     "precision": 1,
     "allow_filter": true,
-    "cellStyle": {
+    "cellStyler": {
       "type": "categorical",
       "source": "resolution_best",
       "rules": {
@@ -95,7 +95,7 @@
     "title": "Species",
     "data_type": "textselect",
     "allow_filter": true,
-    "cellStyle": {
+    "cellStyler": {
       "type": "categorical",
       "source": "closest_to_human",
       "rules": {
@@ -143,7 +143,7 @@
     "data_type": "numeric",
     "precision": 0,
     "allow_filter": true,
-    "cellStyle": {
+    "cellStyler": {
       "type": "gradient_greyscale",
       "source": "tm6_angle",
       "shadingMin": 0,

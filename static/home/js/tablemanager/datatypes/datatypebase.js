@@ -78,10 +78,10 @@ class DataTypeBase {
   cellFormatting(cell, cellData, rowData, rowIndex, colIndex, tableManagerReference) {
     const column = this.column;
 
-    // Handle new cellStyle JSON format
-    if (column.cellStyle && typeof column.cellStyle === 'object') {
+    // Handle new cellStyler JSON format
+    if (column.cellStyler && typeof column.cellStyler === 'object') {
       const styler = tableManagerReference.cellStyleFactory.getStyler(
-        column.cellStyle,
+        column.cellStyler,
         cell,
         cellData,
         rowData,
