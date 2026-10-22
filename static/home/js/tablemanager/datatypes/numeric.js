@@ -3,8 +3,24 @@
 
 import { DataTypeBase } from "./datatypebase.js";
 
+/**
+ * Data type for numeric columns. Displays values rounded to the column's precision, and filters by a numeric minimum
+ * and maximum.
+ * @extends DataTypeBase
+ */
 class Numeric extends DataTypeBase {
 
+    /**
+     * Renders numeric values. For the display type, null values show the nullValuePlaceholder, numeric values are
+     * formatted to the column's precision when one is set, and non-numeric values are shown unchanged. Other types
+     * return the raw data, so ordering and filtering use the original values.
+     * @param {*} data - The cell data.
+     * @param {string} type - The DataTables render type: "display", "filter", "sort" or "type".
+     * @param {*} row - The full row data (unused).
+     * @param {Object} meta - The DataTables cell metadata (unused).
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     * @returns {*} The rendered value for the render type.
+     */
     dataTableRenderer(data, type, row, meta, tableManagerReference) {
         if (type === "display" && (data === null || data === undefined)) {
             return tableManagerReference.nullValuePlaceholder;
@@ -24,8 +40,19 @@ class Numeric extends DataTypeBase {
         // Search, order and type return
         return data;
     }
+    /**
+     * Creates the minimum and maximum inputs for a range filter. The range is applied when an input loses focus. An input
+     * that is empty or not a number leaves that bound open, and clearing both removes the filter.
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     * @returns {HTMLInputElement[]} The minimum and maximum inputs, in that order.
+     */
     createFilterInterface(tableManagerReference) {
         const column = this.column;
+        
+        if (!column.allow_filter) {
+            return false;
+        }
+        
         let filterInputMin = document.createElement("input");
         filterInputMin.setAttribute("data-field", column.json_id);
         // Prefix id with table id to avoid collisions when multiple tables have the same column on one page

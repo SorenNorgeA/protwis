@@ -10,9 +10,16 @@ import { Checkbox } from "../datatypes/checkbox.js"
 // New data types can be registered with the factory, allowing for easy extension of the table manager's 
 // capabilities without modifying the core codebase.
 
+/**
+ * Creates data type instances for table columns, based on the column's `data_type`.
+ * Data type classes are kept in a registry keyed by the `data_type` string.
+ */
 class DataTypeFactory {
     _dataTypes = {};
 
+    /**
+     * Registers the built-in data types.
+     */
     constructor() {
         this.registerDataType("text", Text);
         this.registerDataType("numeric", Numeric);
@@ -21,11 +28,21 @@ class DataTypeFactory {
         this.registerDataType("checkbox", Checkbox);
     }
 
+    /**
+     * Registers a data type class so it can be created by {@link DataTypeFactory#createDataType}.
+     * @param {string} dataTypeName - Name used as the `data_type` in the column specification.
+     * @param {Function} dataTypeClass - Data type class to instantiate. It is constructed with the column.
+     */
     registerDataType(dataTypeName, dataTypeClass) {
         this._dataTypes[dataTypeName] = dataTypeClass;
     }
 
-    // Create the data type instance owned by the column. The instance keeps a reference to the column to read its specification.
+    /**
+     * Creates the data type instance owned by the column. The instance keeps a reference to the column to read its specification.
+     * @param {Object} column - Column specification. Its `data_type` selects the data type class.
+     * @returns {Object} The new data type instance.
+     * @throws {Error} If the column's `data_type` is not registered.
+     */
     createDataType(column) {
         if (!this._dataTypes[column.data_type]) {
             throw new Error(`Data type "${column.data_type}" is not registered.`);

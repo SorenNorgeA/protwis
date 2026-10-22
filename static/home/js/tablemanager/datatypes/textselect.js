@@ -7,8 +7,14 @@
 
 import { Text } from "./text.js";
 
+/**
+ * Data type for text columns filtered with a select2 multi-select. The options are the column's values. Typed-in
+ * values are accepted as tags and matched with a contains search. Extends Text for display rendering.
+ * @extends Text
+ */
 class TextSelect extends Text {
 
+    /** select2 configuration, passed to select2 when the filter is initialised. */
     select2options = {
                             multiple: true,
                             closeOnSelect: true, 
@@ -18,9 +24,15 @@ class TextSelect extends Text {
                             allowClear: true 
                         }    
     
+    /**
+     * Creates the select element for the filter. It is turned into a select2 control later, in afterTableCreated.
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     * @returns {HTMLSelectElement|null} The select element, or null if the column does not allow filtering.
+     */
     createFilterInterface(tableManagerReference) {
-      if (!this.column.allow_filter) {
-        return null;
+      const column = this.column;
+      if (!column.allow_filter) {
+        return false;
       }
 
       //-----------------//
@@ -35,6 +47,10 @@ class TextSelect extends Text {
   }
 
     // select2 is initialised once the header, and so the select, is in the DOM
+    /**
+     * Initialises select2 on the filter and listens for changes. Runs once the header is in the DOM.
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     */
     afterTableCreated(tableManagerReference) {
       if (!this.filterInput) {
         return;
@@ -45,6 +61,12 @@ class TextSelect extends Text {
     }
 
     // The options are the column's distinct values, which need the loaded data client-side
+    /**
+     * Fills the filter with the column's distinct values once the table's data has loaded.
+     * @async
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     * @returns {Promise<void>}
+     */
     async afterDataLoaded(tableManagerReference) {
       if (!this.filterInput) {
         return;
@@ -57,6 +79,12 @@ class TextSelect extends Text {
     //------------------//
     //  Event Handlers  //
     //------------------//
+    /**
+     * Applies the selected values as a text filter. Typed-in tags use a contains match, and chosen options match exactly.
+     * Does nothing while filters are being cleared.
+     * @param {Event} e - The select2 change event. Its target is the select element.
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     */
     onSelectChangeHandler(e, tableManagerReference) {
 
       // If we are in the process of clearing filters, we don't want to trigger 
@@ -82,6 +110,11 @@ class TextSelect extends Text {
         dataSource.applyColumnFilter(this.column, { type: "text", terms: terms });
     }
 
+    /**
+     * Creates the select element for the filter, with its id, name and classes.
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     * @returns {HTMLSelectElement} The select element.
+     */
     _createInputForSelectFilter(tableManagerReference) {
         const column = this.column;
         let filterInput = document.createElement("select");
@@ -100,6 +133,11 @@ class TextSelect extends Text {
         return filterInput;
     }
 
+    /**
+     * Converts a value to plain text for an option label. Removes the sub tags and decodes Greek letter entities.
+     * @param {*} value - The value to convert.
+     * @returns {string} The display text, or an empty string if the value is null or undefined.
+     */
     _processHTMLForDisplay(value) {
           if (value === null || value === undefined) return '';
           let text = String(value);
@@ -110,6 +148,11 @@ class TextSelect extends Text {
           return text;
         }
 
+    /**
+     * Replaces Greek letter HTML entities (for example the alpha entity) with the matching Unicode characters.
+     * @param {*} text - The text to decode.
+     * @returns {string} The decoded text, or an empty string if the text is null or undefined.
+     */
     _decodeHTMLEntities(text) {
       if (text === null || text === undefined) return '';
 
@@ -148,6 +191,12 @@ class TextSelect extends Text {
       return decoded;
     }
 
+    /**
+     * Adds an option to the select for each value. Option labels are processed for display, and option values are the raw values.
+     * @param {Array<*>|null|undefined} data - The distinct column values. Logs a warning and adds nothing if empty.
+     * @param {string} ColumnJsonId - The column's json_id, used in the warning message.
+     * @param {HTMLSelectElement} filterInput - The select element to add the options to.
+     */
     _populateTextSelectFilterOptionsFromData(data, ColumnJsonId, filterInput) {
       
       if (!data || data.length === 0) {

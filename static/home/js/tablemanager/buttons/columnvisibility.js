@@ -15,6 +15,11 @@ class ColumnVisibility {
     button_config
     tableManagerReference
 
+    /**
+     * Creates the column visibility (colvis) button configuration, with one toggle per column grouped under its
+     * column_group heading.
+     * @param {Object} tableManagerReference - The TableManager instance that owns the table.
+     */
     constructor(tableManagerReference) {
         this.tableManagerReference = tableManagerReference;
         this.button_config = {
@@ -27,6 +32,11 @@ class ColumnVisibility {
         }
     }
 
+    /**
+     * Adds the column visibility button to the DataTable button bar and binds the popover handler that regroups the
+     * popup's buttons. The handler is bound on document and shared by all tables, so re-binding replaces the previous one.
+     * @param {number} index - Position at which the button is inserted into the button bar.
+     */
     attach(index) {
         this.tableManagerReference.dataTableReference.button().add(index, this.button_config);
         // Buttons fires buttons-popover once a collection is drawn; regroup the popup's buttons into one column per group.
@@ -34,10 +44,12 @@ class ColumnVisibility {
         $(document).off(ColumnVisibility.POPOVER_EVENT).on(ColumnVisibility.POPOVER_EVENT, ColumnVisibility._arrangeGroupColumns);
     }
 
-    // Moves the group headings and column toggles into one column per group. Each heading starts a new column;
-    // any columns without a group before the first heading go in a column of their own.
-    // The popup's buttons are reused on every open, so they are collected from within the menu (which may already hold
-    // the column wrappers from the previous open) rather than from its direct children.
+    /**
+     * Moves the group headings and column toggles into one column per group. Each heading starts a new column;
+     * any columns without a group before the first heading go in a column of their own.
+     * The popup's buttons are reused on every open, so they are collected from within the menu (which may already hold
+     * the column wrappers from the previous open) rather than from its direct children.
+     */
     static _arrangeGroupColumns() {
         document.querySelectorAll(`.dt-button-collection.${ColumnVisibility.LAYOUT_CLASS} > [role="menu"]`).forEach((menu) => {
             const columns = [];
@@ -54,13 +66,19 @@ class ColumnVisibility {
         });
     }
 
-    // Columns the user can toggle: checkbox columns have no title and columns configured as initially hidden are
-    // helper columns (e.g. the flags behind the toggle buttons)
+    /**
+     * Returns the columns the user can toggle. Checkbox columns are excluded because they have no title, and columns
+     * configured as initially hidden are excluded because they are helper columns (e.g. the flags behind the toggle buttons).
+     * @returns {Object[]} The TableManager column definitions that can be toggled.
+     */
     _toggleableColumns() {
         return this.tableManagerReference.columns.filter((col) => col.data_type !== 'checkbox' && col.visible !== false);
     }
 
-    // Groups the toggleable columns by column_group in col_idx order. Columns without a group share a single unnamed group.
+    /**
+     * Groups the toggleable columns by column_group, in col_idx order. Columns without a group share a single unnamed group.
+     * @returns {Map<?string, Object[]>} Map of group name (null for ungrouped columns) to its column definitions.
+     */
     _groupColumns() {
         const groups = new Map();
         this._toggleableColumns().forEach((col) => {
@@ -71,6 +89,11 @@ class ColumnVisibility {
         return groups;
     }
 
+    /**
+     * Builds the buttons shown in the column visibility popup: a heading button for each named group followed by a
+     * toggle button for each of its columns.
+     * @returns {Object[]} The DataTables Buttons definitions for the popup.
+     */
     _buildCollectionButtons() {
         const buttons = [];
 
@@ -91,6 +114,13 @@ class ColumnVisibility {
         return buttons;
     }
 
+    /**
+     * Creates the heading button for a column group. Clicking it shows all of the group's columns, or hides them all
+     * when they are already all visible. The button is shown as active while every column in the group is visible.
+     * @param {string} groupName - The column_group name, used as the button text.
+     * @param {Object[]} columns - The column definitions in the group.
+     * @returns {Object} The DataTables Buttons definition for the heading.
+     */
     _groupHeadingButton(groupName, columns) {
         const indexes = columns.map((col) => col.col_idx);
         const allVisible = (dt) => indexes.every((idx) => dt.column(idx).visible());

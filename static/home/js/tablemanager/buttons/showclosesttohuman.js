@@ -12,6 +12,10 @@ class ShowClosestToHuman {
     buttonNode = null
     closestOnly = false
 
+    /**
+     * Creates the Show Human (Or Closest) Only toggle button configuration, starting in the initial state (filter off).
+     * @param {Object} tableManagerReference - The TableManager instance that owns the table.
+     */
     constructor(tableManagerReference) {
         this.tableManagerReference = tableManagerReference;
         this.button_config = {
@@ -23,6 +27,11 @@ class ShowClosestToHuman {
         this.button_config.action = (e, dt, node, config, cb) => { this._actionHandler(node) };
     }
 
+    /**
+     * Adds the toggle button to the DataTable button bar and subscribes to "filtersCleared" so the toggle resets
+     * when Clear Filters is used.
+     * @param {number} index - Position at which the button is inserted into the button bar.
+     */
     attach(index) {
         this.tableManagerReference.dataTableReference.button().add(index, this.button_config);
 
@@ -33,6 +42,10 @@ class ShowClosestToHuman {
         });
     }
 
+    /**
+     * Toggles the closest to human filter on the closest_to_human column and updates the button to match.
+     * @param {HTMLElement} node - The button element that was clicked.
+     */
     _actionHandler(node) {
         this.buttonNode = node;
         this.closestOnly = !this.closestOnly;
@@ -45,7 +58,10 @@ class ShowClosestToHuman {
         this._renderState();
     }
 
-    // Show the button as the action it offers next
+    /**
+     * Shows the button as the action it offers next. Does nothing until the button has been clicked, while the
+     * initial state is still showing.
+     */
     _renderState() {
         if (!this.buttonNode) return; // Never clicked, so the initial state is still showing
 

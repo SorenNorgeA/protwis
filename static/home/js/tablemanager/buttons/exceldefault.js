@@ -3,6 +3,11 @@ class ExcelDefault {
     button_config
     tableManagerReference
 
+    /**
+     * Creates the Excel export button configuration. The export keeps the super-header and column title rows and drops
+     * the rows below the title row.
+     * @param {Object} tableManagerReference - The TableManager instance that owns the table.
+     */
     constructor(tableManagerReference) {
         this.tableManagerReference = tableManagerReference;
         this.button_config = {
@@ -18,6 +23,10 @@ class ExcelDefault {
         }
     }
     
+    /**
+     * Adds the Excel export button to the DataTable button bar.
+     * @param {number} index - Position at which the button is inserted into the button bar.
+     */
     attach(index) {
         this.tableManagerReference.dataTableReference.button().add(index, this.button_config);
     }

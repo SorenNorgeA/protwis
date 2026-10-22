@@ -1,10 +1,26 @@
-// This class represents the "text" data type used in the table manager.
-// It provides simple text filtering capabilities, allowing users to filter table data based on text input.
+// This class represents the "checkbox" data type used in the table manager.
+// This is a specialised data type that renders a checkbox in each cell of the column. 
+// It allows users to select or deselect rows by checking or unchecking the checkboxes.
 
 import { DataTypeBase } from "./datatypebase.js";
 
+/**
+ * Data type for checkbox columns. Each cell renders a checkbox. Checked rows are tracked in the table manager's
+ * activeCheckBoxes state, so the selection is kept across pages and filters.
+ * @extends DataTypeBase
+ */
 class Checkbox extends DataTypeBase {
     
+    /**
+     * Renders the checkbox for a cell. The display type builds an input with the row id and the row's data as data-*
+     * attributes. Other types return the row id, for search, ordering and type detection.
+     * @param {{row_id: (number|string), data?: Object}|null} data - The cell data for the row.
+     * @param {string} type - The DataTables render type: "display", "filter", "sort" or "type".
+     * @param {*} row - The full row data (unused).
+     * @param {Object} meta - The DataTables cell metadata (unused).
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     * @returns {string|number} The checkbox HTML for the display type, otherwise the row id, or "" if there is no data.
+     */
     dataTableRenderer(data, type, row, meta, tableManagerReference) {
         if (type === "display" && data) {
             let id_property = '';
@@ -31,6 +47,16 @@ class Checkbox extends DataTypeBase {
         return data ? data.row_id : ""
     }
 
+    /**
+     * Attaches the checkbox event handlers to a cell. Handlers come from the column's eventRegister, or from the default
+     * click handler if none is set. If any event enables row click, clicking anywhere on the row toggles the checkbox.
+     * @param {HTMLElement} cell - The rendered table cell containing the checkbox.
+     * @param {{row_id: (number|string), data?: Object}} cellData - The cell data for the row. Nothing is attached if it is empty.
+     * @param {*} rowData - The full row data (unused).
+     * @param {number} rowIndex - The index of the row (unused).
+     * @param {number} colIndex - The index of the column (unused).
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     */
     eventHookup(cell, cellData, rowData, rowIndex, colIndex, tableManagerReference) {
         if (!cellData) {
             return;
@@ -87,6 +113,13 @@ class Checkbox extends DataTypeBase {
         }
     }
 
+    /**
+     * Default click handler. Adds the row to, or removes it from, the active checkboxes state, then publishes a
+     * checkboxStateChanged event.
+     * @param {Event} e - The click event. Its target is the checkbox.
+     * @param {{row_id: (number|string), data?: Object}} cellData - The cell data for the row.
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     */
     defaultClickHandler(e, cellData, tableManagerReference) {
         const checkbox = e.target;
         const rowId = Number.parseInt(cellData.row_id);
@@ -99,15 +132,12 @@ class Checkbox extends DataTypeBase {
 
         tableManagerReference.eventPubSub.publish('checkboxStateChanged', { rowId: rowId, checked: checkbox.checked, cellData: cellData });
     }
-    
-    createFilterInterface(tableManagerReference) {
-        if (!this.column.allow_filter) {
-            return null;
-        }
 
-        
-    }
-
+    /**
+     * Syncs the checked state of the checkboxes in the rendered rows with the active checkboxes state. Does nothing
+     * if the table has no checkbox column.
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     */
     static synchroniseVisibleCheckState(tableManagerReference) {
     const checkboxCol = tableManagerReference.columns.find((col) => col.data_type === "checkbox");
     if (!checkboxCol) {
@@ -125,6 +155,10 @@ class Checkbox extends DataTypeBase {
     
 }
 
+/**
+ * The header checkbox for a checkbox column. Clicking it selects or deselects every row matching the current search
+ * and filters, across all pages. Its state shows whether those rows are all, some or none selected.
+ */
 class MasterCheckbox{
 
     column;
@@ -134,11 +168,19 @@ class MasterCheckbox{
     searchSetValid = true; // False while an update is pending or if the last one failed
     abortController = null; // Cancels a superseded request
     
+    /**
+     * @param {Object} checkboxColumnColumnReference - The checkbox column specification.
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     */
     constructor(checkboxColumnColumnReference, tableManagerReference) {        
         this.column = checkboxColumnColumnReference;
         this.tableManagerReference = tableManagerReference;
     }
 
+    /**
+     * Creates the master checkbox input and connects its change event to clickHandler.
+     * @returns {HTMLInputElement} The master checkbox element.
+     */
     createHtmlElement() {
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
@@ -147,6 +189,15 @@ class MasterCheckbox{
         return checkbox;
     }
 
+    /**
+     * Handles a change to the master checkbox. Waits for any in-flight search-set request, then selects or deselects
+     * every row in the search set. If the search set could not be loaded, the click is ignored and the checkbox is
+     * reverted to match the active state.
+     * @async
+     * @param {Event} event - The change event. Its target is the master checkbox.
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     * @returns {Promise<void>}
+     */
     async clickHandler(event, tableManagerReference) {
         const masterCheckbox = event.target;
         const activeCheckboxes = tableManagerReference.state.activeCheckBoxes;
@@ -172,6 +223,14 @@ class MasterCheckbox{
         this.applyMasterCheckClick(masterCheckbox, activeCheckboxes, searchSetCheckboxes, tableManagerReference);
     }
 
+    /**
+     * Adds or removes every row in the search set from the active checkboxes, depending on the master checkbox state.
+     * A click from the indeterminate state always selects all rows. Rendered rows on the current page are updated to match.
+     * @param {HTMLInputElement} masterCheckboxElement - The master checkbox element.
+     * @param {Map<number, Object>} activeCheckboxes - The active checkboxes, keyed by row id.
+     * @param {Map<number, Object>} searchSetCheckboxes - Checkbox data for every row matching the current search, keyed by row id.
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     */
     applyMasterCheckClick(masterCheckboxElement, activeCheckboxes, searchSetCheckboxes, tableManagerReference) {        
         const wasIndeterminate = masterCheckboxElement.indeterminate;       
 
@@ -202,6 +261,11 @@ class MasterCheckbox{
         });
     }
 
+    /**
+     * Reloads the search set for the current search and filters, then updates the master checkbox to match.
+     * @async
+     * @returns {Promise<void>}
+     */
     async updateCheckBoxSearchSet() {
         // Update the currentSearchCheckBoxes map with the checkbox data for all rows matching the current search/filters, regardless of pagination
         await this.populateCurrentSearchCheckBoxes();
@@ -209,7 +273,13 @@ class MasterCheckbox{
         this.synchroniseCheckedState();
     }
 
-    // Populate a map of the checkbox data for all rows matching the current search/filters, from the table manager's data source
+    /**
+     * Loads the checkbox data for every row matching the current search and filters from the data source, and stores it
+     * in state.currentSearchCheckBoxes keyed by row id. A newer call aborts any request still in flight. On failure the
+     * error is logged and the previous search set is kept. Never rejects.
+     * @async
+     * @returns {Promise<void>} Resolves once the search set has been updated.
+     */
     async populateCurrentSearchCheckBoxes() {
         // A newer search supersedes any request still in flight, so a stale response can never overwrite fresh state
         this.abortController?.abort();
@@ -246,6 +316,10 @@ class MasterCheckbox{
         await request;
     }
 
+    /**
+     * Sets the master checkbox to checked, unchecked or indeterminate, depending on how many rows in the current
+     * search set are active.
+     */
     synchroniseCheckedState() {
 
         // Create a set from the currently checked checkboxes
@@ -264,6 +338,11 @@ class MasterCheckbox{
         this.checkboxElement.checked = allChecked && !isIndeterminate;
     }
 
+    /**
+     * @param {Set<*>} a - The first set.
+     * @param {Set<*>} b - The second set.
+     * @returns {boolean} True if both sets hold the same values.
+     */
     setsAreEqual(a, b) {
         try {
             return a.size === b.size && a.symmetricDifference(b).size === 0;
@@ -275,6 +354,11 @@ class MasterCheckbox{
         }
     }
 
+    /**
+     * @param {Set<*>} setA - The containing set.
+     * @param {Set<*>} setB - The set that should be contained in setA.
+     * @returns {boolean} True if every value in setB is also in setA.
+     */
     setContains(setA, setB) {
         try {
             return setB.isSubsetOf(setA);
@@ -288,6 +372,11 @@ class MasterCheckbox{
         }
     }
 
+    /**
+     * @param {Set<*>} setA - The first set.
+     * @param {Set<*>} setB - The second set.
+     * @returns {boolean} True if setA and setB have no values in common.
+     */
     setDoesNotContain(setA, setB) {
         try {
             return setB.isDisjointFrom(setA);

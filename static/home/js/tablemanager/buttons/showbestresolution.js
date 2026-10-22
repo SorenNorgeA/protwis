@@ -12,6 +12,10 @@ class ShowBestResolution {
     buttonNode = null
     bestOnly = false
 
+    /**
+     * Creates the Show Best Resolution toggle button configuration, starting in the "On" state (filter off).
+     * @param {Object} tableManagerReference - The TableManager instance that owns the table.
+     */
     constructor(tableManagerReference) {
         this.tableManagerReference = tableManagerReference;
         this.button_config = {
@@ -23,6 +27,11 @@ class ShowBestResolution {
         this.button_config.action = (e, dt, node, config, cb) => { this._actionHandler(node) };
     }
 
+    /**
+     * Adds the toggle button to the DataTable button bar and subscribes to "filtersCleared" so the toggle resets
+     * when Clear Filters is used.
+     * @param {number} index - Position at which the button is inserted into the button bar.
+     */
     attach(index) {
         this.tableManagerReference.dataTableReference.button().add(index, this.button_config);
 
@@ -33,6 +42,10 @@ class ShowBestResolution {
         });
     }
 
+    /**
+     * Toggles the best resolution filter on the resolution_best column and updates the button to match.
+     * @param {HTMLElement} node - The button element that was clicked.
+     */
     _actionHandler(node) {
         this.buttonNode = node;
         this.bestOnly = !this.bestOnly;
@@ -45,7 +58,10 @@ class ShowBestResolution {
         this._renderState();
     }
 
-    // Show the button as the action it offers next: "On" turns the best resolution filter on, "Off" turns it off
+    /**
+     * Updates the button to show the action it offers next. Does nothing until the button has been clicked, while the
+     * initial state is still showing.
+     */
     _renderState() {
         if (!this.buttonNode) return; // Never clicked, so the initial "On" state is still showing
 

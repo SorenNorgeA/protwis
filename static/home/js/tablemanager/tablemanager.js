@@ -143,19 +143,19 @@ class TableManager {
     }
 
     // -- 2. DataTable -- //
-    // Any initComplete function supplied in the config is passed through unchanged; the TableManager's own
-    // data-dependent setup waits for this.ready instead.
+    // The DataTable is created with the specified options, and the reference to the DataTable API is stored in this.dataTableReference.
     this.dataTableReference = $(`#${this.tableId}`).DataTable(dataTableOptions);
 
     // -- 3. Setup that needs the DataTables API but not the data -- //
     this.columns.forEach((col) => col.type.afterTableCreated(this));
 
-    // Group boundary borders follow the visible columns
+    // Establish formatting for cells on the boundaries of column group, and
+    // re-establish it whenever column visibility changes, as the visible boundaries may change.
     this._refreshGroupBoundaries();
     this.dataTableReference.on("column-visibility.dt", () => this._refreshGroupBoundaries());
 
     // Set up event publishing for DataTables events that may be of interest to subscribers, such as search, order, and page events.
-    this.setupDatTablesEventPublishing();
+    this.setupDataTablesEventPublishing();
 
     // If any of the columns are of type "checkbox", subscribe to relevant events to help synchronise checkboxes.
     if (this.columns.some((col) => col.data_type === "checkbox")) {
@@ -173,8 +173,11 @@ class TableManager {
     this.dataTableReference.ready(() => this._resolveReady(this.dataTableReference));
   }
 
-  // Runs once the initial data is loaded. Each piece of data-dependent state is computed once for the loaded data and
-  // then kept up to date by a search change subscription, so no change is missed or handled twice.
+  /**
+   * Runs once the initial data is loaded. Each piece of data-dependent state is computed once for the loaded data and
+   * then kept up to date by a search change subscription, so no change is missed or handled twice.
+   * @param {Object} dataTableOptions - The options for the DataTable, used to check whether category counts are shown.
+   */
   _afterDataLoaded(dataTableOptions) {
     this.columns.forEach((col) => {
       Promise.resolve()
@@ -183,18 +186,20 @@ class TableManager {
     });
 
     if (dataTableOptions.showCategoryCounts) {
-      this._handleColumnUniqueValueCounts();
-      this.dataSource.onSearchChange(() => this._handleColumnUniqueValueCounts());
+      this._handleColumnUniqueValueCounts(); // Initialise the category counts once the data is loaded
+      this.dataSource.onSearchChange(() => this._handleColumnUniqueValueCounts()); // Update the counts whenever the table's search changes
     }
 
-    if (this.state.masterCheckbox) {
-      // Update the currentSearchCheckBoxes state whenever the table's search changes. This goes through the data source
-      // rather than the DataTableSearch event, which fires server-side before the new search is sent.
-      this.state.masterCheckbox.updateCheckBoxSearchSet();
-      this.dataSource.onSearchChange(() => this.state.masterCheckbox.updateCheckBoxSearchSet());
+    if (this.state.masterCheckbox) {      
+      this.state.masterCheckbox.updateCheckBoxSearchSet(); // Initialise the currentSearchCheckBoxes state once the data is loaded
+      this.dataSource.onSearchChange(() => this.state.masterCheckbox.updateCheckBoxSearchSet()); // Update the currentSearchCheckBoxes state whenever the table's search changes
     }
   }
 
+  /**
+   * Creates and attaches the buttons named in the buttonFactory option, using the ButtonFactory.
+   * @param {Object} dataTableOptions - The options for the DataTable; buttonFactory is an array of button type names.
+   */
   runButtonFactory(dataTableOptions) {
     // Create and attach buttons based on the button configurations in the dataTableOptions
     if (dataTableOptions.buttonFactory) {
@@ -207,6 +212,12 @@ class TableManager {
     };
     }
 
+  /**
+   * Applies alternating odd/even row classes to the rows displayed on the current page, and reapplies them on every
+   * redraw so the striping always follows the displayed order.
+   * @param {Object} dataTableOptions - The options for the DataTable; rowClassEven and rowClassOdd override the default
+   *   "even_row" and "odd_row" class names.
+   */
   assignOddEvenRowClasses(dataTableOptions) {
 
     let evenRowClass = dataTableOptions.rowClassEven ? dataTableOptions.rowClassEven :"even_row";
@@ -228,10 +239,14 @@ class TableManager {
     row_class_assigner();
 
     // Reapply the row class assigner whenever the table is redrawn (sort, filter, page change)
-    this.dataTableReference.on("draw.dt", row_class_assigner);
+    this.eventPubSub.subscribe('DataTableDraw', row_class_assigner);
   }
 
-  setupDatTablesEventPublishing() {
+  /**
+   * Republishes the DataTables search, draw, order and page events through the eventPubSub instance as
+   * DataTableSearch, DataTableDraw, DataTableOrder and DataTablePage, each with the DataTables settings as data.
+   */
+  setupDataTablesEventPublishing() {
     //Add event listeners to the DataTable for various events (search, draw, order, page) and publish corresponding events via the eventPubSub instance.
     this.dataTableReference.on("search.dt", (e, settings) => {
       this.eventPubSub.publish("DataTableSearch", settings);
@@ -250,6 +265,10 @@ class TableManager {
     });
   }
 
+  /**
+   * Subscribes to the table events that keep the checkbox column, its master checkbox and the activeCheckBoxes state
+   * synchronised (DataTableDraw and checkboxStateChanged).
+   */
   setupCheckboxEventSubscriptions() {
       // The currentSearchCheckBoxes state needs the data, so it is set up in _afterDataLoaded.
 
@@ -264,6 +283,11 @@ class TableManager {
       this.eventPubSub.subscribe("checkboxStateChanged", () => this.state.masterCheckbox.synchroniseCheckedState(this));
   }
 
+  /**
+   * Fetches the distinct value counts from the data source and displays them in the category count cells.
+   * Only the result of the most recent request is displayed; failed or superseded requests are ignored.
+   * @returns {Promise<void>} A promise resolving once the counts have been displayed or discarded.
+   */
   async _handleColumnUniqueValueCounts(){
     const requestId = ++this.categoryCountRequestId;
     let counts;
@@ -360,7 +384,10 @@ class TableManager {
   //                         /
   //-------------------------/
 
-  // Creates the <thead> section of the table and assigns it an ID based on the table's ID.
+  /**
+   * Creates the <thead> section of the table and assigns it an ID based on the table's ID.
+   * @returns {HTMLElement} The created <thead> element.
+   */
   _createTableHeaderSection() {
     const tableHead = document.createElement("thead");
     this.headerSetId = this.tableId + "_headerSet";
@@ -368,14 +395,22 @@ class TableManager {
     return tableHead;
   }
 
-  // Registers a header cell whose column group boundary borders are maintained by _refreshGroupBoundaries.
+  /**
+   * Registers a header cell whose column group boundary borders are maintained by _refreshGroupBoundaries.
+   * Cells of columns without a column_group are not registered.
+   * @param {HTMLElement} headerCell - The header cell to register.
+   * @param {Column} column - The column the header cell belongs to.
+   */
   _registerGroupBoundaryCell(headerCell, column) {
     if (column.column_group) {
       this.groupBoundaryCells.push({ col: column, th: headerCell });
     }
   }
 
-  // Recomputes the group boundary borders of every registered header cell from the DataTable's current column visibility.
+  /**
+   * Recomputes the group boundary borders of every registered header cell and of the body cells on the current page
+   * from the DataTable's current column visibility.
+   */
   _refreshGroupBoundaries() {
     const isVisible = (col) => this.dataTableReference.column(col.col_idx).visible();
     this.groupBoundaryCells.forEach(({ col, th }) => this.annotateColumnGroupBoundaries(th, col, this.columns, isVisible));
@@ -419,12 +454,18 @@ class TableManager {
   //  Super(/grouped) headers  /
   //---------------------------/
 
-  // Checks if all columns have a column_group property defined, indicating that super-headers should be created for the table.
+  /**
+   * Checks if all columns have a column_group property defined, indicating that super-headers should be created for the table.
+   * @returns {boolean} True if every column has a column_group.
+   */
   _hasSuperHeaders() {
     return this.columns.every((col) => col.column_group);
   }
 
-  // Checks if any columns have allow_filter set to true, indicating that a filter row should be created for the table.
+  /**
+   * Checks if any columns have allow_filter set to true, indicating that a filter row should be created for the table.
+   * @returns {boolean} True if at least one column allows filtering.
+   */
   _hasFilters() {
     return this.columns.some((col) => col.allow_filter);
   }
@@ -470,7 +511,11 @@ class TableManager {
     });
   }
 
-  // Creates a super-header row element with the specified ID and returns it.
+  /**
+   * Creates a super-header row element with the specified ID and returns it.
+   * @param {string} superHeaderRowId - The ID for the super-header row.
+   * @returns {HTMLElement} The created super-header <tr> element.
+   */
   _createSuperHeaderRow(superHeaderRowId) {
     const superHeaderRow = document.createElement("tr");
     superHeaderRow.id = superHeaderRowId;
@@ -547,9 +592,11 @@ class TableManager {
   //  Filter row  /
   //--------------/
 
-  // Filter Header row
-
-  // Creates a filter header row element with the specified ID and returns it.
+  /**
+   * Creates a filter header row element with the specified ID and returns it.
+   * @param {string} filterHeaderRowId - The ID for the filter header row.
+   * @returns {HTMLElement} The created filter header <tr> element.
+   */
   _createFilterHeaderRow(filterHeaderRowId) {
     const filterHeaderRow = document.createElement("tr");
     filterHeaderRow.id = filterHeaderRowId;
@@ -559,6 +606,7 @@ class TableManager {
   /**
    * Populates the filter header row with filter interface elements for each column that allows filtering.
    * Hidden columns get a cell (and filter interface) too; DataTables shows it when the column is shown.
+   * Any filter header injectors registered for a column's json_id are applied to the filter interface before it is added to the cell.
    * @param {HTMLElement} filterHeaderRow - The <tr> element representing the filter header row.
    */
   populateFilterHeaders(filterHeaderRow) {
@@ -648,6 +696,11 @@ class TableManager {
     });
   }
 
+  /**
+   * Writes the "filtered/base" count of distinct values into each registered category count label.
+   * Columns without a base count are left unchanged; a failure for one column does not stop the others.
+   * @param {Object} counts - The distinct value counts, with 'base' and 'filtered' objects keyed by column json_id.
+   */
   _updateCategoryCountCells(counts) {
     for (const { col, label } of this.categoryCountCells) {
       try
@@ -669,6 +722,11 @@ class TableManager {
   //  Column specification validation   /
   //------------------------------------/
 
+  /**
+   * Validates the column specifications: col_idx values must be continuous and sorted, and column groups must be
+   * either on all or none of the columns and form contiguous blocks.
+   * @throws {Error} If any of the checks fails.
+   */
   validateColumnSpecifications() {
     if (!this._checkColumnsIdxContinuous(this.columns)) {
       throw new Error(
@@ -695,14 +753,26 @@ class TableManager {
     }
   }
 
+  /**
+   * Assigns each column a col_idx matching its position in the columns array.
+   */
   _createColumnIndexes() {
     this.columns.forEach((col, index) => col.col_idx = index);
   }
 
+  /**
+   * Checks if none of the columns have a col_idx property.
+   * @returns {boolean} True if no column has a col_idx.
+   */
   _columnIndexesAbsent() {
     return this.columns.every((col) => !col.hasOwnProperty("col_idx"));
   }
 
+  /**
+   * Checks that either all or none of the columns have a column_group, so that grouped and ungrouped columns are not mixed.
+   * @param {Array} columnsSpecifications - The columns to check.
+   * @returns {boolean} True if all or none of the columns have a column_group.
+   */
   _checkAllOrNoneColumnGroups(columnsSpecifications) {
     // Check that all columns have a group or all lack one (don't mix)
     const hasGrouped = columnsSpecifications.some((col) => col.column_group);
@@ -710,7 +780,12 @@ class TableManager {
     return !(hasGrouped && hasUngrouped)
   }
 
-  // Checks if the col_idx values of the column specifications are continuous, meaning that they form a sequence without any gaps.
+  /**
+   * Checks if the col_idx values of the column specifications are continuous, meaning that they form a sequence without any gaps.
+   * @param {Array} columnsSpecifications - The columns to check.
+   * @returns {boolean} True if each col_idx is exactly one more than the previous one.
+   * @throws {Error} If only some of the columns have a col_idx.
+   */
   _checkColumnsIdxContinuous(columnsSpecifications) {
     let someColumnsMissingColIdx = columnsSpecifications.some((col) => !col.hasOwnProperty("col_idx"));
 
@@ -728,7 +803,11 @@ class TableManager {
     return true;
   }
 
-  // Checks if the col_idx values of the column specifications are sorted in ascending order.
+  /**
+   * Checks if the col_idx values of the column specifications are sorted in ascending order.
+   * @param {Array} columnsSpecifications - The columns to check.
+   * @returns {boolean} True if the col_idx values never decrease.
+   */
   _checkColumnsIdxSorted(columnsSpecifications) {
     for (let i = 1; i < columnsSpecifications.length; i++) {
       if (
@@ -772,9 +851,9 @@ class TableManager {
     return true;
   }
 
-  //------------------------------/
-  //  Data Table Initialisation   /
-  //------------------------------/
+  //--------------------------------/
+  //  Data Table Column Definitions /
+  //--------------------------------/
 
   /**
     * Converts a column specification into a DataTables column definition object.
@@ -830,8 +909,6 @@ class TableManager {
 
   }
 
-  // Fetch table configuration JSON from API endpoint
-  // 
   /**
    * Fetches a configuration asynchronously from the API endpoint. Endpoint format: /table_provider/configuration/{configurationType}/{tableName}/{configurationVariant}
    * @param {string} configurationType - The type of the configuration.
@@ -886,14 +963,27 @@ class TableManager {
 //----------------------//
 
 class TableEventRegister {
+  /**
+   * Constructs an empty registry of named event handlers.
+   */
   constructor() {
     this.eventHandlers = {};
   }
 
+  /**
+   * Registers an event handler under a name, replacing any handler already registered with that name.
+   * @param {string} eventHandlerName - The name to register the handler under.
+   * @param {Function} eventHandlerFunction - The event handler function.
+   */
   registerEventHandler(eventHandlerName, eventHandlerFunction) {
     this.eventHandlers[eventHandlerName] = eventHandlerFunction;
   }
 
+  /**
+   * Gets the event handler registered under a name.
+   * @param {string} eventHandlerName - The name the handler was registered under.
+   * @returns {Function|undefined} The event handler function, or undefined if none is registered.
+   */
   getEventHandler(eventHandlerName) {
     return this.eventHandlers[eventHandlerName];
   }
@@ -906,14 +996,27 @@ class TableEventRegister {
 //------------------------//
 
 class CellInjectorRegister {
+  /**
+   * Constructs an empty registry of named injector functions.
+   */
   constructor() {
     this.injectors = {};
   }
 
+  /**
+   * Registers an injector function under a name, replacing any injector already registered with that name.
+   * @param {string} injectorName - The name to register the injector under.
+   * @param {Function} injectorFunction - The injector function.
+   */
   registerInjector(injectorName, injectorFunction) {
     this.injectors[injectorName] = injectorFunction;
   }
 
+  /**
+   * Gets the injector registered under a name.
+   * @param {string} injectorName - The name the injector was registered under.
+   * @returns {Function|undefined} The injector function, or undefined if none is registered.
+   */
   getInjector(injectorName) {
     return this.injectors[injectorName];
   }
@@ -926,10 +1029,19 @@ class CellInjectorRegister {
 //-------------------------------//
 
 class SuperHeaderInjectorRegister {
+  /**
+   * Constructs an empty registry of super-header injector functions.
+   */
   constructor() {
     this.injectors = {};
   }
 
+  /**
+   * Registers an injector function for a super-header. Several injectors can be registered for the same super-header;
+   * they are applied in registration order.
+   * @param {string} superHeaderName - The name of the super-header (its column group).
+   * @param {Function} injectorFunction - The injector function.
+   */
   registerInjector(superHeaderName, injectorFunction) {
     if (this.injectors[superHeaderName] == undefined) {
       this.injectors[superHeaderName] = []
@@ -937,6 +1049,11 @@ class SuperHeaderInjectorRegister {
     this.injectors[superHeaderName].push(injectorFunction);
   }
 
+  /**
+   * Gets the injectors registered for a super-header.
+   * @param {string} superHeaderName - The name of the super-header (its column group).
+   * @returns {Function[]} The injector functions in registration order; empty if none are registered.
+   */
   getInjectors(superHeaderName) {
     return this.injectors[superHeaderName] || [];
   }
@@ -949,11 +1066,19 @@ class SuperHeaderInjectorRegister {
 //----------------------//
 
 class EventPubSub{
+    /**
+     * Constructs an event publisher with no subscribers.
+     */
     constructor(){
         this.events = {}
     }
 
-    // Subscribe to an event with a handler function. Returns an unsubscribe function for convenience.
+    /**
+     * Subscribes a handler function to an event.
+     * @param {string} event - The name of the event.
+     * @param {Function} handler - The function called with the event data when the event is published.
+     * @returns {Function} A function that unsubscribes the handler, so callers don't need to keep the handler reference.
+     */
     subscribe(event, handler){
         if(!this.events[event]){
             this.events[event] = []
@@ -963,7 +1088,11 @@ class EventPubSub{
         return () => this.unsubscribe(event, handler);
     }
 
-    // Unsubscribe from an event with a handler function
+    /**
+     * Unsubscribes a handler function from an event. Does nothing if the handler is not subscribed.
+     * @param {string} event - The name of the event.
+     * @param {Function} handler - The handler function to remove.
+     */
     unsubscribe(event, handler){
         if(this.events[event]){
             const index = this.events[event].findIndex(item => item === handler)
@@ -974,7 +1103,12 @@ class EventPubSub{
         }
     }
 
-    // Publish an event with optional data. Errors in one handler don't prevent other handlers from running.
+    /**
+     * Publishes an event, calling every subscribed handler with the data. Errors in one handler don't prevent other
+     * handlers from running.
+     * @param {string} event - The name of the event.
+     * @param {*} [data] - Optional data passed to each handler.
+     */
     publish(event, data){
         if(this.events[event]){
             this.events[event].forEach(handler => {
@@ -995,15 +1129,29 @@ class EventPubSub{
 //---------------//
 
 class FetchCache {
+  /**
+   * Constructs an empty cache.
+   * @param {number} [maxEntries=200] - The maximum number of entries kept; the oldest entry is evicted beyond this.
+   */
   constructor(maxEntries = 200) {
     this.cache = new Map();
     this.maxEntries = maxEntries;
   }
 
+  /**
+   * Gets the cached value for a key object.
+   * @param {Object} keyObject - The key object; property order does not matter.
+   * @returns {*} The cached value, or undefined if there is none.
+   */
   get(keyObject) {
     return this.cache.get(this.createKey(keyObject));
   }
 
+  /**
+   * Caches a value for a key object, making it the most recent entry and evicting the oldest entry if the cache is full.
+   * @param {Object} keyObject - The key object; property order does not matter.
+   * @param {*} value - The value to cache.
+   */
   push(keyObject, value) {
     const key = this.createKey(keyObject);
     this.cache.delete(key); // re-insert so the entry becomes the most recent
@@ -1013,11 +1161,20 @@ class FetchCache {
     }
   }
 
-  // The canonical JSON string is used directly as the key. 
+  /**
+   * Creates the cache key for an object. The canonical JSON string (with sorted keys) is used directly as the key.
+   * @param {Object} object - The key object.
+   * @returns {string} The canonical JSON string of the object.
+   */
   createKey(object) {
     return JSON.stringify(this.sortKeys(object));
   }
 
+  /**
+   * Recursively sorts the keys of objects (including those nested in arrays) so equal objects serialise identically.
+   * @param {*} obj - The value to canonicalise.
+   * @returns {*} A copy of the value with all object keys in sorted order.
+   */
   sortKeys(obj) {
   if (Array.isArray(obj)) return obj.map(item => this.sortKeys(item));
   if (obj !== null && typeof obj === 'object') {
@@ -1031,6 +1188,9 @@ class FetchCache {
   return obj;
 }
 
+  /**
+   * Removes all entries from the cache.
+   */
   clear() {
     this.cache.clear();
   }

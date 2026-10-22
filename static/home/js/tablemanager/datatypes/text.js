@@ -8,6 +8,11 @@ import { DataTypeBase } from "./datatypebase.js";
 const symbolPopups = new Set();
 let outsideClickListenerAdded = false;
 
+/**
+ * Registers a symbol popup to be closed by the next click anywhere on the document. The document listener is added
+ * once, on first use.
+ * @param {HTMLElement} popup - The symbol popup element.
+ */
 function registerPopupForOutsideClick(popup) {
     if (!outsideClickListenerAdded) {
         outsideClickListenerAdded = true;
@@ -24,8 +29,23 @@ function registerPopupForOutsideClick(popup) {
     symbolPopups.add(popup);
 }
 
+/**
+ * Data type for text columns. Displays text, truncated to max_display_length when set, and filters by typed text.
+ * Also the base class for the other text-based data types.
+ * @extends DataTypeBase
+ */
 class Text extends DataTypeBase {
 
+    /**
+     * Renders text for display. Null values show the nullValuePlaceholder. Text longer than max_display_length is
+     * truncated with an ellipsis, and the full text is kept in the title attribute. Other types return the raw data.
+     * @param {string|null|undefined} data - The cell text.
+     * @param {string} type - The DataTables render type: "display", "filter", "sort" or "type".
+     * @param {*} row - The full row data (unused).
+     * @param {Object} meta - The DataTables cell metadata (unused).
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     * @returns {string|null|undefined} The rendered value for the render type.
+     */
     dataTableRenderer(data, type, row, meta, tableManagerReference) {
         if (type === "display" && (data === null || data === undefined)) {
             return tableManagerReference.nullValuePlaceholder;
@@ -44,10 +64,16 @@ class Text extends DataTypeBase {
         return data; // Search, order and type return
     } 
 
+    /**
+     * Creates a text input that applies the filter when it loses focus or Enter is pressed. If show_symbol_popup is set,
+     * a button is added beside the input that opens a popup of Greek symbols to insert into it.
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     * @returns {HTMLDivElement|false} The filter wrapper, or false if the column does not allow filtering.
+     */
     createFilterInterface(tableManagerReference) {
         const column = this.column;
         if (!column.allow_filter) {
-            return null;
+            return false;
         }
 
         let filterInput = document.createElement("input");
@@ -82,6 +108,11 @@ class Text extends DataTypeBase {
         return wrapper;
     }
 
+    /**
+     * Creates the Greek symbol button and its popup. Clicking a symbol appends it to the filter input.
+     * @param {HTMLInputElement} filterInput - The filter input to insert symbols into.
+     * @returns {{symbolBtn: HTMLButtonElement, popup: HTMLDivElement}} The toggle button and the popup.
+     */
     createSymbolPopup(filterInput) {
         const greekSymbols = [
             { label: "α", name: "alpha" },
@@ -123,10 +154,24 @@ class Text extends DataTypeBase {
         return { symbolBtn, popup };
     }
         
+    /**
+     * Removes HTML tags from a value, so it can be compared with plain text.
+     * @param {*} v - The value to clean.
+     * @returns {string} The value as text, or an empty string if it is null or undefined.
+     */
     _stripHtmlTags(v) {
         return v == null ? "" : String(v).replace(/<[^>]*>/g, '');
     }
 
+    /**
+     * Applies the typed text as a column filter. If the text matches one of the column's options exactly, it filters on
+     * that value. Otherwise it filters with a contains match. Empty text clears the filter. Does nothing while filters
+     * are being cleared.
+     * @async
+     * @param {Event} e - The blur or Enter event. Its target is the filter input.
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     * @returns {Promise<void>}
+     */
     async blurHandler(e, tableManagerReference) {
         const column = this.column;
 

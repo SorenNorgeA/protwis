@@ -9,25 +9,50 @@ class ServerDataSource extends DataSourceBase {
 
   // Endpoint extensions of the table's AJAX URL
   static PATHS = {
+    /**
+     * Endpoint extension for a column's distinct values.
+     * @param {string} column - The column's json id.
+     * @returns {string} The path, relative to the AJAX URL.
+     */
     options: (column) => `/options/${encodeURIComponent(column)}/`,
+    /**
+     * Endpoint extension for a column's min and max values.
+     * @param {string} column - The column's json id.
+     * @returns {string} The path, relative to the AJAX URL.
+     */
     range: (column) => `/range/${encodeURIComponent(column)}/`,
+    /**
+     * Endpoint extension for the distinct value counts of all columns.
+     * @returns {string} The path, relative to the AJAX URL.
+     */
     counts: () => `/countdistinct`,
   };
 
   // Data request parameters that don't affect which rows match the search
   static NON_SEARCH_PARAMS = /^(draw|start|length|order\[.*)$/;
 
+  /**
+   * True for ServerDataSource.
+   * @returns {boolean} Always true.
+   */
   get isServerSide() {
     return true;
   }
 
+  /**
+   * Fetch a reference to the DataTable instance for the current table.
+   * @returns {Object} The DataTables instance.
+   */
   get _dataTable() {
     return this.tableManagerReference.dataTableReference;
   }
 
-  // DataTables fires search before it builds the request for the new search, so ajax.params() would still hold the
-  // previous request's parameters. preXhr fires once they are set; requests that only page or reorder the rows
-  // (same search query) are skipped.
+  /**
+   * Calls handler when the search changes. DataTables fires search before it builds the request for the new search, so
+   * ajax.params() would still hold the previous request's parameters. preXhr fires once they are set; requests that
+   * only page or reorder the rows (same search query) are skipped.
+   * @param {Function} handler - Called with no arguments on each search change.
+   */
   onSearchChange(handler) {
     let lastSearchQuery = this._currentSearchQuery();
     this._dataTable.on("preXhr.dt", () => {
@@ -39,9 +64,12 @@ class ServerDataSource extends DataSourceBase {
     });
   }
 
-  // The data methods build their URLs from the DataTable's AJAX URL and last request, so each waits for the table's
-  // initial data first (it may be called earlier, e.g. by a cell style while the first rows are rendered).
-
+  /**
+   * Gets the distinct values of a column from the server, cached per column. Resolves to an empty array if the request
+   * fails.
+   * @param {Object} column - The column (data type instance) to get options for.
+   * @returns {Promise<Array>} The distinct raw values.
+   */
   async getOptions(column) {
     await this.tableManagerReference.ready;
     const cacheKey = { type: 'columnOptions', columnId: column.json_id };
@@ -65,7 +93,12 @@ class ServerDataSource extends DataSourceBase {
     }
   }
 
-  // Never rejects: resolves to null if any range request fails.
+  /**
+   * Gets the minimum and maximum over the given source columns from the server. Never rejects.
+   * @param {string[]} sources - The json ids of the source columns.
+   * @returns {Promise<{min: number, max: number}|null>} The range, or null if there are no numeric values or any range
+   *   request fails.
+   */
   async getRange(sources) {
     try {
       await this.tableManagerReference.ready;
@@ -87,6 +120,12 @@ class ServerDataSource extends DataSourceBase {
     }
   }
 
+  /**
+   * Gets the distinct value counts per column from the server, cached per complete request URL. The URL includes the
+   * current search, so any change that alters the counts misses the cache.
+   * @returns {Promise<{base: Object<string, number>, filtered: Object<string, number>}>} Counts keyed by json id, for
+   *   the whole dataset (base) and for the rows matching the current search (filtered).
+   */
   async getDistinctCounts() {
     await this.tableManagerReference.ready;
     // Key on the complete request (endpoint plus every search parameter) so any change that alters the counts misses the cache
@@ -101,6 +140,12 @@ class ServerDataSource extends DataSourceBase {
     return counts;
   }
 
+  /**
+   * Gets the checkbox cell data of every row matching the current search and filters, from the server.
+   * @param {Object} column - The checkbox column.
+   * @param {AbortSignal} signal - Aborts the request when the caller no longer needs the result.
+   * @returns {Promise<Array<{row_id: string, data: *}>>} The checkbox cell data of each matching row.
+   */
   async getSearchSetRows(column, signal) {
     await this.tableManagerReference.ready;
     // The search set uses the column's options endpoint with the current search parameters: for the checkbox
@@ -112,6 +157,13 @@ class ServerDataSource extends DataSourceBase {
   // Server-side filters are JSON objects the server reads directly, so values are matched exactly as given (no regex
   // escaping or parsing). Keys are always present, in a fixed order, so the same filter always gives the same string
   // and can be compared with the current search value. An empty filter gives an empty search (no filter).
+  /**
+   * Builds the column search as a JSON string the server reads directly.
+   * @param {Object} column - The column (data type instance) to filter.
+   * @param {Object} filter - {type: "text", terms: [{value, contains}]} or {type: "range", min, max}.
+   * @returns {{value: string, regex: boolean, key: string}} The column search. An empty filter gives an empty value.
+   * @throws {Error} If the filter type is unknown.
+   */
   _buildColumnSearch(column, filter) {
     let value = "";
 
@@ -132,9 +184,11 @@ class ServerDataSource extends DataSourceBase {
     return { value: value, regex: false, key: value };
   }
 
-  // The last data request's parameters as a query string, encoded as DataTables sent them (jQuery's $.param, after any
-  // ajax.data additions such as the PDB table's effector), without the draw, paging and ordering parameters.
-  // Empty before the first request.
+  /**
+   * Gets the last data request's parameters as a query string, encoded as DataTables sent them (jQuery's $.param, after
+   * any ajax.data additions such as the PDB table's effector), without the draw, paging and ordering parameters.
+   * @returns {string} The query string, or an empty string before the first request.
+   */
   _currentSearchQuery() {
     const params = this._dataTable.ajax.params();
     if (params == null) {
@@ -150,11 +204,24 @@ class ServerDataSource extends DataSourceBase {
     return query.toString();
   }
 
+  /**
+   * Builds a request URL from the table's AJAX URL.
+   * @param {string} path - The endpoint path, appended to the AJAX URL.
+   * @param {string} [queryString] - The query string to append, if any.
+   * @returns {string} The full request URL.
+   */
   _url(path, queryString) {
     const url = this._dataTable.ajax.url() + path;
     return queryString ? url + "?" + queryString : url;
   }
 
+  /**
+   * Fetches a URL and parses the response as JSON.
+   * @param {string} url - The URL to fetch.
+   * @param {AbortSignal} [signal] - Aborts the request when signalled.
+   * @returns {Promise<*>} The parsed JSON response.
+   * @throws {Error} If the response status is not OK.
+   */
   async _fetchJson(url, signal) {
     const response = await fetch(url, { signal });
     if (!response.ok) {
