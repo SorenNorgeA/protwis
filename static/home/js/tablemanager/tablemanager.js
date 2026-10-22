@@ -212,7 +212,7 @@ class TableManager {
     let dtButtons = [] // Buttons to be handled by DataTables, either known buttons or custom buttons using the extenstion mechanism
     let customButtons = [] // Custom buttons that are not known to DataTables and will be handled by the ButtonFactory
     
-    dataTableOptions.buttons.forEach((buttonType) => {
+    dataTableOptions.buttons?.forEach((buttonType) => {
       ((typeof buttonType === "string" 
         && dataTablesKnownButtons.includes(buttonType)) || 
         typeof buttonType === "object") 
