@@ -1,6 +1,6 @@
 from django.shortcuts import render
-from django.db.models import Q, F, Prefetch, Avg, StdDev, IntegerField, Sum, Case, When, Min, Max
-from django.db.models.functions import Concat
+from django.db.models import Q, F, Count, Value, ExpressionWrapper, FloatField, Prefetch, Avg, StdDev, IntegerField, Sum, Case, When, Min, Max
+from django.db.models.functions import Cast, Coalesce, Concat, Length
 from django.views.decorators.cache import cache_page
 from django.views.decorators.csrf import csrf_exempt
 from django.core.cache import cache
@@ -193,6 +193,441 @@ def PdbTreeData(request):
         data_dict[s0 + ',' + l0][s1 + ',' + l1][s2 + ',' + l2][s3 + ',' + l3].append(pdb + ' (' + state + ')'  + '(' + rep + ')')
 
     return JsonResponse(data_dict)
+
+@cache_page(60*60*24*7)
+def PdbTableData(request):
+    exclude_non_interacting = True if request.GET.get('exclude_non_interacting') == 'true' else False
+    effector = request.GET.get('effector') if request.GET.get('effector') != 'false' else False
+    # interaction_protein_class = request.GET.get('interaction_protein_class')
+    #constructs = Construct.objects.defer('schematics','snakecache').all().prefetch_related('crystallization__crystal_method')
+    #methods = {}
+    #for c in constructs:
+        # print(c.name)
+    #    if c.crystallization and c.crystallization.crystal_method:
+    #        method = c.crystallization.crystal_method.name
+    #    else:
+    #        method = "N/A"
+    #    methods[c.name] = method
+    
+    # data = Structure.objects.all().exclude(structure_type__slug__startswith='af-').prefetch_related(
+    #             "pdb_code",
+    #             "state",
+    #             "stabilizing_agents",
+    #             "structureligandinteraction_set__ligand__ligand_type",
+    #             "structureligandinteraction_set__ligand_role",
+    #             "structure_type",
+    #             "protein_conformation__protein__parent__parent__parent",
+    #             "protein_conformation__protein__parent__family__parent",
+    #             "protein_conformation__protein__parent__family__parent__parent__parent",
+    #             "protein_conformation__protein__species",Prefetch("ligands", queryset=StructureLigandInteraction.objects.filter(
+    #             annotated=True).exclude(structure__structure_type__slug__startswith='af-').prefetch_related('ligand__ligand_type', 'ligand_role')))
+    # get best signalprotein/species/receptor
+    # if effector is defined (as one letter), filter by that
+    # 'G alpha' = G proteins (all G protein classes starts with G)
+    # 'A' = Arrestin
+    if effector:
+        af_model_slugs = {'G alpha': 'af-signprot', 'A': 'af-arrestin'}
+        structure_filter = Q(structure_type__origin='experiment')
+        if effector in af_model_slugs:
+            structure_filter |= Q(structure_type__slug=af_model_slugs[effector])
+
+        data = Structure.objects.filter(structure_filter).prefetch_related(
+                "pdb_code",
+                "state",
+                "stabilizing_agents",
+                "structureligandinteraction_set__ligand__ligand_type",
+                "structureligandinteraction_set__ligand_role",
+                "structure_type",
+                "protein_conformation__protein__parent__parent__parent",
+                "protein_conformation__protein__parent__family__parent",
+                "protein_conformation__protein__parent__family__parent__parent__parent",
+                "protein_conformation__protein__parent",
+                "protein_conformation__protein__parent__parent",
+                "protein_conformation__protein__family__parent",
+                "protein_conformation__protein__family__parent__parent__parent",
+                "protein_conformation__protein__species",Prefetch("ligands", queryset=StructureLigandInteraction.objects.filter(
+                annotated=True).prefetch_related('ligand', 'ligand__ligand_type', 'ligand_role')))
+        data = data.filter(extra_proteins__category__startswith=effector).prefetch_related(
+        'extra_proteins__protein_conformation','extra_proteins__wt_protein').order_by(
+        'extra_proteins__protein_conformation__protein__parent','state').annotate(
+        coverage_pct=ExpressionWrapper(
+                        Cast(Count("protein_conformation__residue", distinct=True),
+                                FloatField()) * 100.0 /
+                        Coalesce(
+                            Length("protein_conformation__protein__parent__sequence"),
+                            Length("protein_conformation__protein__sequence"),
+                            Value(1.0)
+                        ),
+                        output_field=IntegerField(),
+                    )
+        )
+        signal_ps = StructureExtraProteins.objects.filter(category__startswith=effector).values(
+                            'structure__pdb_code__index','structure__protein_conformation__protein','structure__protein_conformation__protein__parent','display_name',
+                            'wt_coverage','wt_protein__family__parent__parent__name','wt_protein__family__parent__name','category','note'
+                            ).order_by().annotate(coverage = Max('wt_coverage'))
+        ep = {s['structure__pdb_code__index']:s for s in signal_ps}
+    else:
+        data = Structure.objects.filter(structure_type__origin='experiment') \
+                                .prefetch_related(
+                                    "pdb_code",
+                                    "state",
+                                    "stabilizing_agents",
+                                    "structureligandinteraction_set__ligand__ligand_type",
+                                    "structureligandinteraction_set__ligand_role",
+                                    "structure_type",
+                                    "protein_conformation__protein__parent__parent__parent",
+                                    "protein_conformation__protein__parent__family__parent",
+                                    "protein_conformation__protein__parent__family__parent__parent__parent",
+                                    "protein_conformation__protein__parent",
+                                    "protein_conformation__protein__parent__parent",
+                                    "protein_conformation__protein__family__parent",
+                                    "protein_conformation__protein__family__parent__parent__parent",
+                                    "protein_conformation__protein__species",
+                                    Prefetch("ligands", 
+                                             queryset=StructureLigandInteraction.objects.filter(annotated=True, 
+                                                                                                structure__structure_type__origin='experiment') \
+                                                                                        .prefetch_related('ligand', 'ligand__ligand_type', 'ligand_role')
+                                    )
+                                )
+        
+        data = data.prefetch_related('extra_proteins__protein_conformation','extra_proteins__wt_protein').order_by(
+        'extra_proteins__protein_conformation__protein__parent','state').annotate(
+        coverage_pct=ExpressionWrapper(
+                        Cast(Count("protein_conformation__residue", distinct=True),
+                                FloatField()) * 100.0 /
+                        Coalesce(
+                            Length("protein_conformation__protein__parent__sequence"),
+                            Length("protein_conformation__protein__sequence"),
+                            Value(1.0)
+                        ),
+                        output_field=IntegerField(),
+                    )
+        )
+        signal_ps = StructureExtraProteins.objects.all().exclude(category__in=['G beta','G gamma']).values(
+                            'structure__pdb_code__index','structure__protein_conformation__protein__parent','display_name',
+                            'wt_coverage','wt_protein__family__parent__parent__name','wt_protein__family__parent__name','category','note'
+                            ).order_by().annotate(coverage = Max('wt_coverage'))
+        ep = {s['structure__pdb_code__index']:s for s in signal_ps}
+
+    if exclude_non_interacting and effector == 'G alpha':
+        complex_structure_ids = SignprotComplex.objects.values_list('structure', flat=True)
+        data = data.filter(id__in=complex_structure_ids)
+
+    # get a gn residue count for all WT proteins
+    proteins_pks = Structure.objects.filter(structure_type__origin='experiment').values_list("protein_conformation__protein__parent__pk", flat=True).distinct()
+    proteins_af_pks = Structure.objects.all().filter(structure_type__origin__in=['model','experiment_model_refined']).values_list("protein_conformation__protein__pk", flat=True).distinct()
+    if effector:
+        proteins_pks = list(proteins_pks) + list(proteins_af_pks)
+
+    # get minimum resolution for every receptor/state pair
+    # resolutions = Structure.objects.all().exclude(structure_type__slug__startswith='af-').values('protein_conformation__protein__parent','state__name').order_by().annotate(res = Min('resolution'))
+    if effector:
+        resolutions = Structure.objects.all().values('protein_conformation__protein__parent','state__name').order_by().annotate(res = Min('resolution'))
+    else:
+        resolutions = Structure.objects.filter(structure_type__origin='experiment').values('protein_conformation__protein__parent','state__name').order_by().annotate(res = Min('resolution'))
+    best_resolutions = {}
+    for r in resolutions:
+        key = '{}_{}'.format(r['protein_conformation__protein__parent'], r['state__name'])
+        best_resolutions[key] = r['res']
+
+    best_signal_p = {}
+    for ps in signal_ps:
+        if effector:
+            key = '{}_{}_{}'.format(ps['structure__protein_conformation__protein'], ps['structure__protein_conformation__protein__parent'], ps['display_name'])
+        else:
+            key = '{}_{}'.format(ps['structure__protein_conformation__protein__parent'], ps['display_name'])
+        best_signal_p[key] = ps['coverage']
+
+    data_dict = OrderedDict()
+
+    if effector=='G alpha':
+        signalling_header = 'G protein'
+    elif effector=='A':
+        signalling_header = 'Arrestin'
+    else:
+        signalling_header = 'Signalling protein'
+    data_table = f'''
+    <table id2='structure_selection' border=0 class='structure_selection row-border text-center compact text-nowrap' width='100%'> 
+        <thead><tr> 
+            <th rowspan=2> <input class ='form-check-input check_all' type='checkbox' value='' onclick='check_all(this);'> </th> 
+            <th colspan=6>Receptor</th> 
+            <th colspan=3>Species</th> 
+            <th colspan=4>Structure</th> 
+            <th colspan=3>Receptor state <a href=\"https://docs.gpcrdb.org/structures.html#structure-descriptors\" target=\"_blank\"><span class=\"glyphicon glyphicon-info-sign\"></span></a></th> 
+            <th colspan=4>{signalling_header}</th> 
+            <th colspan=2>Auxiliary protein</th> 
+            <th colspan=2>Ligand</th> 
+        </tr> 
+        <tr>
+            <!-- Protein Name --> <th></th>
+            <!-- Gene Name --> <th></th>
+            <!-- Protein Long --> <th></th> 
+            <!-- Protein Family --> <th></th> 
+            <!-- Class --> <th></th> 
+            <!-- Fraction_of_wt_seq --> <th>% of Seq</th> 
+            <!-- Species --> <th id=species></th> 
+            <!-- species best --> <th></th> 
+            <!-- identity to human --> <th>Identity %<br>to Human</th> 
+            <!-- Method --> <th></th>
+            <!-- pdb_id --> <th></th> 
+            <!-- resolution --> <th>Res (Å)</th>
+            <!-- resolution_best --> <th></th> 
+            <!-- state --> <th></th> 
+            <!-- gprot_bound_likeness --> <th>Degree active (%)</th> 
+            <!-- tm6_angle --> <th>TM6 tilt</th>'''
+#            <th><a href=\"http://docs.gpcrdb.org/structures.html\" target=\"_blank\">Cytosolic</br> opening</a></th>"
+#            <th><a href=\"http://docs.gpcrdb.org/structures.html\" target=\"_blank\">7TM Open IC (Å)</a></th> \
+#            <th>TM6 tilt (%, inactive: 0-X, intermed: X-Y, active Y-Z)</th> \
+    data_table += ''' 
+            <!-- signal_protein --> <th></th>
+            <!-- signal_protein_subtype --> <th></th>
+            <!-- signal_protein_note --> <th>Note</th> 
+            <!-- signal_protein_seq_cons --> <th>% of Seq</th>
+            <!-- fusion --> <th></th> 
+            <!-- antibody --> <th></th> 
+            <!-- ligand --> <th></th> 
+            <!-- ligand_function --> <th></th> 
+        </tr> 
+        <tr> 
+            <th colspan=7></th> 
+            <th colspan=1 id=best_species class='text-center'></th> 
+            <th colspan=4></th> 
+            <th colspan=1 id=best_res class='text-center'></th> 
+            <th colspan=12></th> 
+        </tr></thead><tbody>\n'''
+
+    identity_lookup = {}
+    for s in data:
+        pdb_id = s.pdb_code.index
+        if pdb_id in data_dict:
+            continue
+
+        r = {}
+        #Setting a short path that addresses af models and regular structures
+        #so we don't have to add infinite try/excepts
+        if not s.protein_conformation.protein.parent:
+            shorted = s.protein_conformation.protein
+        else:
+            shorted = s.protein_conformation.protein.parent
+
+        r['protein'] = shorted.entry_short()
+        r['protein_long'] = shorted.short()
+        r['protein_family'] = shorted.family.parent.short()
+        r['class'] = shorted.family.parent.parent.parent.shorter()
+        r['species'] = s.protein_conformation.protein.species.common_name
+        gene_obj = shorted.genes.first()
+        r['gene'] = gene_obj.name if gene_obj else "-"
+        # # r['date'] = s.publication_date
+        r['state'] = s.state.name
+        r['distance_representative'] = 'Yes' if s.distance_representative else 'No'
+        r['contact_representative'] = 'Yes' if s.contact_representative else 'No'
+        r['class_consensus_based_representative'] = 'Yes' if s.class_contact_representative else 'No'
+
+        #r['contact_representative_score'] = "{:.0%}".format(s.contact_representative_score)
+
+        #r['active_class_contacts_fraction'] = "{:.0%}".format(s.active_class_contacts_fraction)
+        #r['inactive_class_contacts_fraction'] = "{:.0%}".format(s.inactive_class_contacts_fraction)
+        #r['diff_class_contacts_fraction'] = "{:.0%}".format(s.inactive_class_contacts_fraction - s.active_class_contacts_fraction)
+
+        r['mammal'] = 'Only show mammalian receptor structures (even if the non-mammalian is the only)' if s.mammal else ''
+        r['closest_to_human'] = 'Only show structures from human or the closest species (for each receptor and state)' if s.closest_to_human else ''
+        r['closest_to_human_raw'] = s.closest_to_human
+
+        r['extra_filter'] = []
+        if s.mammal and s.closest_to_human:
+            r['extra_filter'] = ['*Only show mammalian structures and those from human or closest species',r['mammal'],r['closest_to_human']]
+        elif s.mammal:
+            r['extra_filter'] = [r['mammal']]
+        elif s.closest_to_human:
+            r['extra_filter'] = [r['closest_to_human']]
+
+        r['identity_to_human'] = "100"
+        if r['species'] != 'Human':
+            key = 'identity_to_human_{}_{}'.format(shorted.family.slug,s.protein_conformation.protein.species.pk)
+            if key in identity_lookup:
+                  r['identity_to_human'] = identity_lookup[key]
+            else:
+                r['identity_to_human'] = cache.get(key)
+                if r['identity_to_human'] == None:
+                    try:
+                        a = Alignment()
+                        ref_p = Protein.objects.get(family = shorted.family, species__common_name = 'Human', sequence_type__slug = 'wt')
+                        a.load_reference_protein(ref_p)
+                        a.load_proteins([shorted])
+                        a.load_segments(ProteinSegment.objects.filter(slug__in=['TM1', 'TM2', 'TM3', 'TM4','TM5','TM6', 'TM7']))
+                        a.build_alignment()
+                        a.calculate_similarity()
+                        a.calculate_statistics()
+                        p = a.proteins[1]
+                        r['identity_to_human'] = int(p.identity)
+                    except:
+                        r['identity_to_human'] = 0
+                    cache.set(key,r['identity_to_human'], 24*7*3600)
+                identity_lookup[key] = r['identity_to_human']
+
+        r['fraction_of_wt_seq'] = s.coverage_pct if s.coverage_pct != None else "N/A"
+
+        a_list = []
+        for a in s.stabilizing_agents.all():
+            a_list.append(a)
+        g_protein = only_gproteins(a_list)
+        arrestin = only_arrestins(a_list)
+        fusion = only_fusions(a_list)
+        antibody = only_antibodies(a_list)
+
+        r['signal_protein'] = ''
+        r['signal_protein_subtype'] = ''
+        r['signal_protein_note'] = ''
+        r['signal_protein_seq_cons'] = ''
+        r['signal_protein_seq_cons_color'] = ''
+
+        ### StructureExtraProtein data parsing
+        if pdb_id in ep:
+            if effector:
+                try:
+                    key = '{}_{}_{}'.format(s.protein_conformation.protein.pk, s.protein_conformation.protein.parent.pk, ep[pdb_id]['display_name'])
+                except:
+                    key = '{}_{}_{}'.format(s.protein_conformation.protein.pk, s.protein_conformation.protein.parent, ep[pdb_id]['display_name'])
+            else:
+                key = '{}_{}'.format(s.protein_conformation.protein.parent.pk,ep[pdb_id]['display_name'])
+
+            if best_signal_p[key] == ep[pdb_id]['wt_coverage']:
+                # this is the best coverage
+                r['signal_protein_seq_cons_color'] = 'green'
+            else:
+                r['signal_protein_seq_cons_color'] = 'red'
+            if ep[pdb_id]['category'] == "Arrestin":
+                 r['signal_protein'] = ep[pdb_id]['wt_protein__family__parent__parent__name']
+            else:
+                 r['signal_protein'] = ep[pdb_id]['wt_protein__family__parent__name']
+
+            # Slight reformatting along the lines of the structure browser
+            r['signal_protein_subtype'] = ep[pdb_id]['display_name']
+            if ep[pdb_id]['category'] == "G alpha" and r['signal_protein_subtype'][0] == 'G':
+                r['signal_protein_subtype'] = '&alpha;' + r['signal_protein_subtype'][1:]
+
+            note = ep[pdb_id]['note']
+            if note:
+                if len(note) > 20:
+                    r['signal_protein_note'] = "<span title='{}'>{}...</span>".format(note, note[:20])
+                else:
+                    r['signal_protein_note'] = note
+
+            r['signal_protein_seq_cons'] = ep[pdb_id]['wt_coverage']
+
+        #if pdb_id in methods:
+        #    r['method'] = methods[pdb_id]
+        #else:
+        #    r['method'] = "N/A"
+        r['method'] = s.structure_type.type_short()
+        try:
+            r['resolution'] = "{0:.2g}".format(s.resolution)
+            r['resolution_best'] = s.resolution==best_resolutions['{}_{}'.format(shorted.pk, s.state.name)]
+        except:
+            r['resolution'] = None
+            r['resolution_best'] = None
+
+
+        r['7tm_distance'] = s.distance
+        r['tm6_angle'] = str(round(s.tm6_angle)) if s.tm6_angle != None else ''
+        r['gprot_bound_likeness'] = str(round(s.gprot_bound_likeness)) if s.gprot_bound_likeness != None else ''
+
+        # DEBUGGING - overwrite with distance to 6x38
+#        tm6_distance = ResidueAngle.objects.filter(structure__pdb_code__index=pdb_id.upper(), residue__generic_number__label="6x38")
+#        if len(tm6_distance)>0:
+#            tm6_distance = tm6_distance[0].core_distance
+#        else:
+#            tm6_distance = -1
+#        r['7tm_distance'] = tm6_distance
+
+#        r['tm6_angle'] = s.tm6_angle if s.tm6_angle != None else 0
+
+        # DEBUGGING - overwrite with distance to 6x38-2x41
+        #tm2_tm6_distance = Distance.objects.filter(structure__pdb_code__index=pdb_id.upper(), res2__generic_number__label="6x38", res1__generic_number__label="2x41")
+        # DEBUGGING - overwrite with distance to 6x37-2x46
+        # tm2_tm6_distance = Distance.objects.filter(structure__pdb_code__index=pdb_id.upper(), gns_pair="2x46_6x37")
+        # DEBUGGING - overwrite with distance to 5x59-6x37
+        # tm5_tm6_distance = Distance.objects.filter(structure__pdb_code__index=pdb_id.upper(), gns_pair="5x59_6x37")
+        # if len(tm2_tm6_distance)>0 and len(tm5_tm6_distance)>0:
+        #     r['7tm_distance'] = "{} {} {}".format(tm2_tm6_distance[0].distance/100, tm5_tm6_distance[0].distance/100, (tm2_tm6_distance[0].distance-tm5_tm6_distance[0].distance)/100)
+        # else:
+        #     r['7tm_distance'] = -1
+
+        # DEBUGGING - overwrite with distance to 3x39-6x41
+        #tm3_tm6_distance = Distance.objects.filter(structure__pdb_code__index=pdb_id.upper(), gns_pair="3x39_6x41")
+        #if len(tm3_tm6_distance)>0:
+        #    r['7tm_distance'] = tm3_tm6_distance[0].distance
+        #else:
+        #    r['7tm_distance'] = -1
+
+        # DEBUGGING - overwrite with tm6 tilt angle
+#       r['7tm_distance'] = s.tm6_angle if s.tm6_angle != None else 0
+
+        r['g_protein'] = g_protein
+        r['arrestin']  = arrestin
+        r['fusion'] = fusion
+        r['antibody_full'] = antibody
+        if len(antibody) > 20:
+            antibody = antibody[:20] + ".."
+        r['antibody'] = antibody
+
+        r['ligand'] = "-"
+        r['ligand_function'] = "-"
+        r['ligand_type'] = "-"
+
+        for l in s.ligands.all():
+            r['ligand'] = l.ligand.name
+            if len(r['ligand'])>20:
+                r['ligand'] = r['ligand'][:20] + ".."
+            if l.ligand_role != None:
+                r['ligand_function'] = l.ligand_role.name
+            if l.ligand.ligand_type != None:
+                r['ligand_type'] = l.ligand.ligand_type.name
+
+        # if pdb_id.startswith('AFM_'):
+        #     if len(pdb_id)==8:
+        #         pdb_id = pdb_id.split('_')[1]+'_refined'
+        #     else:
+        #         pdb_id = pdb_id.replace('_HUMAN', '')
+
+        data_dict[pdb_id] = r
+        resolution_colour = 'green' if r['resolution_best'] else 'red'
+        resolution_best = 'Best' if r['resolution_best'] else ''
+        species_colour = 'green' if r['closest_to_human_raw'] else 'red'
+        species_best = 'Best' if r['closest_to_human_raw'] else ''
+        data_table += f'''<tr> \
+                        <td data-sort='0'><input class='form-check-input pdb_selected' type='checkbox' value='' 
+                                onclick='thisPDB(this);' representative='{r['contact_representative']}' distance_representative='{ r['distance_representative']}' 
+                                class_consensus_based_representative='{r['class_consensus_based_representative']}' long='{r['protein_long']}'  id='{pdb_id}'></td> \
+                        <td>{r['protein']}</td> 
+                        <td>{r['gene']}</td> 
+                        <td><span>{r['protein_long']}</span></td> 
+                        <td>{r['protein_family']}</td> 
+                        <td>{r['class']}</td> 
+                        <td>{r['fraction_of_wt_seq']}</td> 
+                        <td><p class='no_margins' style='color:{species_colour}'>{r['species']}</p></td> 
+                        <td>{species_best}</td> 
+                        <td>{r['identity_to_human']}</td> 
+                        <td>{r['method']}</td> 
+                        <td class='shorten'>{pdb_id}</td> 
+                        <td style='color:{resolution_colour}'>{r['resolution']}</td> 
+                        <td>{resolution_best}</td> 
+                        <td>{r['state']}</td> 
+                        <td>{r['gprot_bound_likeness']}</td>
+                        <td>{r['tm6_angle']}</td>
+                        <td>{r['signal_protein']}</td>
+                        <td>{r['signal_protein_subtype']}</td>
+                        <td>{r['signal_protein_note']}</td>
+                        <td><p class='no_margins' style='color:{r['signal_protein_seq_cons_color']}'>{r['signal_protein_seq_cons']}</p></td>
+                        <td>{r['fusion']}</td>
+                        <td title='{r['antibody_full']}'>{r['antibody']}</td>
+                        <td>{r['ligand']}</td>
+                        <td>{r['ligand_function']}</td>
+                        </tr> \n'''
+    data_table += "</tbody></table>"
+    return HttpResponse(data_table)
+
+    # return render(request, 'contactnetwork/test.html', {'data_table':data_table})
 
 @csrf_exempt
 def InteractionBrowserData(request):
