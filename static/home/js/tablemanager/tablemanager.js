@@ -143,6 +143,13 @@ class TableManager {
     }
 
     // -- 2. DataTable -- //
+
+    // Separate the button templates that DataTables knows about from the custom buttons that the ButtonFactory will handle, 
+    // so DataTables doesn't throw an error for unknown button types.
+    const { dtButtons, customButtons } = this._separateCustomButtonsForButtonFactory(dataTableOptions);
+    dataTableOptions.buttons = dtButtons;
+    dataTableOptions.customButtons = customButtons; // Custom buttons are handled by the ButtonFactory, not DataTables
+
     // The DataTable is created with the specified options, and the reference to the DataTable API is stored in this.dataTableReference.
     this.dataTableReference = $(`#${this.tableId}`).DataTable(dataTableOptions);
 
@@ -196,14 +203,35 @@ class TableManager {
     }
   }
 
+  _separateCustomButtonsForButtonFactory(dataTableOptions) {
+    const dataTablesKnownButtons = 
+    ["colOrder", "columnOrder", "colvis", "columnsToggle", "columnToggle", "columnsVisibility",
+      "columnVisibility","colvisRestore","colvisGroup", "copy", "copyHtml5", "csv", "csvHtml5", 
+      "excel", "excelHtml5", "pdf", "pdfHtml5", "pageLength", "print", "spacer", "collection", "split"] 
+    
+    let dtButtons = [] // Buttons to be handled by DataTables, either known buttons or custom buttons using the extenstion mechanism
+    let customButtons = [] // Custom buttons that are not known to DataTables and will be handled by the ButtonFactory
+    
+    dataTableOptions.buttons.forEach((buttonType) => {
+      ((typeof buttonType === "string" 
+        && dataTablesKnownButtons.includes(buttonType)) || 
+        typeof buttonType === "object") 
+      ? dtButtons.push(buttonType) 
+      : customButtons.push(buttonType)
+    });
+    
+    return { dtButtons, customButtons }
+    
+  }
+
   /**
    * Creates and attaches the buttons named in the buttonFactory option, using the ButtonFactory.
    * @param {Object} dataTableOptions - The options for the DataTable; buttonFactory is an array of button type names.
    */
   runButtonFactory(dataTableOptions) {
     // Create and attach buttons based on the button configurations in the dataTableOptions
-    if (dataTableOptions.buttonFactory) {
-      dataTableOptions.buttonFactory.forEach((buttonTypeName, idx) => {
+    if (dataTableOptions.customButtons) {
+      dataTableOptions.customButtons.forEach((buttonTypeName, idx) => {
         const button = this.buttonFactory.getButtonType(buttonTypeName, this);
         if (button) {
           button.attach(idx);
