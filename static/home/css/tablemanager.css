@@ -44,35 +44,6 @@
     max-width: 250px;
 }
 
-/* ---------------------------- */
-/* Styling for alternating rows */
-/* ---------------------------- */
-
-:root {
-    /* global scope */
-  --alternating-row-bg-on: rgb(249 251 255);
-  --alternating-row-bg-off: rgb(255 255 255);
-}
-
-table>tbody>tr.odd_row {
-    background-color: var(--alternating-row-bg-on);
-    border-bottom: 1px solid #bdbcbc;
-}
-
-table>tbody>tr.even_row {
-    background-color: var(--alternating-row-bg-off);
-    border-bottom: 1px solid #bdbcbc;
-}
-
-table.dataTable tbody tr.odd_row>.dtfc-fixed-start,table.dataTable tbody tr.odd_row>.dtfc-fixed-end {
-    z-index: 1;
-    background-color: var(--alternating-row-bg-on)
-}
-
-table.dataTable tbody tr.even_row>.dtfc-fixed-start,table.dataTable tbody tr.even_row>.dtfc-fixed-end {
-    z-index: 1;
-    background-color: var(--alternating-row-bg-off)
-}
 
 /* ----------------------------------- */
 /* CSS for optional Greek symbol popup */
