@@ -6,12 +6,13 @@ import django.apps
 from django.core.management.base import BaseCommand
 
 # Table model imports
-from table_provider.models import GpcrStructureBrowserTable, GpcrStructureStatisticsTable, PdbTable
+from table_provider.models import GpcrStructureBrowserTable, GpcrStructureStatisticsTable, PdbTable, GpcrListTable
 
 # Table query imports
 from structure.tables.structure_browser_table_query import StructureBrowserTableRows
 from structure.tables.structure_coverage_statistics_query import GpcrStructureCoverageStatisticsQuery
 from contactnetwork.tables.pdb_table_query import PdbTableDataSource
+from classification.tables.gpcr_list_table_query import GpcrListTableRows
 
 # Other imports
 from common.tools import test_model_updates
@@ -30,6 +31,7 @@ class Command(BaseCommand):
             #'build_structure_browser_table',
             'build_pdb_structure_table',
             'build_structure_statistics_table',
+            'build_gpcr_list_table',
         ]
 
         for f in functions:
@@ -65,6 +67,18 @@ class Command(BaseCommand):
         GpcrStructureStatisticsTable.objects.bulk_create(rows, batch_size=10000)
 
         self.logger.info('COMPLETED BUILDING STRUCTURE STATISTICS TABLE ({} rows)'.format(len(rows)))
+
+    def build_gpcr_list_table(self):
+        """ Builds table_provider.GpcrListTable, a flat per-receptor table
+            consumed by the All GPCRs page (/allgpcrs)."""
+        self.logger.info('BUILDING GPCR LIST TABLE')
+
+        GpcrListTable.objects.all().delete()
+
+        rows = [ GpcrListTable(**row) for row in GpcrListTableRows() ]
+        GpcrListTable.objects.bulk_create(rows, batch_size=10000)
+
+        self.logger.info('COMPLETED BUILDING GPCR LIST TABLE ({} rows)'.format(len(rows)))
 
 
     def build_pdb_structure_table(self):

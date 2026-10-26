@@ -3,7 +3,7 @@ from django.db import models
 from rest_framework import serializers
 
 from common.models import WebResource, WebLink
-from table_provider.models import GpcrStructureStatisticsTable, PdbTable
+from table_provider.models import GpcrStructureStatisticsTable, PdbTable, GpcrListTable
 
 # Server-side filter datatype for each model field class; checked in order.
 MODEL_FIELD_DATATYPES = (
@@ -197,8 +197,37 @@ class PdbStructureSummarySerializer(DataTablesSerializerMixin, serializers.Seria
         return self.weblink_anchor(obj.pdb_id, obj.pdb_id, 'pdb')
 
 
+class GpcrListSerializer(DataTablesSerializerMixin, serializers.Serializer):
+    """Serializer to generate JSON for the per-receptor classification data stored in the table_gpcr_list database table."""
+
+    protein = serializers.SerializerMethodField()
+    gene_name = serializers.ReadOnlyField()
+    receptor_class = serializers.ReadOnlyField()
+    receptor_family = serializers.ReadOnlyField()
+    modality = serializers.ReadOnlyField()
+    chemotype = serializers.ReadOnlyField()
+    sense = serializers.ReadOnlyField()
+    sequence = serializers.ReadOnlyField()
+
+    class Meta:
+        model = GpcrListTable
+        serializer_method_to_filter_field_map = {
+            'protein': 'protein_name_text',
+        }
+
+    def get_protein(self, obj):
+        # Internal link to the protein page. anchor_html keeps the name's markup (sub/superscripts) for display,
+        # while anchor_content is the plain text that filtering and ordering use.
+        return {
+            'anchor_content': obj.protein_name_text,
+            'anchor_html': obj.protein_name,
+            'anchor_href': f'/protein/{obj.uniprot_entry_name}',
+        }
+
+
 # Serializer behind each table name used in the configuration files (<table_name>__<variant>.json)
 TABLE_SERIALIZERS = {
     'pdb_data_table': PdbStructureSummarySerializer,
     'structure_statistics_table_gpcr': GpcrStatisticsSummarySerializer,
+    'gpcr_list_table': GpcrListSerializer,
 }

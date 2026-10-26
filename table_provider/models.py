@@ -184,6 +184,41 @@ class GpcrStructureBrowserTable(models.Model):
             models.Index(fields=["has_ligand_interactions"], name="gsbt_has_li_idx"),
         ]
 
+class GpcrListTable(models.Model):
+    """Flat, per-receptor table backing the "All GPCRs" page (/allgpcrs): one row per human receptor with its
+    classification (class, family, modality, chemotype, sense). Built by `manage.py build_frontend_table_datasources`
+    from classification.tables.gpcr_list_table_query."""
+
+    uniprot_entry_name = models.CharField(max_length=30, null=False)
+    protein_name = models.TextField(null=False)  # HTML, e.g. "&beta;<sub>2</sub>-adrenoceptor"
+    protein_name_text = models.CharField(max_length=200, null=False)  # Plain text of protein_name, for filtering and ordering
+    gene_name = models.CharField(max_length=30, null=True)
+    receptor_class = models.CharField(max_length=100, null=True)
+    receptor_family = models.CharField(max_length=100, null=True)
+    modality = models.CharField(max_length=100, null=True)
+    chemotype = models.CharField(max_length=100, null=True)
+    sense = models.CharField(max_length=100, null=True)
+    sequence = models.TextField(null=True)
+
+    def __str__(self):
+        return self.uniprot_entry_name
+
+    class Meta:
+        """Index definitions for the GpcrListTable model to optimize query performance during table filtering"""
+
+        db_table = "table_gpcr_list"
+        indexes = [
+            models.Index(fields=["uniprot_entry_name"], name="gl_uniprot_entry_name_idx"),
+            models.Index(fields=["protein_name_text"], name="gl_protein_name_text_idx"),
+            models.Index(fields=["gene_name"], name="gl_gene_idx"),
+            models.Index(fields=["receptor_class"], name="gl_receptor_class_idx"),
+            models.Index(fields=["receptor_family"], name="gl_receptor_family_idx"),
+            models.Index(fields=["modality"], name="gl_modality_idx"),
+            models.Index(fields=["chemotype"], name="gl_chemotype_idx"),
+            models.Index(fields=["sense"], name="gl_sense_idx"),
+        ]
+
+
 class PdbTable (models.Model):
     uniprot_entry_name = models.CharField(max_length=30, null=False)
     uniprot_accession = models.CharField(max_length=10, null=False)

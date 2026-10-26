@@ -1,22 +1,24 @@
 // This class represents the "weblink" data type used in the table manager.
 // It extends the "text" data type, providing additional functionality for rendering and filtering web links in the table after deserialization. 
 // The data for this data type is expected to be an object containing two properties: "anchor_href" and "anchor_content".
+// An optional "anchor_html" property supplies markup (e.g. sub/superscripts) to display in place of anchor_content.
 
 
 import { Text } from "./text.js";
 
 /**
- * Data type for web link columns. Cell data is an object with anchor_href and anchor_content. Displays the content as
- * a link that opens in a new tab, and filters on the link text. Extends Text.
+ * Data type for web link columns. Cell data is an object with anchor_href and anchor_content, and optionally
+ * anchor_html. Displays the content as a link that opens in a new tab, and filters on the link text. Extends Text.
  * @extends Text
  */
-class WebLinkText extends Text {  
+class WebLinkText extends Text {
 
     /**
      * Renders a web link. For the display type, null values show the nullValuePlaceholder. A link to anchor_href is shown
-     * with anchor_content as its text. Without an href, anchor_content is shown as plain text. Other types return
-     * anchor_content, so ordering and filtering use the link text.
-     * @param {{anchor_href?: string, anchor_content?: string}|null|undefined} data - The cell data.
+     * with anchor_content as its text, or with anchor_html as its markup when the data supplies it (trusted, server-built
+     * HTML). Without an href, the content is shown unlinked. Other types return the plain anchor_content, so ordering
+     * and filtering use the link text.
+     * @param {{anchor_href?: string, anchor_content?: string, anchor_html?: string}|null|undefined} data - The cell data.
      * @param {string} type - The DataTables render type: "display", "filter", "sort" or "type".
      * @param {*} row - The full row data (unused).
      * @param {Object} meta - The DataTables cell metadata (unused).
@@ -29,12 +31,16 @@ class WebLinkText extends Text {
         }
         if (type === "display" && data) {
             if (!data.anchor_href) {
-                return data.anchor_content || ""; // fallback to displaying anchor_content as plain text if href is missing
+                return data.anchor_html || data.anchor_content || ""; // fallback to displaying the content unlinked if href is missing
             }
             const link = document.createElement("a");
             link.setAttribute("href", data.anchor_href);
             link.setAttribute("target", "_blank");
-            link.textContent = data.anchor_content;
+            if (data.anchor_html) {
+                link.innerHTML = data.anchor_html;
+            } else {
+                link.textContent = data.anchor_content;
+            }
             return link.outerHTML;
         }
         // Search, order and type return

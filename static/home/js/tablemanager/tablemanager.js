@@ -352,6 +352,10 @@ class TableManager {
       throw new Error(`No table element found with id "${this.tableId}". Please ensure an HTML <table> element with this id exists in the DOM before initializing the TableManager.`);
     }
 
+    // Scopes the shared TableManager styling (tablemanager.css). Added before DataTables initialises, so the
+    // scroll-head table DataTables clones from this element carries it too.
+    table.classList.add("tablemanager-standard");
+
     let tableHead = this._createTableHeaderSection();
 
     let superHeaderRow = null;

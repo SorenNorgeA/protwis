@@ -1,0 +1,29 @@
+{
+  "serverSide": false,
+  "processing": true,
+  "deferRender": true,
+  "scrollX": true,
+  "layout": {
+    "topEnd": "pageLength",
+    "topStart": "buttons"
+  },
+  "ajax": {
+    "url": "/table_provider/gpcr_list_table_cached",
+    "type": "GET",
+    "cache": false,
+    "dataSrc": "data"
+  },
+  "search": {
+    "regex": true,
+    "caseInsensitive": true
+  },
+  "order": {
+    "name": "protein",
+    "dir": "asc"
+  },
+  "pageLength": 25,
+  "lengthMenu": [10, 25, 50, 100],
+  "nullValuePlaceholder": "-",
+  "showCategoryCounts": true,
+  "buttons": [ "clear_filters_default", "excel_default" ]
+}

@@ -1155,7 +1155,7 @@ class GPCRList(TemplateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["page_title"] = "All GPCRs"
-        ctx["gpcr_rows"] = json.dumps(_build_gpcr_browser_rows())
+        # The table rows are served by table_provider (GpcrListSummaryTable) and loaded by the TableManager
         return ctx
 
 
@@ -1347,38 +1347,6 @@ class Classification_tree(ClassificationVisualizationMixin):
             "tree_locked_type": requested_type if tree_locked else "",
             "tree_locked_selection": requested_selection if tree_locked else "",
         }
-
-def _strip_tags(s):
-    if not s:
-        return ""
-    return re.sub(r"<[^>]+>", "", str(s)).strip()
-
-
-def _build_gpcr_browser_rows():
-    """Flat, per-receptor row list backing the "GPCR list" tab on the
-    Classification overview page (classification/Classification.html)."""
-    return [
-        {
-            "uniprot": row["uniprot"],
-            "entry_name": row["entry_name"],
-            "gene": row["gene"],
-            "gene_link": row.get("gene_entrez_link", ""),
-            "protein_name_html": row["protein_name"],
-            "protein_name_text": _strip_tags(row["protein_name"]),
-            "gtopdb_link": row.get("gtopdb_link", ""),
-            "class": row["class_family_name"],
-            "family": row["receptor_family"],
-            "modality": row["modality"],
-            "chemotype": row["chemotype"],
-            "sense": row["sense"],
-            "sequence": row["sequence"],
-        }
-        for row in sorted(
-            classification_db.get_primary_classification_rows(),
-            key=lambda r: str(r["uniprot"]).lower(),
-        )
-    ]
-
 
 
 class ClassificationWheel:

@@ -1,0 +1,62 @@
+[
+  {
+    "column_group": "Receptor",
+    "json_id": "protein",
+    "title": "Protein",
+    "data_type": "weblinktext",
+    "allow_filter": true,
+    "show_symbol_popup": true,
+    "filter_suggestions": true
+  },
+  {
+    "column_group": "Receptor",
+    "json_id": "gene_name",
+    "title": "Gene",
+    "data_type": "textselect",
+    "allow_filter": true
+  },
+    {
+    "column_group": "Receptor",
+    "json_id": "receptor_family",
+    "title": "Family",
+    "data_type": "textselect",
+    "allow_filter": true
+  },
+  {
+    "column_group": "Receptor",
+    "json_id": "receptor_class",
+    "title": "Class",
+    "data_type": "textselect",
+    "allow_filter": true
+  },
+  {
+    "column_group": "Classification",
+    "json_id": "modality",
+    "title": "Modality",
+    "data_type": "textselect",
+    "allow_filter": true
+  },
+  {
+    "column_group": "Classification",
+    "json_id": "chemotype",
+    "title": "Chemotype",
+    "data_type": "textselect",
+    "allow_filter": true
+  },
+  {
+    "column_group": "Classification",
+    "json_id": "sense",
+    "title": "Sense",
+    "data_type": "textselect",
+    "allow_filter": true
+  },
+  {
+    "column_group": "Sequence",
+    "json_id": "sequence",
+    "title": "Sequence",
+    "data_type": "text",
+    "visible": false,
+    "allow_filter": false,
+    "orderable": false
+  }
+]

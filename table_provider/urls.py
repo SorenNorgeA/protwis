@@ -1,6 +1,6 @@
 from django.conf.urls import url
 from django.views.decorators.cache import cache_page
-from table_provider.views import GpcrStructureStatisticsSummaryTable, PdbStructureSummaryTable, ConfigurationFactoryView
+from table_provider.views import GpcrStructureStatisticsSummaryTable, PdbStructureSummaryTable, GpcrListSummaryTable, ConfigurationFactoryView
 
 
 def datatable_urls(path, view_class, name, cached_path=None):
@@ -29,6 +29,8 @@ urlpatterns = [
                     cached_path='structure_statistics_table_cached/gpcr'),
     *datatable_urls('pdb_data_table', PdbStructureSummaryTable, 'pdb_structure_table',
                     cached_path='pdb_data_table_cached'),
+    *datatable_urls('gpcr_list_table', GpcrListSummaryTable, 'gpcr_list_table',
+                    cached_path='gpcr_list_table_cached'),
 
     ######################################
     # TableManager configuration factory #
