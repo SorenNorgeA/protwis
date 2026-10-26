@@ -1,0 +1,24 @@
+{
+  "serverSide": true,
+  "processing": true,
+  "deferRender": true,
+  "scrollX": true,
+  "layout": {
+    "topEnd": null
+  },
+  "fixedColumns": { "left": 1 },
+  "ajax": {
+    "url": "/table_provider/pdb_data_table",
+    "type": "GET",
+    "cache": false,
+    "dataSrc":  "data"           
+    
+  },
+  "order": {
+		"name": "uniprot",
+		"dir": "asc"
+	},
+  "lengthMenu": [ [10, 25, 50], [10, 25, 50] ],
+  "nullValuePlaceholder": "-",
+  "showCategoryCounts": true
+}

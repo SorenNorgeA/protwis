@@ -1,0 +1,29 @@
+{
+  "serverSide": false,
+  "processing": true,
+  "deferRender": true,
+  "scrollX": true,
+  "layout": {
+    "topEnd": "pageLength",
+   	"topStart": "buttons"
+	},
+  "fixedColumns": { "left": 2 },
+  "ajax": {
+    "url": "/table_provider/pdb_data_table_cached",
+    "type": "GET",
+    "cache": false,
+    "dataSrc":  "data"
+  },  
+  "search": {
+    "regex": true,
+    "caseInsensitive": true
+  },
+  "order": {
+		"name": "uniprot",
+		"dir": "asc"
+	},
+  "lengthMenu": [10, 25, 50, 100] ,
+  "nullValuePlaceholder": "-",
+  "showCategoryCounts": true,
+  "buttons": [ "clear_filters_default", "column_visibility", "closest_to_human_toggle", "best_resolution_toggle", "excel_default" ]
+}

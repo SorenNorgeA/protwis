@@ -1,0 +1,163 @@
+/* ------------------- */
+/* Header cell styling */
+/* ------------------- */
+
+.super_header_cell {
+    text-align: center !important;
+    border: 1px solid #b3b3b3;    
+}
+
+.primary_header_cell {
+    border-bottom: 1px solid #b3b3b3;
+}
+
+.filter_header_cell {
+    border-bottom: 1px solid #b3b3b3;
+}
+
+.col_group_boundary_left {
+    border-left: 1px solid #b3b3b3;
+}
+
+.col_group_boundary_right {
+    border-right: 1px solid #b3b3b3;
+}
+
+/* ---------------------- */
+/* Filter control styling */
+/* ---------------------- */
+
+.col-filter.numericrange-filter {
+    width: 60px;
+}
+
+.col-filter.text-filter {
+    width: 140px;
+}
+
+/* -------------------------------- */
+/* Styling for the table body cells */
+/* -------------------------------- */
+
+.wide-note-cell, .wide-note-header {
+    min-width: 150px !important;
+    max-width: 250px;
+}
+
+
+/* ----------------------------------- */
+/* CSS for optional Greek symbol popup */
+/* ----------------------------------- */
+
+.tm-text-filter-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.tm-symbol-button {
+    cursor: pointer;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    background: #f0f0f0;
+    padding: 1px 4px;
+    font-size: 0.8em;
+    white-space: nowrap;
+}
+
+.tm-symbol-popup {
+    display: none;
+    position: absolute;
+    z-index: 9999;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 4px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    grid-template-columns: repeat(3, 1fr);
+    gap: 3px;
+}
+
+.tm-symbol-popup.tm-open {
+    display: grid;
+}
+
+.tm-symbol-popup-item {
+    cursor: pointer;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    background: #f8f8f8;
+    padding: 2px 5px;
+    font-size: 1em;
+    line-height: 1.4;
+}
+
+/* ------------------------------ */
+/* Conditional formatting classes */
+/* ------------------------------ */
+
+.bestTrue {
+    color: green; 
+}
+
+.bestFalse {
+    color: red; 
+}
+
+/* ---------------------------------------- */
+/* -- Column visibility (ColVis) classes -- */
+/* CSS to override DataTables Buttons'      */
+/* default styling for the column           */
+/* visibility popup                         */
+/* ---------------------------------------- */
+
+
+/* Column visibility collection: each column group is laid out as a column, headed by its group button */
+/* Buttons gives collections a fixed 150px width; size the popup to its columns instead, capped at the viewport */
+.dt-button-collection.colvis_grouped_columns {
+  width: max-content;
+  max-width: 90vw;
+}
+
+.dt-button-collection.colvis_grouped_columns > [role="menu"] {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 12px;
+  overflow-x: auto;
+}
+
+.dt-button-collection.colvis_grouped_columns .colvis_group_column {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-width: 10em;
+  max-width: 16em;
+}
+
+/* Scoped to the grouped popup so these beat Buttons' own .dt-button-active padding and nowrap rules.
+   Right padding keeps wrapped labels clear of the active tick Buttons draws at right: 1em */
+.dt-button-collection.colvis_grouped_columns .dt-button {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  white-space: normal !important;
+  overflow: visible;
+  padding-right: 2.5em !important;
+}
+
+.dt-button-collection.colvis_grouped_columns .dt-button-active:after {
+  right: 0.75em;
+}
+
+.dt-button.colvis_group_button {
+  font-weight: bold;
+  text-align: left;
+  border-bottom: 1px solid #ccc;
+  margin-bottom: 4px;
+}
+
+.dt-button.colvis_column_button {
+  padding-left: 1.5em;
+}

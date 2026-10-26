@@ -3,36 +3,103 @@
 
 import { DataTypeBase } from "./datatypebase.js";
 
+// Symbol popups close when the user clicks anywhere else. One document listener serves every popup, and popups
+// that have been removed from the page (e.g. a destroyed table) are dropped from the set as they are found.
+const symbolPopups = new Set();
+let outsideClickListenerAdded = false;
+
+/**
+ * Registers a symbol popup to be closed by the next click anywhere on the document. The document listener is added
+ * once, on first use.
+ * @param {HTMLElement} popup - The symbol popup element.
+ */
+function registerPopupForOutsideClick(popup) {
+    if (!outsideClickListenerAdded) {
+        outsideClickListenerAdded = true;
+        document.addEventListener("click", () => {
+            for (const p of symbolPopups) {
+                if (!p.isConnected) {
+                    symbolPopups.delete(p);
+                } else {
+                    p.classList.remove("tm-open");
+                }
+            }
+        }, true);
+    }
+    symbolPopups.add(popup);
+}
+
+/**
+ * Data type for text columns. Displays text, truncated to max_display_length when set, and filters by typed text.
+ * Also the base class for the other text-based data types.
+ * @extends DataTypeBase
+ */
 class Text extends DataTypeBase {
 
+    /**
+     * Renders text for display. Null values show the nullValuePlaceholder. Text longer than max_display_length is
+     * truncated with an ellipsis, and the full text is kept in the title attribute. Other types return the raw data.
+     * @param {string|null|undefined} data - The cell text.
+     * @param {string} type - The DataTables render type: "display", "filter", "sort" or "type".
+     * @param {*} row - The full row data (unused).
+     * @param {Object} meta - The DataTables cell metadata (unused).
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     * @returns {string|null|undefined} The rendered value for the render type.
+     */
+    dataTableRenderer(data, type, row, meta, tableManagerReference) {
+        if (type === "display" && (data === null || data === undefined)) {
+            return tableManagerReference.nullValuePlaceholder;
+        }
+        if (type === "display" && data) {
+            const maxDisplayLength = this.column.max_display_length;
+            if(maxDisplayLength && data.length > maxDisplayLength){
+                let truncatedData = data.substring(0, maxDisplayLength) + "...";
+                const span = document.createElement("span");
+                span.setAttribute("title", data);
+                span.textContent = truncatedData;
+                return span.outerHTML;
+            }
+            return data;
+        }
+        return data; // Search, order and type return
+    } 
+
+    /**
+     * Creates a text input that applies the filter when it loses focus or Enter is pressed. If show_symbol_popup is set,
+     * a button is added beside the input that opens a popup of Greek symbols to insert into it.
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     * @returns {HTMLDivElement|false} The filter wrapper, or false if the column does not allow filtering.
+     */
     createFilterInterface(tableManagerReference) {
-        if (!this.allow_filter) {
-            return null;
+        const column = this.column;
+        if (!column.allow_filter) {
+            return false;
         }
 
         let filterInput = document.createElement("input");
-        filterInput.setAttribute("data-field", this.json_id);
-        filterInput.setAttribute("id", this.json_id + "_search");
+        filterInput.setAttribute("data-field", column.json_id);
+        // Prefix id with table id to avoid collisions when multiple tables have the same column on one page
+        filterInput.setAttribute("id", tableManagerReference.tableId + "_" + column.json_id + "_search");
 
         filterInput.classList.add("col-filter");
         filterInput.classList.add("text-filter");
 
-        if (this.cssClassFilterInput) {
-            filterInput.classList.add(this.cssClassFilterInput);
+        if (column.cssClassFilterInput) {
+            filterInput.classList.add(column.cssClassFilterInput);
         }
 
-        filterInput.addEventListener("blur", (e) => this.blurHandler(e, this.col_idx, tableManagerReference));
+        filterInput.addEventListener("blur", (e) => this.blurHandler(e, tableManagerReference));
         filterInput.addEventListener("keydown", (e) => {
             if (e.key === "Enter") {
-                this.blurHandler(e, this.col_idx, tableManagerReference);
+                this.blurHandler(e, tableManagerReference);
             }
         });
 
         const wrapper = document.createElement("div");
-        wrapper.style.cssText = "position:relative;display:inline-flex;align-items:center;gap:2px;";
+        wrapper.classList.add("tm-text-filter-wrapper");
         wrapper.appendChild(filterInput);
 
-        if (this.show_symbol_popup) {
+        if (column.show_symbol_popup) {
             const { symbolBtn, popup } = this.createSymbolPopup(filterInput);
             wrapper.appendChild(symbolBtn);
             wrapper.appendChild(popup);
@@ -41,6 +108,11 @@ class Text extends DataTypeBase {
         return wrapper;
     }
 
+    /**
+     * Creates the Greek symbol button and its popup. Clicking a symbol appends it to the filter input.
+     * @param {HTMLInputElement} filterInput - The filter input to insert symbols into.
+     * @returns {{symbolBtn: HTMLButtonElement, popup: HTMLDivElement}} The toggle button and the popup.
+     */
     createSymbolPopup(filterInput) {
         const greekSymbols = [
             { label: "α", name: "alpha" },
@@ -51,32 +123,14 @@ class Text extends DataTypeBase {
         ];
 
         const popup = document.createElement("div");
-        let popupCss = "display:none;"
-        popupCss += "position:absolute;"
-        popupCss += "z-index:9999;"
-        popupCss += "background:#fff;"
-        popupCss += "border:1px solid #ccc;"
-        popupCss += "border-radius:4px;"
-        popupCss += "padding:4px;"
-        popupCss += "box-shadow:0 2px 6px rgba(0,0,0,0.2);"
-        popupCss += "display:none;"
-        popupCss += "grid-template-columns:repeat(3,1fr);"
-        popupCss += "gap:3px;"
-        popup.style.cssText = popupCss;
+        popup.classList.add("tm-symbol-popup");
 
         greekSymbols.forEach(({ label, name }) => {
             const cell = document.createElement("button");
             cell.type = "button";
             cell.title = name;
             cell.textContent = label;
-            let cellCss = "cursor:pointer;"
-            cellCss += "border:1px solid #ddd;"
-            cellCss += "border-radius:3px;"
-            cellCss += "background:#f8f8f8;"
-            cellCss += "padding:2px 5px;"
-            cellCss += "font-size:1em;"
-            cellCss += "line-height:1.4;"
-            cell.style.cssText = cellCss;
+            cell.classList.add("tm-symbol-popup-item");
             cell.addEventListener("mousedown", (e) => {
                 e.preventDefault();
                 filterInput.value += label;
@@ -88,54 +142,63 @@ class Text extends DataTypeBase {
         const symbolBtn = document.createElement("button");
         symbolBtn.type = "button";
         symbolBtn.textContent = "Ω";
-        let symbolBtnCss = "cursor:pointer;"
-        symbolBtnCss += "border:1px solid #ccc;"
-        symbolBtnCss += "border-radius:3px;"
-        symbolBtnCss += "background:#f0f0f0;"
-        symbolBtnCss += "padding:1px 4px;"
-        symbolBtnCss += "font-size:0.8em;"
-        symbolBtnCss += "white-space:nowrap;"
-        symbolBtn.style.cssText = symbolBtnCss;
-
-        let popupVisible = false;
+        symbolBtn.classList.add("tm-symbol-button");
 
         symbolBtn.addEventListener("click", (e) => {
             e.stopPropagation();
-            popupVisible = !popupVisible;
-            popup.style.display = popupVisible ? "grid" : "none";
+            popup.classList.toggle("tm-open");
         });
 
-        document.addEventListener("click", () => {
-            if (popupVisible) {
-                popupVisible = false;
-                popup.style.display = "none";
-            }
-        }, true);
+        registerPopupForOutsideClick(popup);
 
         return { symbolBtn, popup };
     }
+        
+    /**
+     * Removes HTML tags from a value, so it can be compared with plain text.
+     * @param {*} v - The value to clean.
+     * @returns {string} The value as text, or an empty string if it is null or undefined.
+     */
+    _stripHtmlTags(v) {
+        return v == null ? "" : String(v).replace(/<[^>]*>/g, '');
+    }
 
-    blurHandler = (e, col_idx, tableManagerReference) => {
-        function stripHtmlTags(str) {
-            return str.replace(/<[^>]*>/g, '');
+    /**
+     * Applies the typed text as a column filter. If the text matches one of the column's options exactly, it filters on
+     * that value. Otherwise it filters with a contains match. Empty text clears the filter. Does nothing while filters
+     * are being cleared.
+     * @async
+     * @param {Event} e - The blur or Enter event. Its target is the filter input.
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     * @returns {Promise<void>}
+     */
+    async blurHandler(e, tableManagerReference) {
+        const column = this.column;
+
+        // If we are in the process of clearing filters, we don't want to trigger a redraw as it will be done after all filters have been cleared.
+        if (tableManagerReference.state.clearingFilters) {
+            return
         }
 
-        const currentSearchValue = tableManagerReference.dataTableReference.columns(col_idx).search()[0];
+        const dataSource = tableManagerReference.dataSource;
+        const newSearchValue = e.target.value.trim();
 
-        let newSearchValue = e.target.value;
+        // An empty input gives no terms, which clears the filter
+        const terms = [];
+        if (newSearchValue !== "") {
+            // Get the list of unique values for the column. Client-side these are the raw cell data, so compare
+            // against their text; server-side they are the values the server matches on, so compare them as given.
+            let dataOptions = await dataSource.getOptions(column);
+            if (!dataSource.isServerSide) {
+                dataOptions = dataOptions.map((item) => this._stripHtmlTags(item));
+            }
 
-        const dataOptions = tableManagerReference.dataTableReference.column(col_idx).data(0).toArray().map((item) => stripHtmlTags(item));
-
-        const useRegex = !dataOptions.includes(newSearchValue)
-
-        if (useRegex) {
-              newSearchValue = newSearchValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // escape regex special characters
-              newSearchValue = ".*" + newSearchValue + ".*"; // wrap tag values with wildcards for "contains" search
+            //if the search value is not in the list of unique values, use a "contains" search to allow for partial matches
+            terms.push({ value: newSearchValue, contains: !dataOptions.includes(newSearchValue) });
         }
 
-        if (newSearchValue !== currentSearchValue) {
-            tableManagerReference.dataTableReference.columns(col_idx).search(newSearchValue, useRegex).draw();
-        }
+        // Redraws only if the filter has changed
+        dataSource.applyColumnFilter(column, { type: "text", terms: terms });
     }
 }
 

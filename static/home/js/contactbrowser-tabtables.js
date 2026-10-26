@@ -169,7 +169,7 @@ function make_range_number_cols(start_column, repeat_number) {
     return repeated_from_to;
 }
 
-jQuery.extend( jQuery.fn.dataTableExt.oSort, {
+jQuery.extend( $.fn.dataTable.ext.type.order, {
     "non-empty-string-asc": function (str1, str2) {
         if(str1 == "")
             return 1;
