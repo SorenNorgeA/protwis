@@ -115,7 +115,8 @@ class Checkbox extends DataTypeBase {
 
     /**
      * Default click handler. Adds the row to, or removes it from, the active checkboxes state, then publishes a
-     * checkboxStateChanged event.
+     * checkboxStateChanged event. In single-select mode (checkboxMultiSelect: false) checking a row first clears any
+     * other selection.
      * @param {Event} e - The click event. Its target is the checkbox.
      * @param {{row_id: (number|string), data?: Object}} cellData - The cell data for the row.
      * @param {Object} tableManagerReference - The table manager that owns the table.
@@ -123,14 +124,43 @@ class Checkbox extends DataTypeBase {
     defaultClickHandler(e, cellData, tableManagerReference) {
         const checkbox = e.target;
         const rowId = Number.parseInt(cellData.row_id);
-        
+
         if (checkbox.checked) {
+            if (this.column.checkboxMultiSelect === false) {
+                this.clearOtherSelections(checkbox, rowId, tableManagerReference);
+            }
             tableManagerReference.state.activeCheckBoxes.set(rowId, cellData);
         } else {
             tableManagerReference.state.activeCheckBoxes.delete(rowId);
         }
 
         tableManagerReference.eventPubSub.publish('checkboxStateChanged', { rowId: rowId, checked: checkbox.checked, cellData: cellData });
+    }
+
+    /**
+     * Single-select helper. Removes every other row from the active checkboxes state, publishes an unchecked
+     * checkboxStateChanged event for each one, and unchecks their rendered checkboxes.
+     * @param {HTMLInputElement} checkbox - The checkbox that was just checked. It is left alone.
+     * @param {number} rowId - The row id of the checkbox that was just checked.
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     */
+    clearOtherSelections(checkbox, rowId, tableManagerReference) {
+        const activeCheckboxes = tableManagerReference.state.activeCheckBoxes;
+
+        for (const [activeRowId, activeCellData] of [...activeCheckboxes]) {
+            if (activeRowId === rowId) {
+                continue;
+            }
+            activeCheckboxes.delete(activeRowId);
+            tableManagerReference.eventPubSub.publish('checkboxStateChanged', { rowId: activeRowId, checked: false, cellData: activeCellData });
+        }
+
+        // Rendered rows on the current page; rows on other pages are unchecked by synchroniseVisibleCheckState when drawn
+        checkbox.closest("tbody")?.querySelectorAll('input[type="checkbox"]').forEach((rowCheckbox) => {
+            if (rowCheckbox !== checkbox) {
+                rowCheckbox.checked = false;
+            }
+        });
     }
 
     /**
@@ -178,12 +208,14 @@ class MasterCheckbox{
     }
 
     /**
-     * Creates the master checkbox input and connects its change event to clickHandler.
+     * Creates the master checkbox input and connects its change event to clickHandler. In single-select mode
+     * (checkboxMultiSelect: false) the master checkbox is disabled, so it does nothing.
      * @returns {HTMLInputElement} The master checkbox element.
      */
     createHtmlElement() {
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
+        checkbox.disabled = this.column.checkboxMultiSelect === false;
         checkbox.addEventListener("change", (e) => this.clickHandler(e, this.tableManagerReference));
         this.checkboxElement = checkbox;
         return checkbox;

@@ -185,7 +185,7 @@ class PdbStructureSummarySerializer(DataTablesSerializerMixin, serializers.Seria
         }
 
     def get_checkbox(self, obj):
-        return {'row_id': obj.id, 'data': {'pdb_id': obj.pdb_id}}
+        return {'row_id': obj.id, 'data': {'pdb_id': obj.pdb_id, 'protein_name_short': obj.protein_name_short}}
 
     def get_uniprot(self, obj):
         return self.weblink_anchor(obj.uniprot_entry_name, obj.uniprot_accession, 'uniprot')
