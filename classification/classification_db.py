@@ -18,7 +18,7 @@ try:
 except Exception:
     cache_alignment = cache
 
-CLASSIFICATION_ROWS_CACHE_KEY = "classification:tree_rows:db:v4"
+CLASSIFICATION_ROWS_CACHE_KEY = "classification:tree_rows:db:v5"
 CLASSIFICATION_ROWS_CACHE_TIMEOUT = 60 * 60 * 24  # 24h
 
 D3_EMPTY_LABEL = "Other / unknown"

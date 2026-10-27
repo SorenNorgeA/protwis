@@ -23,13 +23,13 @@
 
   function titleCaseFragment(value) {
     const normalizedValue = String(value || '').trim().toLowerCase();
-    // Generic per-word title-casing would wrongly capitalize after the "/" and "-" here
-    // ("Extra-Nasal" instead of "extra-nasal"), so these keep the DB's actual casing verbatim.
-    if (normalizedValue === 'olfactory/extra-nasal 1') {
-      return 'Olfactory/extra-nasal 1';
+    // Generic per-word title-casing would wrongly capitalize after the "/" here
+    // ("Pleiotropic" instead of "pleiotropic"), so these keep the DB's actual casing verbatim.
+    if (normalizedValue === 'olfactory/pleiotropic 1') {
+      return 'Olfactory/pleiotropic 1';
     }
-    if (normalizedValue === 'olfactory/extra-nasal 2') {
-      return 'Olfactory/extra-nasal 2';
+    if (normalizedValue === 'olfactory/pleiotropic 2') {
+      return 'Olfactory/pleiotropic 2';
     }
     return String(value || '').replace(/\b([A-Za-z][A-Za-z'-]*)/g, function(match) {
       return match.charAt(0).toUpperCase() + match.slice(1).toLowerCase();
@@ -38,8 +38,8 @@
 
   function normalizeClassName(name) {
     return String(name || '')
-      .replace('Class O1 (fish-like)', 'Class O1 (Olfactory/extra-nasal 1)')
-      .replace('Class O2 (tetrapod specific)', 'Class O2 (Olfactory/extra-nasal 2)');
+      .replace('Class O1 (fish-like)', 'Class O1 (Olfactory/pleiotropic 1)')
+      .replace('Class O2 (tetrapod specific)', 'Class O2 (Olfactory/pleiotropic 2)');
   }
 
   function formattedClassNameHtml(name) {
@@ -72,7 +72,7 @@
 
   function buildMarkerSizes(points, activeClassId) {
     return points.map(function(point) {
-      return point.id === activeClassId ? 48 : 36;
+      return point.id === activeClassId ? 62 : 50;
     });
   }
 
@@ -91,7 +91,7 @@
 
   function buildLabelSizes(points, activeClassId) {
     return points.map(function(point) {
-      return point.id === activeClassId ? 28 : 14;
+      return point.id === activeClassId ? 30 : 20;
     });
   }
 
@@ -257,7 +257,8 @@
     };
 
     const layout = {
-      margin: { l: 24, r: 24, t: 12, b: 36 },
+      // Top margin clears the Download dropdown pinned in the card's top-right corner.
+      margin: { l: 24, r: 24, t: 48, b: 36 },
       paper_bgcolor: '#fff',
       plot_bgcolor: '#fff',
       showlegend: false,
@@ -315,6 +316,8 @@
     data[1].text = buildBasePlotLabels(points);
     data[1].textfont.size = buildLabelSizes(points, null);
     const layout = JSON.parse(JSON.stringify(clusterPlotEl.layout));
+    // The exported image has no Download button, so drop the top margin reserved for it.
+    layout.margin.t = 12;
     // Keep the on-screen dimensions so marker/label sizes stay proportional to the canvas.
     const width = Math.max(clusterPlotEl._fullLayout.width || 0, 800);
     const height = Math.max(clusterPlotEl._fullLayout.height || 0, 700);

@@ -61,8 +61,8 @@ class ClassificationVisualizationMixin:
         ("B2", {"label": "Class B2", "title": "Class B2 (Adhesion)", "slug": "003"}),
         ("C", {"label": "Class C", "title": "Class C (Glutamate)", "slug": "004"}),
         ("F", {"label": "Class F", "title": "Class F (Frizzled)", "slug": "006"}),
-        ("O1", {"label": "Class O1", "title": "Class O1 (Olfactory/extra-nasal 1)", "slug": "007"}),
-        ("O2", {"label": "Class O2", "title": "Class O2 (Olfactory/extra-nasal 2)", "slug": "008"}),
+        ("O1", {"label": "Class O1", "title": "Class O1 (Olfactory/pleiotropic 1)", "slug": "007"}),
+        ("O2", {"label": "Class O2", "title": "Class O2 (Olfactory/pleiotropic 2)", "slug": "008"}),
         ("T2", {"label": "Class T2", "title": "Class T2 (Taste 2)", "slug": "009"}),
         ("V1", {"label": "Class V1", "title": "Class V1 (Vomeronasal)", "slug": "010"}),
         ("U", {"label": "Unclassified", "title": "Unclassified", "slug": "011"}),
@@ -1018,9 +1018,9 @@ class Classification(ClassificationVisualizationMixin, TemplateView):
         {"code": "D2", "name": "Fungal pheromone 2", "species": "Fungi", "non_sensory_share": "-", "sensory_function": "Pheromone-sensing"},
         {"code": "E", "name": "Slime mold cAMP", "species": "Slime molds, amoebas", "non_sensory_share": "-", "sensory_function": "Pheromone-sensing (cAMP, in chemotaxis)"},
         {"code": "F", "name": "Frizzled", "species": "Yes", "non_sensory_share": "All", "sensory_function": "-"},
-        {"code": "O1", "name": "Olfactory/extranasal 1", "species": "Yes", "non_sensory_share": "Minority", "sensory_function": "Olfaction"},
-        {"code": "O2", "name": "Olfactory/extranasal 2", "species": "Yes", "non_sensory_share": "Minority", "sensory_function": "Olfaction"},
-        {"code": "T2", "name": "Taste 2/extraoral", "species": "Yes", "non_sensory_share": "Minority", "sensory_function": "Bitter taste"},
+        {"code": "O1", "name": "Olfactory/pleiotropic 1", "species": "Yes", "non_sensory_share": "Minority", "sensory_function": "Olfaction"},
+        {"code": "O2", "name": "Olfactory/pleiotropic 2", "species": "Yes", "non_sensory_share": "Minority", "sensory_function": "Olfaction"},
+        {"code": "T2", "name": "Taste 2/pleiotropic", "species": "Yes", "non_sensory_share": "Minority", "sensory_function": "Bitter taste"},
         {"code": "V1", "name": "Vomeronasal 1", "species": "Yes (five V1 receptors, but no vomeronasal organ in humans)", "non_sensory_share": "TBD", "sensory_function": "Pheromone-sensing"},
         {"code": "V2", "name": "Vomeronasal 2", "species": "Amphibia, reptiles & non-primate mammals", "non_sensory_share": "-", "sensory_function": "Pheromone-sensing"},
         {"code": "U", "name": "Unclassified", "species": "Yes", "non_sensory_share": "Unknown", "sensory_function": "Unknown"},
@@ -1431,8 +1431,8 @@ class ClassSimilarityDataMixin:
         "Class B2 (Adhesion)",
         "Class C (Glutamate)",
         "Class F (Frizzled)",
-        "Class O1 (Olfactory/extra-nasal 1)",
-        "Class O2 (Olfactory/extra-nasal 2)",
+        "Class O1 (Olfactory/pleiotropic 1)",
+        "Class O2 (Olfactory/pleiotropic 2)",
         "Class T2 (Taste 2)",
         "Class V1 (Vomeronasal)",
         "Unclassified",
@@ -1445,8 +1445,8 @@ class ClassSimilarityDataMixin:
         "Class B2 (Adhesion)": "003",
         "Class C (Glutamate)": "004",
         "Class F (Frizzled)":  "006",
-        "Class O1 (Olfactory/extra-nasal 1)": "007",
-        "Class O2 (Olfactory/extra-nasal 2)": "008",
+        "Class O1 (Olfactory/pleiotropic 1)": "007",
+        "Class O2 (Olfactory/pleiotropic 2)": "008",
         "Class T2 (Taste 2)": "009",
         "Class V1 (Vomeronasal)": "010",
         "Unclassified": "011",
@@ -1458,8 +1458,8 @@ class ClassSimilarityDataMixin:
         "Class B2 (Adhesion)": "B2",
         "Class C (Glutamate)": "C",
         "Class F (Frizzled)": "F",
-        "Class O1 (Olfactory/extra-nasal 1)": "O1",
-        "Class O2 (Olfactory/extra-nasal 2)": "O2",
+        "Class O1 (Olfactory/pleiotropic 1)": "O1",
+        "Class O2 (Olfactory/pleiotropic 2)": "O2",
         "Class T2 (Taste 2)": "T2",
         "Class V1 (Vomeronasal)": "V1",
         "Unclassified": "U",
@@ -1467,7 +1467,7 @@ class ClassSimilarityDataMixin:
 
     CLASS_COLOR_BY_SYMBOL = GPCR_CLASS_COLORS
 
-    CLASS_CLUSTER_PAYLOAD_CACHE_KEY = "classclustertree:payload:v13"
+    CLASS_CLUSTER_PAYLOAD_CACHE_KEY = "classclustertree:payload:v14"
     CLASS_CLUSTER_PAYLOAD_CACHE_TIMEOUT = 60 * 60 * 24
     CLASS_CLUSTER_PAYLOAD_VERSION = 3
     CLASS_CLUSTER_DATASET_KEY = "superfamily"

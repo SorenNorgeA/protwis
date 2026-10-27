@@ -220,8 +220,8 @@ def class_code_to_name(class_code):
         "C": "Class C (Glutamate)",
         "D1": "Class D1 (Ste2-like fungal pheromone)",
         "F": "Class F (Frizzled)",
-        "O1": "Class O1 (Olfactory/extra-nasal 1)",
-        "O2": "Class O2 (Olfactory/extra-nasal 2)",
+        "O1": "Class O1 (Olfactory/pleiotropic 1)",
+        "O2": "Class O2 (Olfactory/pleiotropic 2)",
         "T2": "Class T2 (Taste 2)",
         "V1": "Class V1 (Vomeronasal)",
         "U": "Class U (Unclassified)"
@@ -237,8 +237,8 @@ def format_class_header(class_code):
         "Class C (Glutamate)": "Class C<br>(Glutamate)",
         "Class D1 (Ste2-like fungal pheromone)": "Class D1<br>(Ste2-like fungal pheromone)",
         "Class F (Frizzled)": "Class F<br>(Frizzled)",
-        "Class O1 (Olfactory/extra-nasal 1)": "Class O1<br>(Olfactory/extra-nasal 1)",
-        "Class O2 (Olfactory/extra-nasal 2)": "Class O2<br>(Olfactory/extra-nasal 2)",
+        "Class O1 (Olfactory/pleiotropic 1)": "Class O1<br>(Olfactory/pleiotropic 1)",
+        "Class O2 (Olfactory/pleiotropic 2)": "Class O2<br>(Olfactory/pleiotropic 2)",
         "Class T2 (Taste 2)": "Class T2<br>(Taste&nbsp;2)",
         "Class V1 (Vomeronasal)": "Class V1<br>(Vomeronasal)",
         "Unclassified": "Class U<br>(Unclassified)"
