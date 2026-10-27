@@ -23,6 +23,25 @@
     border-right: 1px solid #b3b3b3;
 }
 
+/* Centre every header row (titles, category counts, filters) to match the centred body cells.
+   The table.dataTable.tablemanager-standard prefix outranks DataTables' right alignment of numeric columns. */
+table.dataTable.tablemanager-standard thead th {
+    text-align: center;
+}
+
+/* DataTables lays a sortable title out as a flex row: the title grows, followed by the sort arrow
+   (--dt-order-arrow-width wide, 4px gap). Padding the other side of the title by the same amount keeps the
+   title centred over the column instead of shifted away from the arrow. */
+table.dataTable.tablemanager-standard thead th:is(.dt-orderable-asc, .dt-orderable-desc, .dt-ordering-asc, .dt-ordering-desc) .dt-column-title {
+    padding-left: calc(var(--dt-order-arrow-width) + 4px);
+}
+
+/* Numeric (and date) headers are laid out row-reverse, with the arrow on the left, so pad the right instead */
+table.dataTable.tablemanager-standard thead th:is(.dt-type-numeric, .dt-type-date):is(.dt-orderable-asc, .dt-orderable-desc, .dt-ordering-asc, .dt-ordering-desc) .dt-column-title {
+    padding-left: 0;
+    padding-right: calc(var(--dt-order-arrow-width) + 4px);
+}
+
 /* ---------------------- */
 /* Filter control styling */
 /* ---------------------- */
@@ -35,9 +54,22 @@
     width: 140px;
 }
 
+/* select2 sizes itself from the still-empty <select> and writes that (tiny) width inline, so override it to fill
+   the column. inline-size containment stops a long selected chip from widening the column; min-width keeps the
+   control usable in narrow columns. */
+table.dataTable.tablemanager-standard thead .filter_header_cell .select2-container {
+    width: 100% !important;
+    min-width: 120px;
+    contain: inline-size;
+}
+
 /* -------------------------------- */
 /* Styling for the table body cells */
 /* -------------------------------- */
+
+table.dataTable.tablemanager-standard tbody td {
+    text-align: center;
+}
 
 .wide-note-cell, .wide-note-header {
     min-width: 150px !important;
