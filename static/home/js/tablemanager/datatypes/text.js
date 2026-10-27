@@ -66,7 +66,9 @@ class Text extends DataTypeBase {
 
     /**
      * Creates a text input that applies the filter when it loses focus or Enter is pressed. If show_symbol_popup is set,
-     * a button is added beside the input that opens a popup of Greek symbols to insert into it.
+     * a button is added beside the input that opens a popup of Greek symbols to insert into it. If filter_suggestions is
+     * set, the input gets a datalist that the browser shows as a dropdown of matching column values while typing; it is
+     * filled in afterDataLoaded, client-side only.
      * @param {Object} tableManagerReference - The table manager that owns the table.
      * @returns {HTMLDivElement|false} The filter wrapper, or false if the column does not allow filtering.
      */
@@ -99,6 +101,24 @@ class Text extends DataTypeBase {
         wrapper.classList.add("tm-text-filter-wrapper");
         wrapper.appendChild(filterInput);
 
+        if (column.filter_suggestions) {
+            const suggestionList = document.createElement("datalist");
+            suggestionList.setAttribute("id", tableManagerReference.tableId + "_" + column.json_id + "_suggestions");
+            filterInput.setAttribute("list", suggestionList.id);
+            filterInput.setAttribute("autocomplete", "off"); // show the column values, not the browser's form history
+            wrapper.appendChild(suggestionList);
+            // Kept for afterDataLoaded, which fills the list once the data is loaded
+            this.suggestionList = suggestionList;
+
+            // Picking a suggestion sets the input to exactly that value: apply it straight away (as an exact match)
+            // rather than waiting for blur or Enter. Typed partial text still applies on blur or Enter.
+            filterInput.addEventListener("input", (e) => {
+                if (this.suggestionValues?.has(e.target.value.trim())) {
+                    this.blurHandler(e, tableManagerReference);
+                }
+            });
+        }
+
         if (column.show_symbol_popup) {
             const { symbolBtn, popup } = this.createSymbolPopup(filterInput);
             wrapper.appendChild(symbolBtn);
@@ -109,7 +129,8 @@ class Text extends DataTypeBase {
     }
 
     /**
-     * Creates the Greek symbol button and its popup. Clicking a symbol appends it to the filter input.
+     * Creates the Greek symbol button and its popup. Clicking a symbol appends it to the filter input as if it had been
+     * typed: an input event is dispatched, and the filter_suggestions dropdown (if any) is reopened for the new text.
      * @param {HTMLInputElement} filterInput - The filter input to insert symbols into.
      * @returns {{symbolBtn: HTMLButtonElement, popup: HTMLDivElement}} The toggle button and the popup.
      */
@@ -135,6 +156,17 @@ class Text extends DataTypeBase {
                 e.preventDefault();
                 filterInput.value += label;
                 filterInput.focus();
+                // Setting the value from script fires no input event, so dispatch one to treat the symbol like typing
+                filterInput.dispatchEvent(new Event("input", { bubbles: true }));
+                // Nor does it update the browser's datalist dropdown; reopen it for the new text. showPicker needs the
+                // user activation this mousedown provides, and is not supported for datalists in every browser.
+                if (filterInput.list) {
+                    try {
+                        filterInput.showPicker();
+                    } catch {
+                        // Suggestions then appear with the next typed character instead
+                    }
+                }
             });
             popup.appendChild(cell);
         });
@@ -154,6 +186,33 @@ class Text extends DataTypeBase {
         return { symbolBtn, popup };
     }
         
+    /**
+     * Fills the filter_suggestions datalist with the column's distinct values once the data is loaded. Client-side only:
+     * server-side, the values would need a request per column and the filter applies on the server anyway.
+     * The suggestions are the same plain-text values blurHandler compares against, so a picked suggestion is an exact match.
+     * @async
+     * @param {Object} tableManagerReference - The table manager that owns the table.
+     * @returns {Promise<void>}
+     */
+    async afterDataLoaded(tableManagerReference) {
+        const dataSource = tableManagerReference.dataSource;
+        if (!this.suggestionList || dataSource.isServerSide) {
+            return;
+        }
+
+        const options = await dataSource.getOptions(this.column);
+        const values = Array.from(new Set(options.map((item) => this._stripHtmlTags(item).trim())))
+            .filter((value) => value !== "")
+            .sort((a, b) => a.localeCompare(b));
+
+        this.suggestionValues = new Set(values);
+        this.suggestionList.replaceChildren(...values.map((value) => {
+            const option = document.createElement("option");
+            option.value = value;
+            return option;
+        }));
+    }
+
     /**
      * Removes HTML tags from a value, so it can be compared with plain text.
      * @param {*} v - The value to clean.
