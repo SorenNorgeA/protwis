@@ -54,7 +54,7 @@
     grouping: "None",
     columns: "Auto",
     colorHeaders: true,
-    bullets: false,
+    bullets: true,
     collapsed: new Set(),
   };
   let rendered = false;
