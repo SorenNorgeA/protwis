@@ -17,19 +17,27 @@ class ClearFiltersDefault {
     }
     
     /**
-     * Initialises the clearingFilters state flag and adds the Clear Filters button to the DataTable button bar.
+     * Initialises the clearingFilters state flag, records the table's initial ordering and adds the Clear Filters button
+     * to the DataTable button bar.
      * @param {number} index - Position at which the button is inserted into the button bar.
      */
     attach(index) {
         // Initialize the clearingFilters state --- used to prevent unnecessary redraws when clearing filters
-        this.tableManagerReference.state.clearingFilters = false; 
+        this.tableManagerReference.state.clearingFilters = false;
+
+        // The buttons are attached right after the DataTable is created, so this is the configured initial ordering.
+        // The entries are copied, as DataTables may update its ordering array in place when the user orders the table.
+        this.initialOrder = this.tableManagerReference.dataTableReference.order()
+            .map((entry) => Array.isArray(entry) ? [...entry] : { ...entry });
+
         this.tableManagerReference.dataTableReference.button().add(index, this.button_config);
     }
 
     /**
-     * Clears all filters. Resets the col-filter controls in the filter header row, clears the DataTable column and
-     * global searches, then publishes "filtersCleared" so injected controls can reset. The clearingFilters flag is set
-     * for the duration, so the resulting redraws are suppressed, and is always released afterwards.
+     * Resets the table to its initial state. Resets the col-filter controls in the filter header row, clears the
+     * DataTable column and global searches, restores the initial ordering and returns to the first page, then publishes
+     * "filtersCleared" so injected controls can reset. The clearingFilters flag is set for the duration, so the
+     * resulting redraws are suppressed, and is always released afterwards.
      * @param {Event} e - The click event from the button.
      * @param {DataTables.Api} dt - The DataTables API instance.
      * @param {HTMLElement} node - The button element.
@@ -57,8 +65,19 @@ class ClearFiltersDefault {
                 });
             }
 
-            // Clear the DataTable search state
-            tableManagerReference.dataTableReference.search('').columns().search('').draw();
+            // Clear the DataTable search state and restore the initial ordering, then redraw once. Each call is made on the
+            // table API: chained after columns(), order() would instead order by the selected columns. The full redraw
+            // also returns to the first page.
+            const dataTable = tableManagerReference.dataTableReference;
+            dataTable.search('');
+            // Column searches are cleared one column at a time: since DataTables 3, columns().search() sets a single
+            // search across all the selected columns together, and leaves each column's own search (set by the column
+            // filters through column().search()) in place.
+            dataTable.columns().every(function () {
+                this.search('');
+            });
+            dataTable.order(this.initialOrder);
+            dataTable.draw();
 
             // Let injected controls (e.g. filter header toggle buttons) reset themselves to match the cleared state
             tableManagerReference.eventPubSub.publish("filtersCleared");
