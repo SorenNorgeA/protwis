@@ -5,6 +5,7 @@ import { ButtonFactory } from "./factories/buttonfactory.js";
 import { MasterCheckbox, Checkbox } from "./datatypes/checkbox.js";
 import { ClientDataSource } from "./datasources/clientdatasource.js";
 import { ServerDataSource } from "./datasources/serverdatasource.js";
+import { StorageCache } from "./storagecache.js";
 
 // This class represents the TableManager, which is responsible for managing the data table and its associated columns, filters, and rendering logic.
 // The TableManager interacts with the back end TableProvider to fetch configuration and content data, then initializes a DataTable with the appropriate settings and column definitions.
@@ -16,6 +17,7 @@ class TableManager {
    * Constructs a new TableManager instance.
    * @param {Array} columnSpecification - An array of column specification objects defining the properties and behaviors of each column in the data table.
    * @param {string} tableId - The ID of the HTML table element to be managed by the TableManager.
+   * @param {Promise|null} waitSignal - An optional Promise that, when provided, will delay the initialization of the TableManager until it resolves. This can be used to wait for external data or conditions before proceeding with table setup.
   **/
   constructor(
     columnSpecification,
@@ -118,6 +120,11 @@ class TableManager {
     // DataTable is created, as cells can be rendered (and styled) during initialisation
     this.dataSource = dataTableOptions.serverSide === true ? new ServerDataSource(this) : new ClientDataSource(this);
 
+    // In client-side mode the AJAX response can be cached in browser storage
+    if (dataTableOptions.serverSide !== true) {
+      this._applyStorageCache(dataTableOptions);
+    }
+
     // -- 1. Table structure -- //
     // Every header row is in place before DataTables reads the header, so it lays them all out: it removes the cells of
     // hidden columns, adjusts the super-header colspans and keeps the rows aligned when column visibility changes.
@@ -178,6 +185,61 @@ class TableManager {
     // (e.g. data supplied inline), otherwise once the initial data has loaded.
     this.ready.then(() => this._afterDataLoaded(dataTableOptions));
     this.dataTableReference.ready(() => this._resolveReady(this.dataTableReference));
+  }
+
+  /**
+   * Replaces the ajax option with a function that serves the rows from browser storage when a valid cached copy exists,
+   * and otherwise fetches them and caches them. Active only when localStorageKey and localStorageDurationDays are set
+   * and ajax is an object with a url. Storage is local storage, then session storage; if neither works the rows are
+   * simply fetched each time. A cached copy older than localStorageDurationDays is cleared and fetched again.
+   * @param {Object} dataTableOptions - The options for the DataTable; its ajax option is replaced.
+   */
+  _applyStorageCache(dataTableOptions) {
+    const { localStorageKey, localStorageDurationDays, ajax } = dataTableOptions;
+    if (!localStorageKey || !(localStorageDurationDays > 0) || !ajax || typeof ajax !== "object" || !ajax.url) {
+      return;
+    }
+
+    const storageCache = new StorageCache(localStorageKey, localStorageDurationDays);
+    this.storageCache = storageCache;
+
+    // dataSrc names the property (dot separated path) holding the rows; "" means the response is the rows
+    const dataSrc = typeof ajax.dataSrc === "string" ? ajax.dataSrc : "data";
+    const extractRows = (json) => dataSrc === "" ? json : dataSrc.split(".").reduce((obj, key) => obj?.[key], json);
+
+    dataTableOptions.ajax = (_requestData, callback, settings) => {
+      const cachedRows = storageCache.get();
+      if (cachedRows !== undefined) {
+        callback({ data: cachedRows });
+        return;
+      }
+
+      fetch(ajax.url, {
+        method: ajax.type || "GET",
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+        cache: ajax.cache === false ? "no-store" : "default",
+      })
+        .then((resp) => {
+          if (!resp.ok) {
+            throw new Error(`${resp.status} ${resp.statusText}`);
+          }
+          return resp.json();
+        })
+        .then((json) => {
+          const rows = extractRows(json);
+          if (!Array.isArray(rows)) {
+            throw new Error(`No row array found in the response at "${dataSrc}"`);
+          }
+          storageCache.set(rows);
+          callback({ data: rows });
+        })
+        .catch((error) => {
+          console.error("Fetching table data failed:", error);
+          callback({ data: [] });
+          $(settings.nTable).trigger("dt-error", [error]);
+        });
+    };
   }
 
   /**
