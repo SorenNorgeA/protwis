@@ -2,8 +2,63 @@
 // Column data is computed from the rows loaded into the DataTable, and column filters use DataTables' own search.
 
 import { DataSourceBase } from "./datasourcebase.js";
+import { StorageCache } from "../storagecache.js";
 
 class ClientDataSource extends DataSourceBase {
+
+  /**
+   * Replaces the ajax option with a function that serves the rows from browser storage when a valid cached copy exists,
+   * and otherwise fetches them and caches them. Active only when localStorageKey and localStorageDurationDays are set
+   * and ajax is an object with a url. Storage is local storage, then session storage; if neither works the rows are
+   * simply fetched each time. A cached copy older than localStorageDurationDays is cleared and fetched again.
+   * @param {Object} dataTableOptions - The options for the DataTable; its ajax option is replaced.
+   */
+  configureDataCache(dataTableOptions) {
+    const { localStorageKey, localStorageDurationDays, ajax } = dataTableOptions;
+    if (!localStorageKey || !(localStorageDurationDays > 0) || !ajax || typeof ajax !== "object" || !ajax.url) {
+      return;
+    }
+
+    const storageCache = new StorageCache(localStorageKey, localStorageDurationDays);
+
+    // dataSrc names the property (dot separated path) holding the rows; "" means the response is the rows
+    const dataSrc = typeof ajax.dataSrc === "string" ? ajax.dataSrc : "data";
+    const extractRows = (json) => dataSrc === "" ? json : dataSrc.split(".").reduce((obj, key) => obj?.[key], json);
+
+    dataTableOptions.ajax = (_requestData, callback, settings) => {
+      const cachedRows = storageCache.get();
+      if (cachedRows !== undefined) {
+        callback({ data: cachedRows });
+        return;
+      }
+
+      fetch(ajax.url, {
+        method: ajax.type || "GET",
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+        cache: ajax.cache === false ? "no-store" : "default",
+      })
+        .then((resp) => {
+          if (!resp.ok) {
+            throw new Error(`${resp.status} ${resp.statusText}`);
+          }
+          return resp.json();
+        })
+        .then((json) => {
+          const rows = extractRows(json);
+          if (!Array.isArray(rows)) {
+            throw new Error(`No row array found in the response at "${dataSrc}"`);
+          }
+          storageCache.set(rows);
+          callback({ data: rows });
+        })
+        .catch((error) => {
+          console.error("Fetching table data failed:", error);
+          callback({ data: [] });
+          $(settings.nTable).trigger("dt-error", [error]);
+        });
+    };
+  }
 
   /**
    * Get a reference to the DataTables instance for the current table.
