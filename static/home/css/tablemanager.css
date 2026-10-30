@@ -79,15 +79,6 @@ table.dataTable.tablemanager-standard thead .filter_header_cell .select2-contain
     contain: inline-size;
 }
 
-/* select2 sizes itself from the still-empty <select> and writes that (tiny) width inline, so override it to fill
-   the column. inline-size containment stops a long selected chip from widening the column; min-width keeps the
-   control usable in narrow columns. */
-table.dataTable.tablemanager-standard thead .filter_header_cell .select2-container {
-    width: 100% !important;
-    min-width: 120px;
-    contain: inline-size;
-}
-
 /* -------------------------------- */
 /* Styling for the table body cells */
 /* -------------------------------- */
