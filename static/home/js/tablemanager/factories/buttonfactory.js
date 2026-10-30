@@ -1,5 +1,6 @@
 import { ExcelDefault } from "../buttons/exceldefault.js";
 import { ClearFiltersDefault } from "../buttons/clearfiltersdefault.js";
+import { ClearSelectionDefault } from "../buttons/clearselectiondefault.js";
 import { ShowBestResolution } from "../buttons/showbestresolution.js";
 import { ShowClosestToHuman } from "../buttons/showclosesttohuman.js";
 import { ColumnVisibility } from "../buttons/columnvisibility.js";
@@ -18,6 +19,7 @@ class ButtonFactory {
     constructor() {
         this.registerButtonType("excel_default", ExcelDefault);
         this.registerButtonType("clear_filters_default", ClearFiltersDefault);
+        this.registerButtonType("clear_selection_default", ClearSelectionDefault);
         this.registerButtonType("best_resolution_toggle", ShowBestResolution);
         this.registerButtonType("closest_to_human_toggle", ShowClosestToHuman);
         this.registerButtonType("column_visibility", ColumnVisibility);

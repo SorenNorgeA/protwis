@@ -24,6 +24,15 @@ class DataSourceBase {
   }
 
   /**
+   * Configure client side caching of the AJAX response, if applicable. Abstract: implemented by the subclasses.
+   * Does nothing by default.
+   * @param {Object} dataTableOptions - The options for the DataTable; may be modified.
+   */
+  configureDataCache(dataTableOptions) {
+    return;
+  }
+
+  /**
    * Gets the column's distinct raw values. Abstract: implemented by the subclasses.
    * @param {Object} column - The column (data type instance) to get options for.
    * @returns {Promise<Array>} The distinct raw values.

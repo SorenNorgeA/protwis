@@ -4,6 +4,7 @@
     "json_id": "checkbox",
     "title": "",
     "data_type": "checkbox",
+    "checkboxMultiSelect": true,
     "allow_filter": false,
     "orderable": false
   },

@@ -16,6 +16,7 @@ class TableManager {
    * Constructs a new TableManager instance.
    * @param {Array} columnSpecification - An array of column specification objects defining the properties and behaviors of each column in the data table.
    * @param {string} tableId - The ID of the HTML table element to be managed by the TableManager.
+   * @param {Promise|null} waitSignal - An optional Promise that, when provided, will delay the initialization of the TableManager until it resolves. This can be used to wait for external data or conditions before proceeding with table setup.
   **/
   constructor(
     columnSpecification,
@@ -118,7 +119,13 @@ class TableManager {
     // DataTable is created, as cells can be rendered (and styled) during initialisation
     this.dataSource = dataTableOptions.serverSide === true ? new ServerDataSource(this) : new ClientDataSource(this);
 
+    // Configure client-side caching of the AJAX response)
+    this.dataSource.configureDataCache(dataTableOptions);
+
     // -- 1. Table structure -- //
+    // Set table to fixed width if fixedWidthTable is true, required for setting column widths using Datatables "width" option
+    this._applyFixedAutoTableClass(dataTableOptions, this.tableId);
+
     // Every header row is in place before DataTables reads the header, so it lays them all out: it removes the cells of
     // hidden columns, adjusts the super-header colspans and keeps the rows aligned when column visibility changes.
     const tableComponents = this.createTableStructure(dataTableOptions);
@@ -200,6 +207,17 @@ class TableManager {
     if (this.state.masterCheckbox) {      
       this.state.masterCheckbox.updateCheckBoxSearchSet(); // Initialise the currentSearchCheckBoxes state once the data is loaded
       this.dataSource.onSearchChange(() => this.state.masterCheckbox.updateCheckBoxSearchSet()); // Update the currentSearchCheckBoxes state whenever the table's search changes
+    }
+  }
+
+  _applyFixedAutoTableClass(dataTableOptions, tableId){
+    const tableElement = document.getElementById(tableId);
+    if (tableElement) {
+      if (dataTableOptions.fixedWidthTable) {
+        tableElement.classList.add("fixed-width-table");
+      } else {
+        tableElement.classList.remove("auto-width-table");
+      }
     }
   }
 
@@ -905,6 +923,7 @@ class TableManager {
     colDef.visible = column.visible !== false; // Default to true if not specified
     colDef.orderable = column.orderable !== false; // Default to true if not specified
     colDef.name = column.json_id; // Set the name property to the json_id for easier reference
+    colDef.width = column.width;
     return colDef;
   }
 
