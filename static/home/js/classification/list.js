@@ -12,7 +12,7 @@
 (function (window, $) {
   "use strict";
 
-  const { normKey, CLASS_COLORS, getChemotypeColor } = window.ClassificationCore;
+  const { normKey, CLASS_COLORS, MODALITY_COLORS, getChemotypeColor } = window.ClassificationCore;
 
   const DATA = window.CLASSIFICATION_LIST_DATA || {};
   const ROWS = DATA.rows || [];
@@ -22,13 +22,6 @@
   const MOUNT_ID = "classification_list_plot";
   const SVG_ID = "classification_list_plot_svg";
   const TAB_SELECTOR = 'a[href="#cv-list-tab"]';
-
-  const MODALITY_COLORS = {
-    "Small molecule receptors": "#1f78b4",
-    "Polypeptide receptors": "#2CA02C",
-    "Ion receptors": "#D62728",
-    "Orphan receptors": "#a0b8ba",
-  };
 
   // Per-level text styling (DataMapper List defaults: 20/18/16/14px).
   const LEVEL_STYLE = {

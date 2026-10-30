@@ -8,10 +8,20 @@
 // #################
 // This is a custom copy that can be modified without affecting datamapper.js
 
+const FAMILY_LABEL_STRIP = /( receptors|neuropeptide )/g;
+
+// Optional class dot per leaf (options.leafDots, circular layout only): one dot between the
+// branch end and the label, LEAF_DOT_X out from the branch end.
+const LEAF_DOT_X = 8;
+const LEAF_DOT_R = 5;
+
 // Generic cleanup / normalization for display.
 // - Class nodes: drop the "(...)" suffix
 // - Receptor family nodes (second-to-last internal level): strip " receptors" etc.
-function custom_update_tree_data(root) {
+// - opts.shortenLeaves: leaves are families/chemotypes too (Modality and chemotype trees), so
+//   strip " receptors" from them the same way (but keep a "(Class X)" disambiguation suffix).
+function custom_update_tree_data(root, opts) {
+    const shortenLeaves = !!(opts && opts.shortenLeaves);
     function isLeaf(n) { return !n.children || n.children.length === 0; }
 
     function walk(node, depth, parent) {
@@ -33,8 +43,12 @@ function custom_update_tree_data(root) {
 
         // If this is a receptor-family node (children are all leaves), shorten label a bit
         if (node.children && node.children.length > 0 && node.children.every(isLeaf) && node.name) {
-            node.name = node.name.replace(/( receptors|neuropeptide )/g, '');
+            node.name = node.name.replace(FAMILY_LABEL_STRIP, '');
             node.name = node.name.split(" (")[0];
+        }
+
+        if (shortenLeaves && parent && isLeaf(node) && node.name) {
+            node.name = node.name.replace(FAMILY_LABEL_STRIP, '');
         }
 
         if (node.children) {
@@ -152,6 +166,7 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
     var branches = {};
     var branch_offset = 0;
     var thickness = options.depth + 1;
+    var leafLabelOffset = options.leafDots ? (LEAF_DOT_X + LEAF_DOT_R + 4) : 10;
 
     // Scale factor to push intermediate branches closer to outer edge
     // Higher values push branches further out (closer to leaves)
@@ -316,8 +331,8 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
             }
         })
         .attr("transform", function (d) {
-            // Label offsets (no dots/circles on this page)
-            var labelOffset = d.depth === options.depth ? 10 : 6;
+            // Label offsets (leaf labels move outward past the optional leaf dot)
+            var labelOffset = d.depth === options.depth ? leafLabelOffset : 6;
             if (d.depth === options.depth) {
                 return d.x < 181 ? `translate(${labelOffset})` : `rotate(180)translate(-${labelOffset})`;
             } else {
@@ -352,7 +367,7 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
         .each(function (d) {
             // Leaves and some internal labels may contain entities/tags (e.g. &kappa;, GABA<sub>B</sub>).
             if (d.depth > 0 && d.name && (d.depth === options.depth || /[<&]/.test(String(d.name)))) {
-                this.innerHTML = custom_formatTextWithHTML(d.name);
+                this.innerHTML = custom_formatTextWithHTML(d.name, options.fullLeafLabels);
             }
             custom_adjust_leaf_label_baseline(this, d, options);
         })
@@ -413,6 +428,20 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
                 .style("stroke-width", "1px");
         });
 
+    // Optional: one class dot per leaf, between the branch end and the label -- same look as the
+    // DataMapper's circles (datamapper.js DrawCircles). The node <g> is already rotated, so +x is
+    // radially outward on both halves of the circle.
+    if (options.leafDots) {
+        node.filter(function (d) { return d.depth === options.depth && d.dotColor; })
+            .append("circle")
+            .attr("class", "leaf-dot")
+            .attr("cx", LEAF_DOT_X)
+            .attr("r", LEAF_DOT_R)
+            .style("fill", function (d) { return d.dotColor; })
+            .style("stroke", "black")
+            .style("stroke-width", 0.8);
+    }
+
     // Optional: leaf pills (outermost labels)
     // These are separate from internal label pills and can be tuned independently.
     if (options.leafPills) {
@@ -451,6 +480,13 @@ function custom_draw_tree(data, options, stacked_meta, centerLabel) {
                     .style("stroke", (leafStrokeMode === "black") ? "#000" : (d.color || "#999"))
                     .style("stroke-width", leafStrokeW + "px");
             });
+    }
+
+    // Optional page-specific leaf decoration (options.decorateLeaves, wired in renderCurrent from
+    // meta.leafDecorator). Runs once labels and pills exist and before the bounding-box padding,
+    // so the SVG grows to fit whatever it draws.
+    if (typeof options.decorateLeaves === "function") {
+        options.decorateLeaves(node.filter(function (d) { return d.depth === options.depth; }), options);
     }
 
     // Center badge removed (no middle label/pill).
@@ -753,7 +789,7 @@ function custom_draw_dendrogram_curved(data, options, stacked_meta, centerLabel)
         })
         .each(function (d) {
             if (d.depth > 0 && d.name && (d.depth === options.depth || /[<&]/.test(String(d.name)))) {
-                this.innerHTML = custom_formatTextWithHTML(d.name);
+                this.innerHTML = custom_formatTextWithHTML(d.name, options.fullLeafLabels);
             }
             custom_adjust_leaf_label_baseline(this, d, options);
         })
@@ -1158,7 +1194,7 @@ function custom_draw_dendrogram_straight(data, options, stacked_meta, centerLabe
         })
         .each(function (d) {
             if (d.depth > 0 && d.name && (d.depth === options.depth || /[<&]/.test(String(d.name)))) {
-                this.innerHTML = custom_formatTextWithHTML(d.name);
+                this.innerHTML = custom_formatTextWithHTML(d.name, options.fullLeafLabels);
             }
             custom_adjust_leaf_label_baseline(this, d, options);
         })
@@ -1287,21 +1323,24 @@ function custom_decodeHtmlEntities(text) {
 }
 
 // Format text with HTML (handles subscripts, italics, entities like &kappa;, etc.)
-function custom_formatTextWithHTML(text) {
-    // Apply all the replacements step by step
-    return custom_decodeHtmlEntities(text)
-        .replace(" receptor", '')
-        .replace("-adrenoceptor", '')
-        .replace(" receptor-", '-')
+// keepNames: skip the receptor-name shortenings ("Olfactory" -> "OLF", ...) and only format.
+function custom_formatTextWithHTML(text, keepNames) {
+    let s = custom_decodeHtmlEntities(text);
+    if (!keepNames) {
+        s = s.replace(" receptor", '')
+            .replace("-adrenoceptor", '')
+            .replace(" receptor-", '-')
+            .replace("Long-wave-sensitive", 'LWS')
+            .replace("Medium-wave-sensitive", 'MWS')
+            .replace("Short-wave-sensitive", 'SWS')
+            .replace("Olfactory", 'OLF')
+            .replace("calcitonin-like receptor", 'CLR');
+    }
+    return s
         .replace("<sub>", '</tspan><tspan baseline-shift="-0.18em" font-size="70%">')
         .replace("</sub>", '</tspan><tspan>')
         .replace("<i>", '</tspan><tspan font-style="italic">')
-        .replace("</i>", '</tspan><tspan>')
-        .replace("Long-wave-sensitive", 'LWS')
-        .replace("Medium-wave-sensitive", 'MWS')
-        .replace("Short-wave-sensitive", 'SWS')
-        .replace("Olfactory", 'OLF')
-        .replace("calcitonin-like receptor", 'CLR');
+        .replace("</i>", '</tspan><tspan>');
 }
 
 // Custom changeLeavesLabels function
@@ -1342,13 +1381,23 @@ function custom_changeLeavesLabels(location, value, dict, styling_dict) {
 // ========================
 // === Initialize data  ===
 // ========================
-const { normKey, fnv1a32, stableColorForKey, CLASS_COLORS, CHEMOTYPE_COLORS, CHEMOTYPE_FALLBACK_PALETTE } = window.ClassificationCore;
+const { normKey, fnv1a32, stableColorForKey, CLASS_COLORS, CHEMOTYPE_COLORS, MODALITY_COLORS, CHEMOTYPE_FALLBACK_PALETTE } = window.ClassificationCore;
 
 // Class color from a class display name ("Class A (Rhodopsin)", "Class V1 (Vomeronasal)", ...).
 function classColorFromName(name) {
     let key = String(name || "").trim().replace(/^Class\s+/i, '');
+    if (/^unclassified/i.test(key)) key = "U";
     key = (key.match(/^[A-Za-z0-9]+/) || [""])[0];
     return CLASS_COLORS[key] || "#333";
+}
+// Modality color from a modality label. The label may already be shortened by
+// custom_update_tree_data ("Polypeptide receptors" -> "Polypeptide") when the modality nodes
+// sit directly above the leaves, so match the shortened form of the keys too.
+function modalityColorFromName(name) {
+    const key = normKey(name);
+    if (MODALITY_COLORS[key]) return MODALITY_COLORS[key];
+    const hit = Object.keys(MODALITY_COLORS).find(function (k) { return k.replace(FAMILY_LABEL_STRIP, '') === key; });
+    return hit ? MODALITY_COLORS[hit] : "#333";
 }
 const custom_norm_key = normKey;
 const custom_hash32 = fnv1a32;
@@ -1404,6 +1453,12 @@ var MANUAL_RADIUS_SCALE = {
     "Chemotype:Retinal receptors": 0.1,
     "Chemotype:Steroid receptors": 0.2,
     "Chemotype:Tastant receptors": 0.45,
+
+    // Levels & terms page: Modality -> Chemotype, Modality -> Chemotype -> Receptor family,
+    // and Class -> Receptor family
+    "LevelsTerms:Chemotypes": 0.5,
+    "LevelsTerms:Families": 1.0,
+    "LevelsTerms:ClassFamilies": 1.0,
 };
 
 function getManualRadiusScale(plotKey) {
@@ -1705,6 +1760,20 @@ function applyTreeColors(root, stacked_meta, options) {
         })(root);
         return root;
     }
+    if (mode === "modality") {
+        // Color by modality (depth 1 nodes) -- the whole subtree takes its modality's color.
+        if (root && root.children && root.children.length) {
+            root.children.forEach(function (modalityNode) {
+                const c = modalityColorFromName(modalityNode.name);
+                (function walk(n) {
+                    if (!n) return;
+                    n.color = c;
+                    if (n.children) n.children.forEach(walk);
+                })(modalityNode);
+            });
+        }
+        return root;
+    }
     if (mode === "class") {
         // If Class got collapsed into stacked meta, apply that single class color to everything.
         if (stacked_meta && stacked_meta.length) {
@@ -1744,8 +1813,32 @@ function renderOrphanLegendPills(svgId, labels, options) {
     const baseW = parseFloat(svg.attr("width")) || 800;
     const baseH = parseFloat(svg.attr("height")) || 800;
 
-    // Layout: 20 columns, as requested
-    const cols = 20;
+    const padX = 4;
+    const padY = 2;
+    const gapX = 4; // px total horizontal gap per cell
+    const fontFamily = (options && options.fontFamily) ? options.fontFamily : "'Palatino Linotype', Georgia, 'Times New Roman', serif";
+    const fontSize = (options && options.fontSize && options.fontSize.receptor) ? options.fontSize.receptor : "9px";
+
+    // Measure max text bbox so all pills share the same size.
+    let maxW = 0;
+    let maxH = 0;
+    const meas = svg.append("g").attr("transform", "translate(-99999,-99999)");
+    for (let i = 0; i < labels.length; i++) {
+        const t = meas.append("text")
+            .attr("text-anchor", "middle")
+            .attr("dy", "0.95em")
+            .style("font-family", fontFamily)
+            .style("font-size", fontSize)
+            .text(String(labels[i]));
+        const bb = t.node().getBBox();
+        if (bb.width > maxW) maxW = bb.width;
+        if (bb.height > maxH) maxH = bb.height;
+        t.remove();
+    }
+    meas.remove();
+
+    // Layout: up to 20 columns, fewer when the longest label (e.g. IUPHAR "MRGPRX1") would not fit.
+    const cols = Math.max(1, Math.min(20, Math.floor(baseW / (maxW + padX * 2 + gapX))));
     const cellW = baseW / cols;
     const rowH = 18;
     const headerH = 14; // room for the "Orphans" header above the pill rows
@@ -1776,31 +1869,7 @@ function renderOrphanLegendPills(svgId, labels, options) {
         .style("fill", "#333")
         .text("Orphans");
 
-    // Measure max text bbox so all pills share the same size.
-    const padX = 4;
-    const padY = 2;
-    const fontFamily = (options && options.fontFamily) ? options.fontFamily : "'Palatino Linotype', Georgia, 'Times New Roman', serif";
-    const fontSize = (options && options.fontSize && options.fontSize.receptor) ? options.fontSize.receptor : "9px";
-
-    let maxW = 0;
-    let maxH = 0;
-    const meas = g.append("g").attr("transform", "translate(-99999,-99999)");
-    for (let i = 0; i < labels.length; i++) {
-        const t = meas.append("text")
-            .attr("text-anchor", "middle")
-            .attr("dy", "0.95em")
-            .style("font-family", fontFamily)
-            .style("font-size", fontSize)
-            .text(String(labels[i]).toUpperCase());
-        const bb = t.node().getBBox();
-        if (bb.width > maxW) maxW = bb.width;
-        if (bb.height > maxH) maxH = bb.height;
-        t.remove();
-    }
-    meas.remove();
-
     // Make pills slightly narrower than the cell to leave a small gap between neighbors.
-    const gapX = 4; // px total horizontal gap per cell
     const pillW = Math.max(10, Math.min(maxW + padX * 2, cellW - gapX));
     const pillH = maxH + padY * 2;
 
@@ -1817,7 +1886,7 @@ function renderOrphanLegendPills(svgId, labels, options) {
             .style("font-family", fontFamily)
             .style("font-size", fontSize)
             .style("fill", "#111")
-            .text(String(labels[i]).toUpperCase());
+            .text(String(labels[i]));
 
         const bb = t.node().getBBox();
         item.insert("rect", "text")
@@ -1833,7 +1902,101 @@ function renderOrphanLegendPills(svgId, labels, options) {
     }
 }
 
+// Font size of the drawn leaf labels (only leaf node <g>s carry an id), so a legend can match it.
+function leafLabelFontSize(svgId) {
+    const t = d3.select('#' + svgId).select("g.node[id] text");
+    return t.empty() ? null : t.style("font-size");
+}
+
+// Legend entries for class dots: "Class X" (or "Unclassified") in its class color.
+function classLegendEntries(classKeys) {
+    return (classKeys || []).map(function (key) {
+        return { color: CLASS_COLORS[key] || "#ccc", label: key === "U" ? "Unclassified" : "Class " + key };
+    });
+}
+
+// Dot legend under the plot, inside the SVG so downloads include it: centered rows of
+// dot + label, wrapped to the plot width. entries: [{color, label}].
+// style (optional): {fontSize: "11px", dotR: 5} -- spacing scales with both (default 18px / 8).
+function renderLeafDotLegend(svgId, entries, options, style) {
+    if (!entries || !entries.length) return;
+    const svg = d3.select('#' + svgId);
+    if (svg.empty()) return;
+
+    const baseW = parseFloat(svg.attr("width")) || 800;
+    const baseH = parseFloat(svg.attr("height")) || 800;
+    const fontFamily = (options && options.fontFamily) ? options.fontFamily : "'Palatino Linotype', Georgia, 'Times New Roman', serif";
+    const fontPx = (style && parseFloat(style.fontSize)) || 18;
+    const fontSize = fontPx + "px";
+    const dotR = (style && style.dotR) || 8;
+    const rowH = Math.max(2 * dotR, fontPx) * 1.65;
+    const padTop = rowH * 0.4;
+    const padBottom = rowH * 0.5;
+    const itemGap = fontPx * 1.55;
+    const textGap = dotR;
+    const strokeW = Math.max(0.8, dotR / 8);
+    const maxRowW = baseW - 40;
+
+    const g = svg.append("g").attr("class", "leaf-dot-legend");
+    const items = entries.map(function (entry) {
+        const item = g.append("g");
+        item.append("circle")
+            .attr("cx", dotR)
+            .attr("cy", 0)
+            .attr("r", dotR)
+            .style("fill", entry.color)
+            .style("stroke", "black")
+            .style("stroke-width", strokeW);
+        const t = item.append("text")
+            .attr("x", dotR * 2 + textGap)
+            .attr("dy", ".35em")
+            .style("font-family", fontFamily)
+            .style("font-size", fontSize)
+            .style("fill", "#111")
+            .text(entry.label);
+        return { item: item, width: dotR * 2 + textGap + t.node().getBBox().width };
+    });
+
+    // Wrap into rows no wider than the plot, then center each row.
+    const rows = [];
+    let row = { items: [], width: 0 };
+    items.forEach(function (it) {
+        const added = (row.items.length ? itemGap : 0) + it.width;
+        if (row.items.length && row.width + added > maxRowW) {
+            rows.push(row);
+            row = { items: [], width: 0 };
+        }
+        row.width += (row.items.length ? itemGap : 0) + it.width;
+        row.items.push(it);
+    });
+    rows.push(row);
+
+    rows.forEach(function (r, rowIndex) {
+        let x = Math.max(0, (baseW - r.width) / 2);
+        const y = baseH + padTop + rowIndex * rowH + rowH / 2;
+        r.items.forEach(function (it) {
+            it.item.attr("transform", "translate(" + x + "," + y + ")");
+            x += it.width + itemGap;
+        });
+    });
+
+    const newH = baseH + padTop + rows.length * rowH + padBottom;
+    svg.attr("height", newH);
+    svg.attr("viewBox", "0 0 " + baseW + " " + newH);
+}
+
+// Set when a render was requested while the plot sat in a hidden tab (getBBox() is all zeros
+// there, which collapses the label pills); the shown.bs.tab handler below re-renders.
+let TREE_RENDER_PENDING = false;
+
 function renderCurrent() {
+    const plotContainer = document.getElementById("tree_plot_main");
+    if (plotContainer && plotContainer.offsetParent === null) {
+        TREE_RENDER_PENDING = true;
+        return;
+    }
+    TREE_RENDER_PENDING = false;
+
     const type = TREE_UI.type;
     const selectionKey = TREE_UI.selectionKey;
     const plot = getPlot(type, selectionKey);
@@ -1878,9 +2041,30 @@ function renderCurrent() {
     }
 
     const collapsed = collapse_singletons(tree_data, meta.collapseLabels || []);
-    tree_data = custom_update_tree_data(collapsed.data);
+    tree_data = custom_update_tree_data(collapsed.data, { shortenLeaves: !!meta.shortenLeaves });
     tree_data = applyTreeColors(tree_data, collapsed.stacked, tree_options);
     tree_data = applyLeafLabels(tree_data, TREE_UI.leafLabelType);
+
+    // Class-colored leaf dot (leaves carry their class short code as classKey).
+    if (meta.leafDots === "class") {
+        tree_options.leafDots = true;
+        (function walk(n) {
+            if (!n) return;
+            if (!n.children || !n.children.length) {
+                n.dotColor = CLASS_COLORS[n.classKey] || "#ccc";
+                return;
+            }
+            n.children.forEach(walk);
+        })(tree_data);
+    }
+
+    // Page-specific decoration: meta.leafDecorator names an entry a page script registered in
+    // window.ClassificationTreeDecorators -- {leaves(leafNodes, options, meta) during the draw,
+    // afterRender(svgId, options, meta) once the SVG is finished}. Circular layout only.
+    const decorator = meta.leafDecorator ? (window.ClassificationTreeDecorators || {})[meta.leafDecorator] : null;
+    if (decorator && typeof decorator.leaves === "function") {
+        tree_options.decorateLeaves = function (leafNodes, opts) { decorator.leaves(leafNodes, opts, meta); };
+    }
 
     const maxDepth = custom_get_max_depth(tree_data, 0);
     tree_options.depth = maxDepth;
@@ -1911,7 +2095,11 @@ function renderCurrent() {
     // Modality and class-colored plots should have colored internal pills too.
     tree_options.labelBoxStrokeColorMode = (tree_options.colorMode === "chemotype") ? "chemotype" : "class";
 
-    tree_options.leafPills = !!TREE_UI.leafPills;
+    // meta.leafPills === false: this plot never shows leaf pills (no Leaf color toggle either).
+    tree_options.leafPills = (meta.leafPills === false) ? false : !!TREE_UI.leafPills;
+    // meta.fullLeafLabels: draw labels exactly as given, without custom_formatTextWithHTML's
+    // receptor-name shortenings (e.g. family leaves that should match a table's names).
+    tree_options.fullLeafLabels = !!meta.fullLeafLabels;
     tree_options.leafBoxPadX = 4;
     tree_options.leafBoxPadY = 0;
     tree_options.leafBoxDy = 0;
@@ -1933,7 +2121,11 @@ function renderCurrent() {
     tree_options.familyCollapsed = custom_has_meta(collapsed.stacked, "family");
 
     tree_options.circleRadii = { chemotype: 40, family: 34, other: 30 };
-    tree_options.fontSize = { 'class': "25px", 'ligandtype': "9px", 'receptorfamily': "9px", 'receptor': "9px" };
+    // meta.fontSize: optional per-plot overrides of these defaults.
+    tree_options.fontSize = Object.assign(
+        { 'class': "25px", 'ligandtype': "9px", 'receptorfamily': "9px", 'receptor': "9px" },
+        meta.fontSize || {}
+    );
     // "Palatino" alone isn't a real font name on Windows (it ships "Palatino Linotype"
     // instead), so the browser and PowerPoint each independently guess a different
     // substitute serif font for it -- and getBBox()-sized label pills baked against one
@@ -2141,7 +2333,25 @@ function renderCurrent() {
     // Class A only: append orphan pill legend under the SVG (alphabetical, unrotated)
     // Note: Orphan legend only works with Tree - Circular layout currently
     if (layout === "Tree - Circular" && type === "Class" && selectionKey === "A" && meta.orphanLeafLabels && meta.orphanLeafLabels.length) {
-        renderOrphanLegendPills(containerId + "_svg", meta.orphanLeafLabels, tree_options);
+        // meta.orphanLeafLabels are UniProt keys -- map them to the selected receptor-name type
+        // like the tree leaves (applyLeafLabels), then re-sort on the displayed name.
+        const orphanLabels = meta.orphanLeafLabels.map(function (key) {
+            const labels = tree_leaf_label_lookup[String(key).toUpperCase()] || {};
+            return labels[TREE_UI.leafLabelType || "UniProt"] || key;
+        }).sort(function (a, b) {
+            return String(a).toUpperCase().localeCompare(String(b).toUpperCase());
+        });
+        renderOrphanLegendPills(containerId + "_svg", orphanLabels, tree_options);
+    }
+
+    if (tree_options.leafDots && layout === "Tree - Circular" && !isDualPlot) {
+        // Same text size as the leaf labels and same dot size as the leaf dots.
+        renderLeafDotLegend(containerId + "_svg", classLegendEntries(meta.legendClassKeys), tree_options,
+            { fontSize: leafLabelFontSize(containerId + "_svg"), dotR: LEAF_DOT_R });
+    }
+
+    if (decorator && typeof decorator.afterRender === "function" && layout === "Tree - Circular" && !isDualPlot) {
+        decorator.afterRender(containerId + "_svg", tree_options, meta);
     }
 
 }
@@ -2167,6 +2377,11 @@ function splitFamilyChildrenForDualPlot(tree_data) {
 
 $(function () {
     wireDownloadButton();
+
+    // The plot may live in a tab (or sub-tab) that's hidden on page load.
+    $(document).on("shown.bs.tab", function () {
+        if (TREE_RENDER_PENDING) scheduleRender();
+    });
 
     const group = document.getElementById("tree_type_group");
     if (group) {

@@ -60,6 +60,14 @@
     "Tastant receptors": "#F7B6D2",
   };
 
+  // Grouped-modality colors (the four MODALITY_GROUP_LABELS in classification/views.py).
+  const MODALITY_COLORS = {
+    "Small molecule receptors": "#1f78b4",
+    "Polypeptide receptors": "#2CA02C",
+    "Ion receptors": "#D62728",
+    "Orphan receptors": "#a0b8ba",
+  };
+
   const CHEMOTYPE_FALLBACK_PALETTE = [
     "#a6cee3", "#1f78b4", "#b2df8a", "#33a02c", "#fb9a99", "#e31a1c",
     "#fdbf6f", "#ff7f00", "#cab2d6", "#6a3d9a", "#ffff99", "#b15928",
@@ -80,6 +88,7 @@
     escapeHtml,
     CLASS_COLORS,
     CHEMOTYPE_COLORS,
+    MODALITY_COLORS,
     CHEMOTYPE_FALLBACK_PALETTE,
     getChemotypeColor,
   };

@@ -4,6 +4,7 @@
 {% block addon_css %}
 <link rel="stylesheet" href="{% static 'home/css/NewDrugsBrowser_datatables.min.css' %}" type="text/css"/>
 <link rel="stylesheet" href="{% static 'home/css/select2_4.1.0-rc.0._full.css' %}" type="text/css">
+<link rel="stylesheet" href="{% static 'home/css/classification/tree.css' %}" type="text/css" />
 
 <style>
   .tab-pane { margin-top: 20px; }
@@ -23,9 +24,7 @@
   /* Center headers for all tables (vertical and horizontal) */
   #classesTable thead th,
   #ligandTypeTable thead th,
-  #rfNonTable thead th,
-  #rfSensTable thead th,
-  #rfOrphanTable thead th {
+  #rfTable thead th {
     text-align: center;
     vertical-align: middle;
   }
@@ -105,26 +104,72 @@
       </div>
     </div>
 
-    <!-- ========== 2) LIGAND TYPES (DataTable) ========== -->
+    <!-- ========== 2) MODALITY AND CHEMOTYPE (table + tree sub-tabs) ========== -->
     <div role="tabpanel" class="tab-pane" id="tab-ligand">
       <div class="row ligand-wrapper">
         <div class="col-sm-10 col-sm-offset-1">
-          <table id="ligandTypeTable" class="table table-bordered table-striped table-hover dt-center" width="100%">
-            <thead>
-              <tr>
-                <th>Modality</th>
-                <th>Chemotype</th>
-                <th>Found in classes</th>
-              </tr>
-              <!-- optional filter row – hook your NorgesDTFilterBuilder here -->
-              <tr class="filter-row">
-                <th data-dt-order="disable"></th>
-                <th data-dt-order="disable"></th>
-                <th data-dt-order="disable"></th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+
+          <ul class="nav nav-pills" role="tablist">
+            <li class="active"><a href="#mc-table" data-toggle="tab">Table</a></li>
+            <li><a href="#mc-tree" data-toggle="tab" data-tree-selection="Chemotypes">Tree</a></li>
+            <li><a href="#mc-tree" data-toggle="tab" data-tree-selection="Families">Tree - Family level</a></li>
+          </ul>
+
+          <div class="tab-content" style="margin-top:15px;">
+            <div role="tabpanel" class="tab-pane active" id="mc-table">
+              <table id="ligandTypeTable" class="table table-bordered table-striped table-hover dt-center" width="100%">
+                <thead>
+                  <tr>
+                    <th>Modality</th>
+                    <th>Chemotype</th>
+                    <th>Found in classes</th>
+                  </tr>
+                  <!-- optional filter row – hook your NorgesDTFilterBuilder here -->
+                  <tr class="filter-row">
+                    <th data-dt-order="disable"></th>
+                    <th data-dt-order="disable"></th>
+                    <th data-dt-order="disable"></th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+
+            <!-- Modality -> Chemotype (-> Receptor family) trees (static/home/js/classification/tree.js).
+                 #levels_tree_content is the page's single tree pane: tree.js is bound to its fixed
+                 ids, so the Tree pills move it into whichever tab's pane they show (see below). -->
+            <div role="tabpanel" class="tab-pane" id="mc-tree">
+              <div id="levels_tree_content">
+              {% if tree_error %}
+                <div class="alert alert-danger">
+                  <strong>Error:</strong> {{ tree_error }}
+                </div>
+              {% else %}
+                <div class="tree-toolbar" style="margin-bottom: 16px;">
+                  <div class="dropdown">
+                    <button id="treeDownloadDropdownBtn" class="btn btn-primary btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+                      <span class="glyphicon glyphicon-download"></span> Download <span class="caret"></span>
+                    </button>
+                    <div class="dropdown-menu">
+                      <button id="download_svg_main" type="button" class="btn btn-primary btn-block">SVG</button>
+                      <button id="download_png_main" type="button" class="btn btn-primary btn-block">PNG</button>
+                    </div>
+                  </div>
+                  <select id="tree_selection" class="form-control input-sm" style="display:none;"></select>
+                </div>
+
+                <div class="plot-container">
+                  <div id="tree_plot_title" class="plot-title"></div>
+                  <div id="tree_plot_scroll_wrap" class="tree-plot-scroll">
+                    <div id="tree_plot_main" class="tree_plot text-center"></div>
+                    <div id="tree_plot_secondary" class="tree_plot text-center" style="display:none;"></div>
+                  </div>
+                </div>
+              {% endif %}
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
@@ -147,27 +192,30 @@
       </div>
     </div>
 
-    <!-- ========== 4) RECEPTOR FAMILIES (three sub-tabs) ========== -->
+    <!-- ========== 4) RECEPTOR FAMILIES (table + tree sub-tabs) ========== -->
     <div role="tabpanel" class="tab-pane" id="tab-families">
       <div class="row rf-wrapper">
         <div class="col-sm-10 col-sm-offset-1">
 
           <ul class="nav nav-pills" role="tablist">
-            <li class="active"><a href="#rf-non" data-toggle="tab">Non-sensory families</a></li>
-            <li><a href="#rf-sens" data-toggle="tab">Sensory families</a></li>
-            <li><a href="#rf-orphan" data-toggle="tab">Orphan receptor families</a></li>
+            <li class="active"><a href="#rf-table" data-toggle="tab">Table</a></li>
+            <li><a href="#rf-tree" data-toggle="tab" data-tree-selection="ClassFamilies">Tree</a></li>
           </ul>
 
           <div class="tab-content" style="margin-top:15px;">
-            <div role="tabpanel" class="tab-pane active" id="rf-non">
-              <table id="rfNonTable" class="table table-bordered table-striped table-hover dt-center" width="100%">
+            <div role="tabpanel" class="tab-pane active" id="rf-table">
+              <table id="rfTable" class="table table-bordered table-striped table-hover dt-center" width="100%">
                 <thead>
                   <tr>
                     <th>Receptor family</th>
-                    <th>Chemotype</th>
                     <th>Class</th>
+                    <th>Modality</th>
+                    <th>Chemotype</th>
+                    <th>Sense</th>
                   </tr>
                   <tr class="filter-row">
+                    <th data-dt-order="disable"></th>
+                    <th data-dt-order="disable"></th>
                     <th data-dt-order="disable"></th>
                     <th data-dt-order="disable"></th>
                     <th data-dt-order="disable"></th>
@@ -177,41 +225,8 @@
               </table>
             </div>
 
-            <div role="tabpanel" class="tab-pane" id="rf-sens">
-              <table id="rfSensTable" class="table table-bordered table-striped table-hover dt-center" width="100%">
-                <thead>
-                  <tr>
-                    <th>Receptor family</th>
-                    <th>Chemotype</th>
-                    <th>Class</th>
-                  </tr>
-                  <tr class="filter-row">
-                    <th data-dt-order="disable"></th>
-                    <th data-dt-order="disable"></th>
-                    <th data-dt-order="disable"></th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-
-            <div role="tabpanel" class="tab-pane" id="rf-orphan">
-              <table id="rfOrphanTable" class="table table-bordered table-striped table-hover dt-center" width="100%">
-                <thead>
-                  <tr>
-                    <th>Receptor family</th>
-                    <th>Chemotype</th>
-                    <th>Class</th>
-                  </tr>
-                  <tr class="filter-row">
-                    <th data-dt-order="disable"></th>
-                    <th data-dt-order="disable"></th>
-                    <th data-dt-order="disable"></th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
+            <!-- Class -> Receptor family tree: hosts #levels_tree_content while this pill is shown -->
+            <div role="tabpanel" class="tab-pane" id="rf-tree"></div>
           </div>
 
         </div>
@@ -230,18 +245,14 @@
 <script type="application/json" id="classesRowsJson">{{ classes_rows|safe }}</script>
 <script type="application/json" id="ligandTypeRowsJson">{{ ligand_type_rows|safe }}</script>
 <script type="application/json" id="senseRowsJson">{{ sense_rows|safe }}</script>
-<script type="application/json" id="rfNonRowsJson">{{ rf_non_rows|safe }}</script>
-<script type="application/json" id="rfSensRowsJson">{{ rf_sens_rows|safe }}</script>
-<script type="application/json" id="rfOrphanRowsJson">{{ rf_orphan_rows|safe }}</script>
+<script type="application/json" id="rfRowsJson">{{ rf_rows|safe }}</script>
 
 <script>
   // backbone data from Django
   var classesRows     = JSON.parse(document.getElementById('classesRowsJson').textContent || '[]');
   var ligandTypeRows  = JSON.parse(document.getElementById('ligandTypeRowsJson').textContent || '[]');
   var senseRows       = JSON.parse(document.getElementById('senseRowsJson').textContent || '[]');
-  var rfNonRows       = JSON.parse(document.getElementById('rfNonRowsJson').textContent || '[]');
-  var rfSensRows      = JSON.parse(document.getElementById('rfSensRowsJson').textContent || '[]');
-  var rfOrphanRows    = JSON.parse(document.getElementById('rfOrphanRowsJson').textContent || '[]');
+  var rfRows          = JSON.parse(document.getElementById('rfRowsJson').textContent || '[]');
 
   $(function () {
 
@@ -468,35 +479,16 @@
       });
     }
 
-    var rfNonDT = $('#rfNonTable').DataTable({
-      data: rfNonRows,
-      columns: [
-        { data: 'receptor_family' },  // Receptor family first
-        { data: 'ligand_type' },       // Chemotype second
-        { data: 'class_symbol' }     // Class Third
-      ],
-      paging:false, searching:true, ordering:true, info:false,
-      autoWidth:false, orderCellsTop:true, dom:'t'
-    });
-
-    var rfSensDT = $('#rfSensTable').DataTable({
-      data: rfSensRows,
+    var rfDT = $('#rfTable').DataTable({
+      data: rfRows,
       columns: [
         { data: 'receptor_family' },
-        { data: 'ligand_type' },      // Chemotype
-        { data: 'classes' }            // Class (renamed from "Found in classes")
+        { data: 'class_symbol' },
+        { data: 'modality' },
+        { data: 'chemotype' },
+        { data: 'sense' }            // Non-sensory, Olfaction, Taste, ..., Orphan
       ],
-      paging:false, searching:true, ordering:true, info:false,
-      autoWidth:false, orderCellsTop:true, dom:'t'
-    });
-
-    var rfOrphanDT = $('#rfOrphanTable').DataTable({
-      data: rfOrphanRows,
-      columns: [
-        { data: 'receptor_family' },
-        { data: 'ligand_type' },      // Chemotype
-        { data: 'classes' }            // Class
-      ],
+      order: [],  // keep the server order (class, then family) until the user sorts
       paging:false, searching:true, ordering:true, info:false,
       autoWidth:false, orderCellsTop:true, dom:'t'
     });
@@ -521,9 +513,7 @@
     attachFilters(ltDT, [2]);
     installLtClassesTokenFilter();
     initLtClassesTokenDropdown();
-    attachFilters(rfNonDT);
-    attachFilters(rfSensDT);
-    attachFilters(rfOrphanDT);
+    attachFilters(rfDT);
 
     // --- 3) Center placeholder text in filter textareas ---
     function centerFilterPlaceholders() {
@@ -558,9 +548,46 @@
 
     // Also apply when tables are redrawn (if needed)
     ltDT.on('draw', centerFilterPlaceholders);
-    rfNonDT.on('draw', centerFilterPlaceholders);
-    rfSensDT.on('draw', centerFilterPlaceholders);
-    rfOrphanDT.on('draw', centerFilterPlaceholders);
+    rfDT.on('draw', centerFilterPlaceholders);
+  });
+</script>
+
+{# Modality and Chemotype -> Tree sub-tab #}
+<script src="{% static 'home/js/d3.min.js' %}"></script>
+<script>
+  window.CLASSIFICATION_TREE_DATA = {
+    treeSets: JSON.parse('{{ tree_sets|default:"{}"|escapejs }}'),
+    leafLabelLookup: JSON.parse('{{ tree_leaf_label_lookup|default:"{}"|escapejs }}'),
+    initialType: "{{ tree_initial_type|default:'LevelsTerms'|escapejs }}",
+    initialSelection: "{{ tree_initial_selection|default:''|escapejs }}",
+    lockedType: "{{ tree_locked_type|default:''|escapejs }}",
+    lockedSelection: "{{ tree_locked_selection|default:''|escapejs }}"
+  };
+</script>
+<script src="{% static 'home/js/classification/core.js' %}"></script>
+<script src="{% static 'home/js/gpcrome_svg_export.js' %}"></script>
+<script src="{% static 'home/js/classification/tree.js' %}"></script>
+<script src="{% static 'home/js/classification/levels_terms_chemotype_dots.js' %}"></script>
+<script>
+  // Tree pills (Modality and Chemotype tab, Receptor families tab) share the one tree pane:
+  // move #levels_tree_content into the pill's own pane, then point tree.js's (hidden) selection at
+  // the pill's plot. tree.js defers the render while the pane is still hidden.
+  function showTreeFor(pill) {
+    var host = document.querySelector(pill.getAttribute('href'));
+    var content = document.getElementById('levels_tree_content');
+    if (host && content && content.parentNode !== host) host.appendChild(content);
+    var sel = document.getElementById('tree_selection');
+    if (!sel) return;
+    sel.value = pill.getAttribute('data-tree-selection');
+    sel.dispatchEvent(new Event('change'));
+  }
+  $('a[data-tree-selection]').on('show.bs.tab', function () { showTreeFor(this); });
+
+  // Switching top-level tabs doesn't fire the pills' events: if the shown tab's active pill is a
+  // Tree pill, its pane may have lost the tree to the other tab -- move it back.
+  $('.container > .nav-tabs a[data-toggle="tab"]').on('shown.bs.tab', function () {
+    var pill = $(this.getAttribute('href')).find('.nav-pills li.active a[data-tree-selection]').get(0);
+    if (pill) showTreeFor(pill);
   });
 </script>
 {% endblock %}

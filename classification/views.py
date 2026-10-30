@@ -1064,87 +1064,46 @@ class Classification(ClassificationVisualizationMixin, TemplateView):
         ]
         rows = [row for row in rows if row["class_symbol"]]
 
-        # nice ordered list of classes
         class_order = list(self.CLASS_VISUALIZATION_CONFIG.keys())
-        def sort_classes(s):
-            return sorted(s, key=lambda x: (class_order.index(x)
-                                            if x in class_order else 999, x))
 
-        # ---------- Receptor families: non-sensory vs sensory vs orphan ----------
-        # Using Sense directly:
-        # - "non-sensory" -> non-sensory
-        # - "unknown" -> orphan
-        # - any other non-empty Sense -> sensory
-
-        non_sens_triples = set()       # (class_symbol, family, chemotype)
-        sensory_map = {}              # (family, chemotype) -> set(classes)
-        orphan_map = {}               # (family, chemotype) -> set(classes)
-
+        # ---------- Receptor families: one row per (class, family, modality, chemotype, sense) ----------
+        # A family with two tags (chemotype/modality order 1 and 2) gets one row per tag. Sense is
+        # the DB value as-is, except "Unknown", which is shown as "Orphan".
+        rf_tuples = set()
         for row in rows:
             fam = row["receptor_family"]
             chemotype = row["chemotype"]
-            if not fam or not chemotype:
+            sense = (row["sense"] or "").strip()
+            if not fam or not chemotype or not sense:
                 continue
+            if sense.lower() == "unknown":
+                sense = "Orphan"
+            rf_tuples.add((row["class_symbol"], fam, self._group_modality_label(row["modality"]), chemotype, sense))
 
-            symbol = row["class_symbol"]
-            sense = (row["sense"] or "").strip().lower()
-
-            if sense == "non-sensory":
-                non_sens_triples.add((symbol, fam, chemotype))
-            elif sense == "unknown":
-                orphan_map.setdefault((fam, chemotype), set()).add(symbol)
-            elif sense:  # Any other non-empty sense value is considered sensory
-                sensory_map.setdefault((fam, chemotype), set()).add(symbol)
-            # If sense is empty, skip it
-
-        # non-sensory: Class / Receptor family / Chemotype
-        rf_non_rows = [
+        rf_rows = [
             {
-                "class_symbol": cs,
                 "receptor_family": fam,
-                "ligand_type": chemotype,  # Using chemotype as ligand_type for template
+                "class_symbol": cs,
+                "modality": modality,
+                "chemotype": chemotype,
+                "sense": sense,
             }
-            for (cs, fam, chemotype) in sorted(
-                non_sens_triples,
-                key=lambda t: (class_order.index(t[0])
-                               if t[0] in class_order else 999,
-                               t[0].lower(), t[1].lower())
+            for (cs, fam, modality, chemotype, sense) in sorted(
+                rf_tuples,
+                key=lambda t: (class_order.index(t[0]) if t[0] in class_order else 999,
+                               self._natural_sort_key(t[1]), t[3].lower())
             )
         ]
-
-        # sensory: Receptor family / Chemotype / Found in classes
-        rf_sens_rows = []
-        for (fam, chemotype), classes in sensory_map.items():
-            cls_list = sort_classes(classes)
-            rf_sens_rows.append({
-                "receptor_family": fam,
-                "ligand_type": chemotype,  # Using chemotype as ligand_type for template
-                "classes": ", ".join(cls_list),
-            })
-
-        rf_sens_rows.sort(key=lambda r: (r["receptor_family"].lower(),
-                                         r["ligand_type"].lower()))
-
-        # orphan: Receptor family / Chemotype / Found in classes
-        rf_orphan_rows = []
-        for (fam, chemotype), classes in orphan_map.items():
-            cls_list = sort_classes(classes)
-            rf_orphan_rows.append({
-                "receptor_family": fam,
-                "ligand_type": chemotype,  # Using chemotype as ligand_type for template
-                "classes": ", ".join(cls_list),
-            })
-
-        rf_orphan_rows.sort(key=lambda r: (r["receptor_family"].lower(),
-                                           r["ligand_type"].lower()))
 
         # Serialize to JSON strings for template (using |safe filter)
         ctx["classes_rows"] = json.dumps(self.CLASSES_TABLE_DATA)
         ctx["ligand_type_rows"] = json.dumps(self.MODALITY_CHEMOTYPE_TABLE_DATA)
         ctx["sense_rows"] = json.dumps(self.SENSE_TABLE_DATA)
-        ctx["rf_non_rows"] = json.dumps(rf_non_rows)
-        ctx["rf_sens_rows"] = json.dumps(rf_sens_rows)
-        ctx["rf_orphan_rows"] = json.dumps(rf_orphan_rows)
+        ctx["rf_rows"] = json.dumps(rf_rows)
+        ctx.update(Classification_tree().build_levels_terms_tree_context(
+            chemotype_classes={row["ligand_type"]: row["classes"] for row in self.MODALITY_CHEMOTYPE_TABLE_DATA},
+            class_order=[row["code"] for row in self.CLASSES_TABLE_DATA],
+        ))
 
         return ctx
 
@@ -1174,6 +1133,16 @@ class Classification_tree(ClassificationVisualizationMixin):
     Classification-tree content.
     """
 
+    BASE_TREE_OPTIONS = {
+        "branch_trunc": 0,
+        "leaf_offset": 30,
+        "anchor": "",
+        "label_free": [],
+        "centerBadgeR": 0,
+        "centerBadgePadding": 0,
+        "firstRingExtra": 45,
+    }
+
     def _build_tree_datasets(self, **kwargs):
         """
         Build the DB-derived tree datasets (via classification/classification_db.py) independent
@@ -1201,15 +1170,7 @@ class Classification_tree(ClassificationVisualizationMixin):
             ctx["error"] = "No classification annotations found in the database."
             return ctx, {}
 
-        base_tree_options = {
-            "branch_trunc": 0,
-            "leaf_offset": 30,
-            "anchor": "",
-            "label_free": [],
-            "centerBadgeR": 0,
-            "centerBadgePadding": 0,
-            "firstRingExtra": 45,
-        }
+        base_tree_options = dict(self.BASE_TREE_OPTIONS)
         tree_sets = {
             "Class": {"options": [], "plots": {}},
             "Modality": {"options": [], "plots": {}},
@@ -1326,6 +1287,177 @@ class Classification_tree(ClassificationVisualizationMixin):
     def _class_order_sort_key(self, class_key):
         order = self.tree_class_keys()
         return order.index(class_key) if class_key in order else len(order)
+
+    @staticmethod
+    def _parse_class_tokens(text):
+        """"A, B1, (V2)" -> ["A", "B1", "V2"]; the table's parentheses are dropped."""
+        tokens = (token.strip().strip("()").strip() for token in str(text or "").split(","))
+        return [token for token in tokens if token]
+
+    def build_levels_terms_tree_context(self, chemotype_classes=None, class_order=None):
+        """
+        Context for the Levels & terms page's trees (one LevelsTerms tree set, three plots that
+        share the page's single tree pane, which the page moves between its tabs):
+        - "Chemotypes": Modality -> Chemotype (leaves), with stacked class dots after each label
+          (packed per leaf in `class_order`; drawn by levels_terms_chemotype_dots.js) for the classes
+          in `chemotype_classes` -- the page's curated
+          "Found in classes" text per chemotype (e.g. "A, B1"), which includes non-human
+          classes. A chemotype missing there falls back to its DB classes.
+        - "Families": Modality -> Chemotype -> Receptor family (leaves), each leaf carrying its
+          class for a class-colored dot.
+        - "ClassFamilies" (Receptor families tab): Class -> Receptor family (leaves), class-colored.
+
+        A family is placed under every chemotype that at least one of its receptors has as its
+        primary tag, so mixed families (e.g. adhesion ADGRG: orphan/protein/steroid members)
+        appear more than once on purpose.
+
+        `class_order` orders the dot columns and legend (defaults to CLASS_VISUALIZATION_CONFIG).
+        """
+        try:
+            rows = classification_db.get_primary_classification_rows()
+        except Exception as e:
+            return {"tree_error": f"Error loading classification annotations from the database: {e}"}
+
+        slug_to_key = self.class_slug_to_key_map()
+        families = {}  # receptor-family slug -> {"name", "class_key", "tags"}
+        for row in rows:
+            family_slug = row["family_slug"].rsplit("_", 1)[0]
+            entry = families.setdefault(family_slug, {
+                "name": (row["receptor_family"] or "").strip() or classification_db.D3_EMPTY_LABEL,
+                "class_key": slug_to_key.get(row["class_slug"]) or "U",
+                "tags": set(),
+            })
+            chemotype = (row["chemotype"] or "").strip() or classification_db.D3_EMPTY_LABEL
+            entry["tags"].add((self._group_modality_label(row["modality"]), chemotype))
+
+        # The two single-chemotype modalities go last (Ion, then Orphan); the rest keep their order.
+        last = ["Ion receptors", "Orphan receptors"]
+        modality_order = [label for label in self.MODALITY_GROUP_LABELS if label not in last] + last
+        nested = OrderedDict((label, {}) for label in modality_order)
+        for entry in families.values():
+            for modality, chemotype in entry["tags"]:
+                nested[modality].setdefault(chemotype, []).append(entry)
+
+        class_order = list(class_order or self.CLASS_VISUALIZATION_CONFIG.keys())
+
+        def class_sort_key(key):
+            return (class_order.index(key) if key in class_order else len(class_order), key)
+
+        modality_nodes = []
+        modality_chemotype_nodes = []
+        chemotype_classes_used = set()
+        for modality, chemotypes in nested.items():
+            if not chemotypes:
+                continue
+            chemotype_leaves = []
+            for chemotype in sorted(chemotypes, key=lambda x: str(x).lower()):
+                if chemotype_classes and chemotype in chemotype_classes:
+                    class_keys = self._parse_class_tokens(chemotype_classes[chemotype])
+                else:
+                    class_keys = [entry["class_key"] for entry in chemotypes[chemotype]]
+                leaf = classification_db.d3_leaf(chemotype)
+                leaf["classKeys"] = sorted(set(class_keys), key=class_sort_key)
+                chemotype_classes_used.update(leaf["classKeys"])
+                chemotype_leaves.append(leaf)
+            modality_chemotype_nodes.append(classification_db.d3_node(modality, chemotype_leaves))
+            chemotype_nodes = []
+            for chemotype in sorted(chemotypes, key=lambda x: str(x).lower()):
+                entries = chemotypes[chemotype]
+                name_counts = {}
+                for entry in entries:
+                    name_counts[entry["name"]] = name_counts.get(entry["name"], 0) + 1
+                leaves = []
+                for entry in entries:
+                    label = entry["name"]
+                    if name_counts[label] > 1:  # e.g. "Orphan receptors" in classes A, C and U
+                        label = "{} ({})".format(label, self.CLASS_VISUALIZATION_CONFIG[entry["class_key"]]["label"])
+                    leaf = classification_db.d3_leaf(label)
+                    leaf["classKey"] = entry["class_key"]
+                    leaves.append(leaf)
+                leaves.sort(key=lambda leaf: self._natural_sort_key(leaf["name"]))
+                chemotype_nodes.append(classification_db.d3_node(chemotype, leaves))
+            modality_nodes.append(classification_db.d3_node(modality, chemotype_nodes))
+
+        families_by_class = {}
+        for entry in families.values():
+            families_by_class.setdefault(entry["class_key"], set()).add(entry["name"])
+        class_family_nodes = []
+        for class_key, names in sorted(families_by_class.items(), key=lambda item: class_sort_key(item[0])):
+            leaves = []
+            for name in sorted(names, key=self._natural_sort_key):
+                leaf = classification_db.d3_leaf(name)
+                leaf["classKey"] = class_key  # for the class-colored leaf dot
+                leaves.append(leaf)
+            class_family_nodes.append(
+                classification_db.d3_node(self.CLASS_VISUALIZATION_CONFIG[class_key]["label"], leaves)
+            )
+
+        present = {entry["class_key"] for entry in families.values()}
+        tree_sets = {
+            "LevelsTerms": {
+                "options": [
+                    {"key": "Chemotypes", "label": "Modality and chemotype"},
+                    {"key": "Families", "label": "Modality and chemotype - family level"},
+                    {"key": "ClassFamilies", "label": "Class and receptor family"},
+                ],
+                "plots": {
+                    "Chemotypes": {
+                        "tree": classification_db.d3_root(modality_chemotype_nodes),
+                        "tree_options": dict(self.BASE_TREE_OPTIONS, colorMode="modality"),
+                        "meta": {
+                            "title": "Modality and chemotype",
+                            "liftClassLayer": False,
+                            "collapseLabels": [],
+                            "shortenLeaves": True,
+                            "leafPills": False,
+                            # Depth 1 (modality) uses "ligandtype", the leaves (chemotype) "receptorfamily".
+                            "fontSize": {"ligandtype": "11px", "receptorfamily": "11px"},
+                            # Stacked class dots after each label: drawn only by this page's
+                            # static/home/js/classification/levels_terms_chemotype_dots.js.
+                            "leafDecorator": "chemotypeClassDots",
+                            "chemotypeClassDots": {
+                                "legendClassKeys": sorted(chemotype_classes_used, key=class_sort_key),
+                            },
+                        },
+                    },
+                    "Families": {
+                        "tree": classification_db.d3_root(modality_nodes),
+                        "tree_options": dict(self.BASE_TREE_OPTIONS, colorMode="modality"),
+                        "meta": {
+                            "title": "Modality and chemotype - family level",
+                            "liftClassLayer": False,
+                            "collapseLabels": [],
+                            "leafDots": "class",
+                            "leafPills": False,  # the class dots already mark the leaves
+                            "shortenLeaves": True,
+                            "legendClassKeys": sorted(present, key=class_sort_key),
+                        },
+                    },
+                    "ClassFamilies": {
+                        "tree": classification_db.d3_root(class_family_nodes),
+                        "tree_options": dict(self.BASE_TREE_OPTIONS, colorMode="class"),
+                        "meta": {
+                            "title": "Class and receptor family",
+                            "liftClassLayer": False,
+                            "collapseLabels": [],
+                            # Leaves show the same names as the Receptor families table.
+                            "fullLeafLabels": True,
+                            # Cosmetic class dot per leaf; no legendClassKeys, so no dot legend --
+                            # the class labels are already on the tree.
+                            "leafDots": "class",
+                            "leafPills": False,
+                        },
+                    },
+                },
+            },
+        }
+        ctx = {
+            "tree_sets": json.dumps(tree_sets),
+            "tree_leaf_label_lookup": "{}",
+        }
+        # Not locked: the page's Tree pills (two tabs) switch between the three plots.
+        ctx.update(self.build_selection_context(tree_sets, "LevelsTerms", "Chemotypes"))
+        return ctx
 
     @staticmethod
     def build_selection_context(tree_sets, requested_type="Class", requested_selection="",
