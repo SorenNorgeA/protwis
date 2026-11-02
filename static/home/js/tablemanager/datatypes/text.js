@@ -51,18 +51,22 @@ class Text extends DataTypeBase {
             return tableManagerReference.nullValuePlaceholder;
         }
         if (type === "display" && data) {
-            const maxDisplayLength = this.column.max_display_length;
-            if(maxDisplayLength && data.length > maxDisplayLength){
-                let truncatedData = data.substring(0, maxDisplayLength) + "...";
-                const span = document.createElement("span");
-                span.setAttribute("title", data);
-                span.textContent = truncatedData;
-                return span.outerHTML;
-            }
-            return data;
+            const truncated_data = this._truncateText(data, this.column.max_display_length);
+            return truncated_data.data;
         }
         return data; // Search, order and type return
     } 
+
+    _truncateText(data, maxDisplayLength) {
+        if (maxDisplayLength && data.length > maxDisplayLength) {
+            let truncatedText = data.substring(0, maxDisplayLength) + "...";
+            const span = document.createElement("span");
+            span.setAttribute("title", data);
+            span.textContent = truncatedText;
+            return { truncated: true, data: span.outerHTML };
+        }        
+        return { truncated: false, data: data };
+    }
 
     /**
      * Creates a text input that applies the filter when it loses focus or Enter is pressed. If show_symbol_popup is set,

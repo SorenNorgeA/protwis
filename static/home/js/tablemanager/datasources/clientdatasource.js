@@ -2,7 +2,7 @@
 // Column data is computed from the rows loaded into the DataTable, and column filters use DataTables' own search.
 
 import { DataSourceBase } from "./datasourcebase.js";
-import { StorageCache } from "../storagecache.js";
+import { StorageCache } from "./storagecache.js";
 
 class ClientDataSource extends DataSourceBase {
 

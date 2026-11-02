@@ -30,14 +30,17 @@ class WebLinkText extends Text {
             return tableManagerReference.nullValuePlaceholder;
         }
         if (type === "display" && data) {
+            const truncated_content = this._truncateText(data.anchor_content, this.column.max_display_length);
+            
             if (!data.anchor_href) {
-                return data.anchor_html || data.anchor_content || ""; // fallback to displaying the content unlinked if href is missing
+                return data.anchor_html || truncated_content.data || ""; // fallback to displaying the content unlinked if href is missing
             }
+            
             const link = document.createElement("a");
             link.setAttribute("href", data.anchor_href);
             link.setAttribute("target", "_blank");
-            if (data.anchor_html) {
-                link.innerHTML = data.anchor_html;
+            if (data.anchor_html || truncated_content.truncated) {
+                link.innerHTML = data.anchor_html || truncated_content.data;
             } else {
                 link.textContent = data.anchor_content;
             }

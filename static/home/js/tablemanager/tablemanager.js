@@ -216,7 +216,7 @@ class TableManager {
       if (dataTableOptions.fixedWidthTable) {
         tableElement.classList.add("fixed-width-table");
       } else {
-        tableElement.classList.remove("auto-width-table");
+        tableElement.classList.add("auto-width-table");
       }
     }
   }
