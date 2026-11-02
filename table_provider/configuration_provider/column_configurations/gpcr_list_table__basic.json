@@ -5,8 +5,7 @@
     "title": "Protein",
     "data_type": "weblinktext",
     "allow_filter": true,
-    "show_symbol_popup": true,
-    "filter_suggestions": true
+    "show_symbol_popup": true
   },
   {
     "column_group": "Receptor",
