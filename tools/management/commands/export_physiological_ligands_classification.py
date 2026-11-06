@@ -6,7 +6,8 @@ The ligand classification uses the receptor classification vocabulary (ProteinFa
 minus " receptors") and is decided once per ligand:
   - modality from the ligand itself: sequence/peptide backbone -> Polypeptide, single atom or ion
     name -> Ion, otherwise Small molecule;
-  - Polypeptide chemotype from sequence length (<= PEPTIDE_MAX_LEN aa -> Peptide, else Protein);
+  - Polypeptide chemotype: < PEPTIDE_BELOW aa -> Peptide, > PROTEIN_ABOVE aa -> Protein; in between, and for
+    polypeptides without a sequence, the term the ligand is most commonly called by (AI lookup, see below);
   - Small molecule chemotype voted by its receptors with the same modality (one vote per receptor
     family / ortholog group, orphans never vote), falling back to RDKit structural rules.
 The receptor classification only covers human receptors; rat/mouse receptors take it from their
@@ -15,8 +16,14 @@ paralogs (parent receptor family) when no human ortholog exists.
 
 Debug columns (far right) flag every disagreement with the receptor and with the curated Type.
 
-    python manage.py export_physiological_ligands_classification              # xlsx + ai_input_NN.json
-    python manage.py export_physiological_ligands_classification --merge-ai   # + ai_output_NN.json columns
+AI runs live in ai_runs/<run>/: ai_input_NN.json is written here, ai_output_NN.json by Claude Code subagents.
+  - full run (AI SUGGESTION columns): every ligand classified into the vocabulary;
+  - polypeptide run (AI POLYPEPTIDE TERM columns): Peptide or Protein by common name, for the 40-100 aa window.
+--*-ai-batches refuses to write into a run folder that already has answers, so archived runs stay intact.
+
+    python manage.py export_physiological_ligands_classification                           # xlsx
+    python manage.py export_physiological_ligands_classification --polypeptide-ai-batches  # + polypeptide ai_input
+    python manage.py export_physiological_ligands_classification --merge-ai                # + both runs' answers
 """
 from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
@@ -42,12 +49,29 @@ RDLogger.DisableLog('rdApp.*')
 OUTPUT_DIR = os.path.join(os.path.abspath(settings.BASE_DIR), 'data', 'ligand_classification')
 OUTPUT_XLSX = 'physiological_ligands_classification.xlsx'
 
-PEPTIDE_MAX_LEN = 60    # <= 60 aa -> Peptide, else Protein (no ligand in the table is 61-67 aa)
-LONG_CHAIN_N = 7        # acyclic carbon chain length that makes a small molecule a Lipid
+PEPTIDE_BELOW = 40      # < 40 aa -> Peptide
+PROTEIN_ABOVE = 100     # > 100 aa -> Protein; 40-100 aa (and no sequence) -> AI common-name term
+LEGACY_PEPTIDE_MAX_LEN = 60    # former length-only rule (<= 60 aa Peptide), kept for the comparison column
+LEGACY_COLUMN = 'Chemotype (≤%d aa rule)' % LEGACY_PEPTIDE_MAX_LEN
+POLYPEPTIDE_TERMS = ('Peptide', 'Protein')
+LONG_CHAIN_N = 7       # acyclic carbon chain length that makes a small molecule a Lipid
 ALICARB_MAX_C = 8       # max carbons of an Alicarboxylic acid (keeps 3-hydroxyoctanoic acid, HCAR3)
 AMINO_ACID_MAX_HEAVY = 30
 AI_BATCH_SIZE = 70
+AI_POLY_BATCH_SIZE = 40
 AI_SEQUENCE_PREVIEW = 120
+AI_RUNS_DIR = 'ai_runs'
+AI_FULL_RUN = '01_full_2026-10-17'
+AI_POLY_RUN = '02_polypeptide_2026-11-06'
+AI_POLY_TASK = (
+    "For each ligand (key = name without species; variants = its species forms in GPCRdb), answer whether the mature "
+    "endogenous ligand is most commonly called a peptide or a protein in the literature and databases (UniProt, "
+    "IUPHAR/GtP, PubMed). Do not decide by sequence length alone: the stored sequence may be a precursor, a "
+    "propeptide or a placeholder, and a name containing 'peptide' or 'hormone' does not settle it either. Answer "
+    "from knowledge first; check online (UniProt, GtP, PubMed) whenever you are not highly confident, and say so in "
+    "web_checked. Return a JSON list with one object per key: key (copied exactly), ai_term ('Peptide' or 'Protein'), "
+    "confidence ('high', 'medium' or 'low'), mature_length (aa of the mature form if known, else null), web_checked "
+    "(true/false) and reasoning (one or two sentences on how the ligand is usually described).")
 
 ORPHAN = 'Orphan'
 ION = 'Ion'
@@ -70,7 +94,9 @@ FLAGS = OrderedDict([
     ('TYPE≠MOD:ION', (True, "Classified Ion, but Type says Small molecule (Type has no Ion entry)")),
     ('TYPE≠MOD', (True, "Curated Type is incompatible with the ligand modality")),
     ('TYPE≠LIPID', (True, "Type is Lipid but the chemotype is not Lipid or Steroid")),
-    ('TYPE≠LEN', (True, "Type is Protein but the sequence is <= %d aa" % PEPTIDE_MAX_LEN)),
+    ('TYPE≠LEN', (True, "Type is Protein but the chemotype is Peptide")),
+    ('POLY_CHANGED', (True, "Peptide/Protein differs from the former rule (<= %d aa Peptide; receptor vote without "
+                            "a sequence)" % LEGACY_PEPTIDE_MAX_LEN)),
     ('NO_STRUCT', (True, "No sequence and no SMILES; modality/chemotype taken from the receptors")),
     ('UNRESOLVED', (True, "No chemotype from receptors or structure")),
     ('RDKIT≠CHEM', (True, "RDKit structural chemotype disagrees with the receptor vote")),
@@ -80,18 +106,24 @@ FLAGS = OrderedDict([
     ('AI≠PROPOSED', (True, "AI suggestion differs from the proposed ligand classification")),
     ('AI_INVALID', (True, "AI answer is not in the vocabulary")),
     ('AI_MISSING', (True, "No AI answer for this ligand")),
+    ('POLY_AI_MISSING', (True, "%d-%d aa (or no sequence) polypeptide without an AI term; former rule kept" % (
+        PEPTIDE_BELOW, PROTEIN_ABOVE))),
+    ('POLY_AI_INVALID', (True, "AI term is not Peptide or Protein; former rule kept")),
     ('RDKIT_ONLY', (False, "Chemotype from the RDKit structure rule only (no receptor vote)")),
     ('ORPHAN_ONLY', (False, "Every receptor of this ligand is an orphan")),
     ('ORPHAN_REC', (False, "This row's receptor is an orphan")),
     ('MULTI_TAG', (False, "Matched on the receptor's secondary (order 2) classification")),
     ('REC_NO_HUMAN_ORTHOLOG', (False, "Rat/mouse receptor without a human ortholog; classification from human paralogs")),
-    ('TYPE≠CHEM', (False, "Type is Peptide but the chemotype is Protein (> %d aa; GtP types chemokines as Peptide)" % PEPTIDE_MAX_LEN)),
+    ('TYPE≠CHEM', (False, "Type is Peptide but the chemotype is Protein (GtP types chemokines as Peptide)")),
+    ('POLY_AI', (False, "Peptide/Protein from the AI common-name term (%d-%d aa or no sequence)" % (
+        PEPTIDE_BELOW, PROTEIN_ABOVE))),
 ])
 WEAK_SOURCE_FLAGS = {'RDKIT_ONLY', 'NO_STRUCT', 'ORPHAN_ONLY', 'UNRESOLVED'}
 
 TAG_RE = re.compile(r'<[^>]+>')
 ION_NAME_RE = re.compile(r'^[A-Z][a-z]?\d*[+-]$')   # clean name without spaces: Ca2+, Zn2+, H+, Cl-
 RECEPTORS_SUFFIX_RE = re.compile(r'\s*receptors?$', re.IGNORECASE)
+SPECIES_SUFFIX_RE = re.compile(r'\s*\((?:Human|Mouse|Rat|Pig)\)$')
 
 # ---- RDKit structural rules (validated against the receptor vote: 91/91 small molecules agree) ----
 _S = Chem.MolFromSmarts
@@ -198,24 +230,39 @@ class Command(BaseCommand):
     help = "Export /ligand/physiological_ligands/ to Excel with a per-ligand modality/chemotype classification"
 
     logger = logging.getLogger(__name__)
+    poly_answers = None    # polypeptide AI answers by key, loaded by --merge-ai
 
     def add_arguments(self, parser):
         parser.add_argument('--output-dir', default=OUTPUT_DIR,
                             help='Folder for the xlsx and the AI json batches (default: %(default)s)')
         parser.add_argument('--merge-ai', action='store_true',
-                            help='Merge ai_output_NN.json files from the output folder into the AI columns')
+                            help='Merge the ai_output_NN.json answers of both AI runs into the AI columns')
+        parser.add_argument('--full-ai-run', default=AI_FULL_RUN,
+                            help='Folder under ai_runs/ of the full classification run (default: %(default)s)')
+        parser.add_argument('--polypeptide-ai-run', default=AI_POLY_RUN,
+                            help='Folder under ai_runs/ of the polypeptide term run (default: %(default)s)')
+        parser.add_argument('--full-ai-batches', action='store_true',
+                            help='Write ai_input_NN.json for a new full run into --full-ai-run')
+        parser.add_argument('--polypeptide-ai-batches', action='store_true',
+                            help='Write ai_input_NN.json for the polypeptide run into --polypeptide-ai-run')
 
     def handle(self, *args, **options):
         self.output_dir = options['output_dir']
         os.makedirs(self.output_dir, exist_ok=True)
+        full_run_dir = os.path.join(self.output_dir, AI_RUNS_DIR, options['full_ai_run'])
+        poly_run_dir = os.path.join(self.output_dir, AI_RUNS_DIR, options['polypeptide_ai_run'])
 
         self.load_vocabulary()
         self.load_pairs()
         self.load_receptor_classification()
+        self.poly_answers = self.read_ai_outputs(poly_run_dir, 'key') if options['merge_ai'] else None
         self.classify_ligands()
         self.flag_rows()
-        self.write_ai_batches()
-        self.ai_stats = self.merge_ai() if options['merge_ai'] else None
+        if options['full_ai_batches']:
+            self.write_ai_batches(full_run_dir)
+        if options['polypeptide_ai_batches']:
+            self.write_polypeptide_batches(poly_run_dir)
+        self.ai_stats = self.merge_ai(full_run_dir) if options['merge_ai'] else None
         path = os.path.join(self.output_dir, OUTPUT_XLSX)
         try:
             self.save_excel(path)
@@ -228,6 +275,13 @@ class Command(BaseCommand):
         if self.ai_stats:
             self.stdout.write("AI merge: %(merged)d/%(total)d ligands merged, %(missing)d missing, "
                               "%(invalid)d invalid, %(disagree)d disagree" % self.ai_stats)
+        self.stdout.write("Polypeptide term (%d-%d aa or no sequence): %%(window)d ligands, %%(keys)d names; "
+                          "%%(ai)d AI term, %%(missing)d missing, %%(invalid)d invalid; %%(changed)d changed vs the "
+                          "former rule" % (PEPTIDE_BELOW, PROTEIN_ABOVE) % self.polypeptide_stats())
+        for ligand in sorted(self.ligands.values(), key=lambda l: l['name'].lower()):
+            if 'POLY_CHANGED' in ligand['flags']:
+                self.stdout.write("  %-45s %s -> %s (%s)" % (ligand['name'], ligand['legacy_chemotype'] or '-',
+                                                            ligand['chemotype'], ligand['source']))
 
     # ------------------------------------------------------------------ data
 
@@ -392,7 +446,7 @@ class Command(BaseCommand):
                 chemotype, source = ION, 'ion (structure)'
             elif modality == POLYPEPTIDE and ligand['sequence']:
                 length = len(ligand['sequence'])
-                chemotype = 'Peptide' if length <= PEPTIDE_MAX_LEN else 'Protein'
+                chemotype = 'Peptide' if length <= LEGACY_PEPTIDE_MAX_LEN else 'Protein'
                 source = 'length (%d aa)' % length
             elif votes:
                 top = votes.most_common(1)[0][1]
@@ -413,6 +467,13 @@ class Command(BaseCommand):
                 flags.add('RDKIT_ONLY')
             elif modality == POLYPEPTIDE and basis.startswith('SMILES'):
                 chemotype, source = 'Peptide', 'SMILES peptide backbone'
+
+            # the former rule above stays as the comparison value; the common-name rule decides
+            legacy_chemotype, poly_key, poly_ai = chemotype, None, None
+            if modality == POLYPEPTIDE:
+                chemotype, source, poly_key, poly_ai = self.polypeptide_term(ligand, basis, chemotype, source, flags)
+                if chemotype != legacy_chemotype:
+                    flags.add('POLY_CHANGED')
             if not chemotype:
                 flags.add('UNRESOLVED')
 
@@ -437,7 +498,47 @@ class Command(BaseCommand):
                 'rdkit_chemotype': rdkit_chem or '', 'source': source,
                 'votes': format_votes(votes), 'flags': flags,
                 'ai': None,
+                'legacy_chemotype': legacy_chemotype, 'poly_key': poly_key, 'poly_ai': poly_ai,
             })
+
+    def polypeptide_term(self, ligand, basis, chemotype, source, flags):
+        """(chemotype, source, AI key, AI answer) under the common-name rule.
+
+        Below PEPTIDE_BELOW / above PROTEIN_ABOVE aa the length decides. In between, and for polypeptides without a
+        sequence (SMILES-only peptides aside), the merged AI term decides; without one the former rule (chemotype,
+        source as passed in) is kept. The AI key is the name without species, so species variants share one answer.
+        """
+        length = len(ligand['sequence'])
+        if length and length < PEPTIDE_BELOW:
+            return 'Peptide', 'length (%d aa)' % length, None, None
+        if length > PROTEIN_ABOVE:
+            return 'Protein', 'length (%d aa)' % length, None, None
+        if not length and basis.startswith('SMILES'):
+            return chemotype, source, None, None
+        key = SPECIES_SUFFIX_RE.sub('', ligand['name'])
+        if self.poly_answers is None:    # not merging: former rule, no flag
+            return chemotype, source, key, None
+        answer = self.poly_answers.get(key)
+        if answer is None:
+            flags.add('POLY_AI_MISSING')
+            return chemotype, source, key, None
+        term = (answer.get('ai_term') or '').strip()
+        if term not in POLYPEPTIDE_TERMS:
+            flags.add('POLY_AI_INVALID')
+            return chemotype, source, key, answer
+        flags.add('POLY_AI')
+        return term, 'AI term (%s)' % ('%d aa' % length if length else 'no sequence'), key, answer
+
+    def polypeptide_stats(self):
+        window = [ligand for ligand in self.ligands.values() if ligand['poly_key']]
+        return OrderedDict([
+            ('window', len(window)),
+            ('keys', len({ligand['poly_key'] for ligand in window})),
+            ('ai', sum('POLY_AI' in ligand['flags'] for ligand in window)),
+            ('missing', sum('POLY_AI_MISSING' in ligand['flags'] for ligand in window)),
+            ('invalid', sum('POLY_AI_INVALID' in ligand['flags'] for ligand in window)),
+            ('changed', sum('POLY_CHANGED' in ligand['flags'] for ligand in self.ligands.values())),
+        ])
 
     def flag_rows(self):
         for row in self.rows:
@@ -468,10 +569,64 @@ class Command(BaseCommand):
         return OrderedDict((modality, self.modality_chemotypes[modality])
                            for modality in (SMALL_MOLECULE, POLYPEPTIDE, ION) if modality in self.modality_chemotypes)
 
-    def write_ai_batches(self):
-        """Distinct ligands for the AI pass. The deterministic proposal is left out on purpose."""
-        for path in glob.glob(os.path.join(self.output_dir, 'ai_input_*.json')):
+    @staticmethod
+    def prepare_run_dir(folder):
+        """Folder for new ai_input batches; one that already holds answers is never touched."""
+        if glob.glob(os.path.join(folder, 'ai_output_*.json')):
+            raise CommandError("%s already holds ai_output_*.json answers; pass a new run name" % folder)
+        os.makedirs(folder, exist_ok=True)
+        for path in glob.glob(os.path.join(folder, 'ai_input_*.json')):
             os.remove(path)
+
+    @staticmethod
+    def write_batches(folder, header, records, batch_size):
+        paths = []
+        for start in range(0, len(records), batch_size):
+            path = os.path.join(folder, 'ai_input_%02d.json' % (start // batch_size + 1))
+            with open(path, 'w', encoding='utf-8') as handle:
+                json.dump(OrderedDict(list(header.items()) + [('ligands', records[start:start + batch_size])]),
+                          handle, ensure_ascii=False, indent=1)
+            paths.append(path)
+        return paths
+
+    @staticmethod
+    def read_ai_outputs(folder, key_field):
+        """key -> answer record from every ai_output_NN.json in an AI run folder ({} when there are none)."""
+        answers = {}
+        for path in sorted(glob.glob(os.path.join(folder, 'ai_output_*.json'))):
+            with open(path, encoding='utf-8') as handle:
+                for record in json.load(handle):
+                    answers[record[key_field]] = record
+        return answers
+
+    def write_polypeptide_batches(self, folder):
+        """One record per polypeptide name in the window (species variants together); no rule-based answer."""
+        self.prepare_run_dir(folder)
+        groups = OrderedDict()
+        for ligand in sorted(self.ligands.values(), key=lambda l: l['name'].lower()):
+            if ligand['poly_key']:
+                groups.setdefault(ligand['poly_key'], []).append(ligand)
+        records = []
+        for key, variants in groups.items():
+            sequence = max((ligand['sequence'] for ligand in variants), key=len)
+            records.append(OrderedDict([
+                ('key', key),
+                ('variants', [OrderedDict([('ligand_id', ligand['id']), ('gtp_id', ligand['gtp_id']),
+                                           ('name', ligand['name']),
+                                           ('sequence_length', len(ligand['sequence']) or None)])
+                              for ligand in variants]),
+                ('curated_type', Counter(ligand['type'] for ligand in variants).most_common(1)[0][0]),
+                ('sequence', sequence[:AI_SEQUENCE_PREVIEW] + ('...' if len(sequence) > AI_SEQUENCE_PREVIEW else '')),
+                ('receptors', sorted({'%s (%s)' % (self.receptors[r]['iuphar'], self.receptors[r]['species'])
+                                      for ligand in variants for r in ligand['receptor_ids']})),
+            ]))
+        header = OrderedDict([('task', AI_POLY_TASK), ('terms', list(POLYPEPTIDE_TERMS))])
+        paths = self.write_batches(folder, header, records, AI_POLY_BATCH_SIZE)
+        self.stdout.write("Wrote %d polypeptide AI batches (%d names) to %s" % (len(paths), len(records), folder))
+
+    def write_ai_batches(self, folder):
+        """Distinct ligands for the full AI pass. The deterministic proposal is left out on purpose."""
+        self.prepare_run_dir(folder)
         records = []
         for ligand in self.ligands.values():
             receptors = []
@@ -493,22 +648,13 @@ class Command(BaseCommand):
                 ('smiles', ligand['smiles']),
                 ('receptors', receptors),
             ]))
-        vocabulary = self.ai_vocabulary()
-        for start in range(0, len(records), AI_BATCH_SIZE):
-            batch = records[start:start + AI_BATCH_SIZE]
-            path = os.path.join(self.output_dir, 'ai_input_%02d.json' % (start // AI_BATCH_SIZE + 1))
-            with open(path, 'w', encoding='utf-8') as handle:
-                json.dump(OrderedDict([('vocabulary', vocabulary), ('ligands', batch)]),
-                          handle, ensure_ascii=False, indent=1)
+        paths = self.write_batches(folder, OrderedDict([('vocabulary', self.ai_vocabulary())]), records, AI_BATCH_SIZE)
+        self.stdout.write("Wrote %d full AI batches (%d ligands) to %s" % (len(paths), len(records), folder))
 
-    def merge_ai(self):
-        answers = {}
-        for path in sorted(glob.glob(os.path.join(self.output_dir, 'ai_output_*.json'))):
-            with open(path, encoding='utf-8') as handle:
-                for record in json.load(handle):
-                    answers[int(record['ligand_id'])] = record
+    def merge_ai(self, folder):
+        answers = {int(key): record for key, record in self.read_ai_outputs(folder, 'ligand_id').items()}
         if not answers:
-            raise CommandError("--merge-ai: no ai_output_*.json files in %s" % self.output_dir)
+            raise CommandError("--merge-ai: no ai_output_*.json files in %s" % folder)
 
         stats = Counter(total=len(self.ligands))
         for ligand in self.ligands.values():
@@ -571,6 +717,8 @@ class Command(BaseCommand):
             'PHYSIOLOGICAL LIGANDS': workbook.add_format({'bold': True, 'align': 'center', 'bg_color': '#C5D9F1', 'border': 1}),
             'CLASSIFICATION DEBUG': workbook.add_format({'bold': True, 'align': 'center', 'bg_color': '#FCE4D6', 'border': 1}),
             'AI SUGGESTION': workbook.add_format({'bold': True, 'align': 'center', 'bg_color': '#E2EFDA', 'border': 1}),
+            'AI POLYPEPTIDE TERM': workbook.add_format({'bold': True, 'align': 'center', 'bg_color': '#FFF2CC',
+                                                        'border': 1}),
         }
         self.write_rows_sheet(workbook)
         self.write_ligands_sheet(workbook)
@@ -620,6 +768,21 @@ class Command(BaseCommand):
         return [('AI modality', 14), ('AI chemotype', 16), ('AI confidence', 12),
                 ('AI agrees', 9), ('AI reasoning', 60)]
 
+    def poly_columns(self):
+        return [(LEGACY_COLUMN, 14), ('AI term', 10), ('AI term confidence', 11), ('AI mature length', 9),
+                ('AI term web-checked', 10), ('AI term reasoning', 60)]
+
+    def poly_values(self, ligand):
+        """Former-rule chemotype for every polypeptide; the AI answer for the ones that were looked up."""
+        legacy = (ligand['legacy_chemotype'] or '-') if ligand['modality'] == POLYPEPTIDE else ''
+        ai = ligand['poly_ai']
+        if not ai:
+            return [legacy, '', '', '', '', '']
+        mature = ai.get('mature_length')
+        return [legacy, (ai.get('ai_term') or '').strip(), (ai.get('confidence') or '').strip(),
+                mature if isinstance(mature, (int, float)) and not isinstance(mature, bool) else str(mature or ''),
+                'Y' if ai.get('web_checked') else 'N', (ai.get('reasoning') or '').strip()]
+
     def write_rows_sheet(self, workbook):
         sheet = workbook.add_worksheet('Physiological ligands')
         sections = [
@@ -631,6 +794,7 @@ class Command(BaseCommand):
             ('CLASSIFICATION DEBUG', [('Classified via', 26), ('Receptor modality', 16), ('Receptor chemotype', 22)]
              + self.debug_columns()),
             ('AI SUGGESTION', self.ai_columns()),
+            ('AI POLYPEPTIDE TERM', self.poly_columns()),
         ]
         records = []
         for row in self.rows:
@@ -646,7 +810,7 @@ class Command(BaseCommand):
                 receptor['via'], '; '.join(receptor_modalities), format_tags(receptor['tags']) if receptor['tags'] else '',
                 ligand['basis'], ligand['rdkit_chemotype'], ligand['source'], ligand['votes'],
                 ', '.join(f for f in FLAGS if f in row['flags']), 'Y' if row['review'] else 'N',
-            ] + self.ai_values(ligand))
+            ] + self.ai_values(ligand) + self.poly_values(ligand))
         self.write_table(sheet, sections, records, new_columns=('Ligand modality', 'Ligand chemotype'))
         sheet.freeze_panes(2, 3)
 
@@ -658,6 +822,7 @@ class Command(BaseCommand):
                                        ('Sequence', 22), ('SMILES', 22), ('InChIKey', 16), ('Receptors', 40)]),
             ('CLASSIFICATION DEBUG', self.debug_columns()),
             ('AI SUGGESTION', self.ai_columns()),
+            ('AI POLYPEPTIDE TERM', self.poly_columns()),
         ]
         row_flags = defaultdict(set)
         for row in self.rows:
@@ -673,7 +838,7 @@ class Command(BaseCommand):
                 ligand['inchikey'], ', '.join(receptors),
                 ligand['basis'], ligand['rdkit_chemotype'], ligand['source'], ligand['votes'],
                 ', '.join(f for f in FLAGS if f in flags), 'Y' if any(FLAGS[f][0] for f in flags) else 'N',
-            ] + self.ai_values(ligand))
+            ] + self.ai_values(ligand) + self.poly_values(ligand))
         self.write_table(sheet, sections, records, new_columns=('Ligand modality', 'Ligand chemotype'))
         sheet.freeze_panes(2, 1)
 
@@ -707,6 +872,17 @@ class Command(BaseCommand):
                 sheet.write_string(r, 0, 'Ligands - AI %s' % key)
                 sheet.write_number(r, 1, self.ai_stats[key])
                 r += 1
+        r += 1
+        sheet.write_string(r, 0, 'AI polypeptide term (%d-%d aa or no sequence)' % (PEPTIDE_BELOW, PROTEIN_ABOVE), bold)
+        r += 1
+        labels = OrderedDict([('window', 'Ligands looked up'), ('keys', 'Distinct names (AI keys)'),
+                              ('ai', 'Ligands with an AI term'), ('missing', 'Ligands without an AI term'),
+                              ('invalid', 'Ligands with an invalid AI term'),
+                              ('changed', 'Ligands changed vs the former rule')])
+        for key, value in self.polypeptide_stats().items():
+            sheet.write_string(r, 0, labels[key])
+            sheet.write_number(r, 1, value)
+            r += 1
 
         r += 1
         for c, header in enumerate(['Flag', 'Ligands', 'Rows', 'Review', 'Meaning']):
@@ -751,7 +927,12 @@ class Command(BaseCommand):
             ('', None, None),
             ('2. Chemotype', None, bold),
             ('Ion', 'Always Ion', None),
-            ('Polypeptide', 'Peptide if sequence <= %d aa, else Protein (receptor vote when there is no sequence)' % PEPTIDE_MAX_LEN, None),
+            ('Polypeptide', '< %d aa -> Peptide; > %d aa -> Protein; %d-%d aa, or no sequence, -> the term the ligand '
+                            'is most commonly called by (AI lookup, AI POLYPEPTIDE TERM columns; species variants share '
+                            'one answer). SMILES-only peptides: receptor vote. Former rule, kept as "%s": <= %d aa '
+                            'Peptide, else Protein, receptor vote without a sequence' % (
+                                PEPTIDE_BELOW, PROTEIN_ABOVE, PEPTIDE_BELOW, PROTEIN_ABOVE, LEGACY_COLUMN,
+                                LEGACY_PEPTIDE_MAX_LEN), None),
             ('Small molecule', 'Majority vote of its receptors with the same modality; RDKit rule when no receptor votes', None),
             ('Receptor vote', 'One vote per receptor family (human/rat/mouse orthologs vote once); orphans never vote; '
                               'multi-tag receptors use the tag with the ligand modality, order 1 first; ties -> RDKit if tied, else alphabetical', None),
@@ -765,7 +946,7 @@ class Command(BaseCommand):
             ('Small molecule', 'Small molecule (an Ion is reported as TYPE≠MOD:ION - Type has no Ion entry)', None),
             ('Lipid', 'Small molecule, chemotype Lipid or Steroid', None),
             ('Peptide', 'Polypeptide (chemotype Protein only reported as info TYPE≠CHEM)', None),
-            ('Protein', 'Polypeptide, chemotype Protein (Peptide-length sequence -> TYPE≠LEN)', None),
+            ('Protein', 'Polypeptide, chemotype Protein (chemotype Peptide -> TYPE≠LEN)', None),
             ('Unknown / None', 'Not checked', None),
             ('', None, None),
             ('5. Vocabulary (modality -> chemotypes)', None, bold),

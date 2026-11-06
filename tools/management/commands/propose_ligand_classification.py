@@ -327,7 +327,8 @@ class Command(BaseCommand):
         out.cell(legend_row, 1, "Receptor status: the first of Principal (GtP), Proposed (GtP), Proposed principal "
                                 "(curation proposal) the receptor has; Unclassified = none of them.")
         out.cell(legend_row + 1, 1, "Sheet '%s', GtP classification: yellow = stated by GtP (changed), blue = from a "
-                                    "GtP potency statement, green = curation proposal (see Proposal basis)." % sheet.title)
+                                    "GtP potency statement, green = curation proposal (see Proposal basis); Modality: "
+                                    "purple = Peptide/Protein changed by the common-name rule." % sheet.title)
 
         header_row = legend_row + 3
         headers = [(sheet.cell(2, col).value, sheet.column_dimensions[get_column_letter(col)].width or 12)

@@ -56,10 +56,11 @@ C_UNIPROT, C_GENE, C_FAMILY, C_MODALITY, C_MODALITY_ORDER, C_CATEGORY, C_LAST = 
 
 ORPHAN = 'Orphan'
 HUMAN = 'Human'
-# Same class under its current label (only the stated aa cutoff changed) -> reported as "Same"
+# Same class under its current label (the aa cutoff is no longer part of the label: < 40 aa Peptide, > 100 aa
+# Protein, in between by common name, see export_physiological_ligands_classification) -> reported as "Same"
 RECEPTOR_EQUIVALENT = {
-    'Peptide (<50 AAs)': 'Peptide (≤60 AAs)',
-    'Protein (>50 AAs)': 'Protein (>60 AAs)',
+    'Peptide (<50 AAs)': 'Peptide',
+    'Protein (>50 AAs)': 'Protein',
 }
 # Labels that are no longer in the scheme -> reported as "Nomenclature only"
 RECEPTOR_RENAME = dict(RECEPTOR_EQUIVALENT, **{

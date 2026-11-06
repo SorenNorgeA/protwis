@@ -17,7 +17,10 @@ Rows without any GtP evidence are left blank (never "None").
 
 A second sheet, "Receptors", collapses the rows per receptor (UniProt + species) with its principal ligand(s),
 to show which receptors still have no Principal/Proposed ligand. The Modality column is renamed to the receptor
-classification nomenclature (MODALITY_RENAME); classify_receptor_modality builds on this output.
+classification nomenclature (MODALITY_RENAME). For Polypeptide rows, Peptide/Protein is taken from the ligand
+export (export_physiological_ligands_classification: < 40 aa Peptide, > 100 aa Protein, in between by common name),
+unless the cell was edited by hand (it differs from the export's former <= 60 aa value): then it is kept and flagged
+when it disagrees. propose_ligand_classification and classify_receptor_modality build on this output.
 
 The source workbook is not modified; the result is written next to it with "_gtp" appended.
 
@@ -30,6 +33,8 @@ from django.conf import settings
 from common.models import WebLink
 from common.tools import get_or_create_url_cache
 from protein.models import Protein
+from tools.management.commands.export_physiological_ligands_classification import (
+    OUTPUT_XLSX as LIGAND_EXPORT_XLSX, LEGACY_COLUMN)
 
 from collections import Counter, OrderedDict, defaultdict
 from copy import copy
@@ -58,12 +63,11 @@ FIRST_DATA_ROW = 3
 # 1-based columns of the source sheet
 COL_UNIPROT, COL_SPECIES, COL_LIGAND, COL_GTP_ID, COL_STATUS, COL_POTENCY, COL_LAST = 3, 6, 7, 9, 10, 11, 13
 RECEPTOR_COLUMNS = 6    # Class .. Species, copied to the Receptors sheet
-COL_MODALITY_CATEGORY, COL_MODALITY = 12, 13
+COL_GPCRDB_ID, COL_MODALITY_CATEGORY, COL_MODALITY = 8, 12, 13
+POLYPEPTIDE = 'Polypeptide'
 
-# Ligand modality -> the receptor classification nomenclature (Polypeptide split kept at <= 60 aa)
+# Ligand modality -> the receptor classification nomenclature (Peptide/Protein keep their plain names)
 MODALITY_RENAME = {
-    'Peptide': 'Peptide (≤60 AAs)',
-    'Protein': 'Protein (>60 AAs)',
     'Lipid': 'Small mol – Lipid',
     'Monoamine': 'Small mol – Monoamine',
     'Other small molecule': 'Small mol – Other',
@@ -80,6 +84,7 @@ NEW_COLUMNS = [
 EXPLICIT_FILL = PatternFill('solid', fgColor='FFF2CC')     # changed, GtP states it outright
 SUGGESTED_FILL = PatternFill('solid', fgColor='DDEBF7')    # filled from a GtP potency statement
 UNCLASSIFIED_FILL = PatternFill('solid', fgColor='F8CBAD')
+POLYPEPTIDE_FILL = PatternFill('solid', fgColor='E4DFEC')  # Peptide/Protein changed by the common-name rule
 
 RECEPTOR_SHEET = 'Receptors'
 RECEPTOR_HEADERS = [
@@ -229,6 +234,8 @@ class Command(BaseCommand):
                             help='Annotated copy (default: %(default)s)')
         parser.add_argument('--endogenous-csv', help='Local endogenous_ligand_detailed.csv instead of the GtP download')
         parser.add_argument('--interactions-csv', help='Local interactions.csv instead of the GtP download')
+        parser.add_argument('--ligand-classification', default=os.path.join(DATA_DIR, LIGAND_EXPORT_XLSX),
+                            help='Ligand export with the Peptide/Protein terms (default: %(default)s)')
 
     def handle(self, *args, **options):
         if os.path.abspath(options['input']) == os.path.abspath(options['output']):
@@ -238,10 +245,11 @@ class Command(BaseCommand):
         interactions = self.read_gtp(options['interactions_csv'] or get_or_create_url_cache(GTP_INTERACTIONS_URL, GTP_CACHE_TTL))
         targets = self.label_targets(endogenous)
         actions = self.gtp_actions(interactions)
+        polypeptide_terms = self.read_polypeptide_terms(options['ligand_classification'])
 
         workbook = openpyxl.load_workbook(options['input'])
         sheet = workbook.active
-        stats, records = self.annotate(sheet, targets, actions)
+        stats, records = self.annotate(sheet, targets, actions, polypeptide_terms)
         receptor_counts, unclassified = self.write_receptor_sheet(workbook, sheet, records)
         workbook.save(options['output'])
 
@@ -253,6 +261,11 @@ class Command(BaseCommand):
         for basis, count in stats['suggestions'].most_common():
             self.stdout.write("  %-32s %5d" % (basis, count))
         self.stdout.write("No GtP evidence (blank): %d" % stats['no_evidence'])
+        self.stdout.write("Polypeptide rows, Modality (Peptide/Protein):")
+        for outcome, count in sorted(stats['polypeptide'].items()):
+            self.stdout.write("  %-34s %5d" % (outcome, count))
+        for ligand, curated, new in stats['hand_edited_disagree']:
+            self.stdout.write("  hand-edited, kept: %-40s %s (new rule: %s)" % (ligand, curated, new))
         self.stdout.write("Review flags:")
         for flag, count in stats['flags'].most_common():
             self.stdout.write("  %-28s %5d" % (flag, count))
@@ -299,6 +312,50 @@ class Command(BaseCommand):
         return targets
 
     @staticmethod
+    def read_polypeptide_terms(path):
+        """GPCRdb ligand id -> (Peptide/Protein, value under the former <= 60 aa rule) from the export's Ligands sheet."""
+        try:
+            sheet = openpyxl.load_workbook(path, read_only=True)['Ligands']
+        except (IOError, OSError, KeyError) as msg:
+            raise CommandError("Cannot read the Ligands sheet of %s (run export_physiological_ligands_classification "
+                               "--merge-ai first): %s" % (path, msg))
+        rows = sheet.iter_rows(min_row=2, values_only=True)
+        header = list(next(rows))
+        try:
+            cols = [header.index(name) for name in ('GPCRdb ID', 'Ligand modality', 'Ligand chemotype', LEGACY_COLUMN)]
+        except ValueError as msg:
+            raise CommandError("%s: unexpected Ligands sheet header (%s)" % (path, msg))
+        terms = {}
+        for row in rows:
+            ligand_id, modality, chemotype, legacy = (row[col] for col in cols)
+            if modality == POLYPEPTIDE and ligand_id is not None:
+                terms[int(ligand_id)] = (chemotype or None, None if legacy in (None, '', '-') else legacy)
+        return terms
+
+    @staticmethod
+    def apply_polypeptide_term(cell, ligand_id, terms, stats, ligand):
+        """Set Peptide/Protein from the export's common-name rule unless the cell was edited by hand; review flags."""
+        term = terms.get(int(ligand_id)) if str(ligand_id or '').strip().isdigit() else None
+        if term is None:
+            stats['polypeptide']['not in the ligand export'] += 1
+            return ['NOT_IN_LIGAND_EXPORT']
+        new, legacy = term
+        curated = cell.value
+        if curated != legacy:    # edited by hand: the user's value stays
+            stats['polypeptide']['hand-edited, kept'] += 1
+            if new and curated != new:
+                stats['hand_edited_disagree'].append((ligand, curated, new))
+                return ['CURATED≠POLY_TERM']
+            return []
+        if new and new != curated:
+            cell.value = new
+            cell.fill = POLYPEPTIDE_FILL
+            stats['polypeptide']['%s -> %s' % (curated, new)] += 1
+            return ['POLY_TERM_CHANGED']
+        stats['polypeptide']['unchanged'] += 1
+        return []
+
+    @staticmethod
     def gtp_actions(interactions):
         """(target id, ligand id) -> 'Agonist (Full agonist); ...' from interactions.csv."""
         actions = defaultdict(list)
@@ -328,9 +385,10 @@ class Command(BaseCommand):
 
     # ------------------------------------------------------------------ workbook
 
-    def annotate(self, sheet, targets, actions):
+    def annotate(self, sheet, targets, actions, polypeptide_terms):
         receptor_targets = self.receptor_targets()
-        stats = {'rows': 0, 'transitions': Counter(), 'suggestions': Counter(), 'no_evidence': 0, 'flags': Counter()}
+        stats = {'rows': 0, 'transitions': Counter(), 'suggestions': Counter(), 'no_evidence': 0, 'flags': Counter(),
+                 'polypeptide': Counter(), 'hand_edited_disagree': []}
         records = []
 
         first_new = COL_LAST + 1
@@ -374,6 +432,9 @@ class Command(BaseCommand):
 
             modality_cell = sheet.cell(row, COL_MODALITY)
             modality_cell.value = MODALITY_RENAME.get(modality_cell.value, modality_cell.value)
+            if sheet.cell(row, COL_MODALITY_CATEGORY).value == POLYPEPTIDE:
+                flags.extend(self.apply_polypeptide_term(modality_cell, sheet.cell(row, COL_GPCRDB_ID).value,
+                                                         polypeptide_terms, stats, sheet.cell(row, COL_LIGAND).value))
 
             final = status or suggestion
             if previous == PRINCIPAL and final != PRINCIPAL:
