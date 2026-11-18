@@ -14,7 +14,8 @@ The receptor classification only covers human receptors; rat/mouse receptors tak
 human ortholog (GPCRdb puts orthologs in the same receptor-level ProteinFamily), or from their human
 paralogs (parent receptor family) when no human ortholog exists.
 
-Debug columns (far right) flag every disagreement with the receptor and with the curated Type.
+The Review column (row colour) compares the ligand modality/chemotype with the AI annotations: polypeptides with an
+AI polypeptide term only against that term (orange when different), every other ligand against the full AI run (red).
 
 AI runs live in ai_runs/<run>/: ai_input_NN.json is written here, ai_output_NN.json by Claude Code subagents.
   - full run (AI SUGGESTION columns): every ligand classified into the vocabulary;
@@ -47,12 +48,30 @@ from rdkit.Chem.MolStandardize import rdMolStandardize
 RDLogger.DisableLog('rdApp.*')
 
 OUTPUT_DIR = os.path.join(os.path.abspath(settings.BASE_DIR), 'data', 'ligand_classification')
-OUTPUT_XLSX = 'physiological_ligands_classification.xlsx'
+OUTPUT_XLSX = 'physiological_ligands_classification_v2.xlsx'    # v2: no Type / classification-debug columns
 
 PEPTIDE_BELOW = 40      # < 40 aa -> Peptide
 PROTEIN_ABOVE = 100     # > 100 aa -> Protein; 40-100 aa (and no sequence) -> AI common-name term
 LEGACY_PEPTIDE_MAX_LEN = 60    # former length-only rule (<= 60 aa Peptide), kept for the comparison column
-LEGACY_COLUMN = 'Chemotype (≤%d aa rule)' % LEGACY_PEPTIDE_MAX_LEN
+LEGACY_COLUMN = 'Previous modality (old ≤%d aa rule)' % LEGACY_PEPTIDE_MAX_LEN
+# Output terminology = the receptor classification's "Modality category" / "Modality". The fine-grained chemotypes
+# used internally (receptor vote / RDKit vocabulary) collapse as in the curated ligand workbook; any other small
+# molecule (Nucleotide, Steroid, Melatonin, Alicarboxylic acid, ..., or unresolved) is Small mol – Other.
+COL_CATEGORY, COL_MODALITY = 'Modality category', 'Modality'
+SMALL_MOL_OTHER = 'Small mol – Other'
+POLYSACCHARIDE = 'Polysaccharide'
+MODALITY_OF_CHEMOTYPE = {
+    'Ion': 'Small mol – Monoatomic ion',
+    'Amino acid': 'Small mol – Amino acid',
+    'Lipid': 'Small mol – Lipid',
+    'Aminergic': 'Small mol – Monoamine',
+    'Peptide': 'Peptide',
+    'Protein': 'Protein',
+    POLYSACCHARIDE: POLYSACCHARIDE,
+}
+# Review column: red = a review flag; orange = chemotype differs from the AI polypeptide term, which outranks the
+# first AI run and the debug flags (a polypeptide agreeing with it is never shaded)
+REVIEW, REVIEW_POLY, NO_REVIEW = 'Y', 'AI term', 'N'
 POLYPEPTIDE_TERMS = ('Peptide', 'Protein')
 LONG_CHAIN_N = 7       # acyclic carbon chain length that makes a small molecule a Lipid
 ALICARB_MAX_C = 8       # max carbons of an Alicarboxylic acid (keeps 3-hydroxyoctanoic acid, HCAR3)
@@ -164,6 +183,15 @@ def clean_text(text):
     return html.unescape(TAG_RE.sub('', text or '')).strip()
 
 
+def receptor_terms(modality, chemotype):
+    """(Modality category, Modality) in the receptor classification terms for an internal modality/chemotype."""
+    if chemotype == POLYSACCHARIDE:
+        return POLYSACCHARIDE, POLYSACCHARIDE
+    if modality in (SMALL_MOLECULE, ION):
+        return SMALL_MOLECULE, MODALITY_OF_CHEMOTYPE.get(chemotype, SMALL_MOL_OTHER)
+    return modality or '', MODALITY_OF_CHEMOTYPE.get(chemotype, chemotype or '')
+
+
 def strip_receptors(name):
     return RECEPTORS_SUFFIX_RE.sub('', name or '').strip()
 
@@ -215,12 +243,6 @@ def rdkit_chemotype(mol):
     return None
 
 
-def format_tags(tags):
-    if len(tags) == 1:
-        return tags[0]['chemotype']
-    return '; '.join('%s (%s)' % (t['chemotype'], t['chemotype_order'] or '-') for t in tags)
-
-
 def format_votes(votes):
     return ', '.join('%s %d' % (chem, n) for chem, n in votes.most_common())
 
@@ -257,6 +279,7 @@ class Command(BaseCommand):
         self.load_receptor_classification()
         self.poly_answers = self.read_ai_outputs(poly_run_dir, 'key') if options['merge_ai'] else None
         self.classify_ligands()
+        self.share_polypeptide_terms()
         self.flag_rows()
         if options['full_ai_batches']:
             self.write_ai_batches(full_run_dir)
@@ -269,9 +292,9 @@ class Command(BaseCommand):
         except (IOError, OSError) as msg:
             raise CommandError("Could not write %s (is it open in Excel?): %s" % (path, msg))
 
-        review_rows = sum(1 for row in self.rows if row['review'])
-        self.stdout.write("Wrote %s: %d rows, %d ligands, %d rows for review" % (
-            path, len(self.rows), len(self.ligands), review_rows))
+        marks = Counter(row['review'] for row in self.rows)
+        self.stdout.write("Wrote %s: %d rows, %d ligands; review: %d red, %d orange (AI term)" % (
+            path, len(self.rows), len(self.ligands), marks[REVIEW], marks[REVIEW_POLY]))
         if self.ai_stats:
             self.stdout.write("AI merge: %(merged)d/%(total)d ligands merged, %(missing)d missing, "
                               "%(invalid)d invalid, %(disagree)d disagree" % self.ai_stats)
@@ -529,6 +552,29 @@ class Command(BaseCommand):
         flags.add('POLY_AI')
         return term, 'AI term (%s)' % ('%d aa' % length if length else 'no sequence'), key, answer
 
+    def share_polypeptide_terms(self):
+        """Species variants share one AI term: a variant outside the window follows its looked-up siblings.
+
+        This catches stored sequences that are placeholders, e.g. FSH (Human) is stored as 9 residues while the
+        mouse/rat FSH (no sequence) were looked up as Protein.
+        """
+        answered = {ligand['poly_key']: ligand['poly_ai'] for ligand in self.ligands.values()
+                    if ligand['poly_key'] and ligand['poly_ai']}
+        for ligand in self.ligands.values():
+            key = SPECIES_SUFFIX_RE.sub('', ligand['name'])
+            if ligand['modality'] != POLYPEPTIDE or ligand['poly_key'] or key not in answered:
+                continue
+            term = (answered[key].get('ai_term') or '').strip()
+            if term not in POLYPEPTIDE_TERMS:
+                continue
+            ligand.update(poly_key=key, poly_ai=answered[key])
+            ligand['flags'].add('POLY_AI')
+            if term != ligand['chemotype']:
+                ligand['chemotype'] = term
+                ligand['source'] = 'AI term (species variant, %d aa stored)' % len(ligand['sequence'])
+            if term != ligand['legacy_chemotype']:
+                ligand['flags'].add('POLY_CHANGED')
+
     def polypeptide_stats(self):
         window = [ligand for ligand in self.ligands.values() if ligand['poly_key']]
         return OrderedDict([
@@ -559,9 +605,22 @@ class Command(BaseCommand):
             row['flags'] = flags
             self.update_review(row)
 
+    def update_review(self, row):
+        row['review'] = self.review_mark(self.ligands[row['ligand_id']])
+
     @staticmethod
-    def update_review(item):
-        item['review'] = any(FLAGS[flag][0] for flag in item['flags'])
+    def review_mark(ligand):
+        """Agreement of the ligand modality/chemotype with the AI annotations.
+
+        A ligand with an AI polypeptide term is judged on that term only (REVIEW_POLY when the chemotype differs);
+        any other ligand on the full AI run (REVIEW when its modality/chemotype differs or it has no answer).
+        """
+        term = ((ligand['poly_ai'] or {}).get('ai_term') or '').strip()
+        if term in POLYPEPTIDE_TERMS:
+            return NO_REVIEW if ligand['chemotype'] == term else REVIEW_POLY
+        if ligand['ai'] is None:
+            return REVIEW if 'AI_MISSING' in ligand['flags'] else NO_REVIEW
+        return NO_REVIEW if ligand['ai']['agrees'] == 'Y' else REVIEW
 
     # ------------------------------------------------------------------ AI
 
@@ -665,9 +724,11 @@ class Command(BaseCommand):
                 continue
             modality = (answer.get('ai_modality') or '').strip()
             chemotype = (answer.get('ai_chemotype') or '').strip()
-            agrees = modality == ligand['modality'] and chemotype == ligand['chemotype']
+            # compared in the receptor classification terms (Aminergic = Monoamine, Nucleotide = Other, ...)
+            terms = receptor_terms(modality, chemotype)
+            agrees = terms == receptor_terms(ligand['modality'], ligand['chemotype'])
             ligand['ai'] = {
-                'modality': modality, 'chemotype': chemotype,
+                'modality': modality, 'chemotype': chemotype, 'terms': terms,
                 'confidence': (answer.get('confidence') or '').strip(),
                 'agrees': 'Y' if agrees else 'N',
                 'reasoning': (answer.get('reasoning') or '').strip(),
@@ -696,8 +757,7 @@ class Command(BaseCommand):
         if not ai:
             return ['', '', '', '', '']
         show_reasoning = ai['agrees'] == 'N' or bool(ligand['flags'] & WEAK_SOURCE_FLAGS)
-        return [ai['modality'], ai['chemotype'], ai['confidence'], ai['agrees'],
-                ai['reasoning'] if show_reasoning else '']
+        return list(ai['terms']) + [ai['confidence'], ai['agrees'], ai['reasoning'] if show_reasoning else '']
 
     # --------------------------------------------------------------- excel
 
@@ -710,12 +770,12 @@ class Command(BaseCommand):
             'header': workbook.add_format({'bold': True, 'text_wrap': True, 'valign': 'top',
                                            'bottom': 1, 'bg_color': '#F2F2F2'}),
             'review': workbook.add_format({'bg_color': '#FADBD8'}),
+            'review_poly': workbook.add_format({'bg_color': '#F8CBAD'}),
             'new': workbook.add_format({'bold': True, 'bg_color': '#E8F1FB'}),
         }
         self.section_formats = {
             'RECEPTOR': workbook.add_format({'bold': True, 'align': 'center', 'bg_color': '#D9D9D9', 'border': 1}),
             'PHYSIOLOGICAL LIGANDS': workbook.add_format({'bold': True, 'align': 'center', 'bg_color': '#C5D9F1', 'border': 1}),
-            'CLASSIFICATION DEBUG': workbook.add_format({'bold': True, 'align': 'center', 'bg_color': '#FCE4D6', 'border': 1}),
             'AI SUGGESTION': workbook.add_format({'bold': True, 'align': 'center', 'bg_color': '#E2EFDA', 'border': 1}),
             'AI POLYPEPTIDE TERM': workbook.add_format({'bold': True, 'align': 'center', 'bg_color': '#FFF2CC',
                                                         'border': 1}),
@@ -756,16 +816,15 @@ class Command(BaseCommand):
         last_row = max(len(records) + 1, 2)
         review_col = xl_col_to_name(headers.index('Review'))
         sheet.conditional_format(2, 0, last_row, len(headers) - 1, {
-            'type': 'formula', 'criteria': '=$%s3="Y"' % review_col, 'format': self.formats['review']})
+            'type': 'formula', 'criteria': '=$%s3="%s"' % (review_col, REVIEW), 'format': self.formats['review']})
+        sheet.conditional_format(2, 0, last_row, len(headers) - 1, {
+            'type': 'formula', 'criteria': '=$%s3="%s"' % (review_col, REVIEW_POLY),
+            'format': self.formats['review_poly']})
         sheet.autofilter(1, 0, last_row, len(headers) - 1)
         sheet.set_row(1, 30)
 
-    def debug_columns(self):
-        return [('Structure basis', 18), ('RDKit chemotype', 16), ('Chemotype source', 18),
-                ('Receptor votes', 22), ('Flags', 34), ('Review', 8)]
-
     def ai_columns(self):
-        return [('AI modality', 14), ('AI chemotype', 16), ('AI confidence', 12),
+        return [('AI modality category', 14), ('AI modality', 22), ('AI confidence', 12),
                 ('AI agrees', 9), ('AI reasoning', 60)]
 
     def poly_columns(self):
@@ -789,10 +848,8 @@ class Command(BaseCommand):
             ('RECEPTOR', [('Class', 8), ('Receptor family', 22), ('UniProt', 10), ('IUPHAR', 18),
                           ('Gene', 10), ('Species', 9)]),
             ('PHYSIOLOGICAL LIGANDS', [('Ligand', 30), ('GPCRdb ID', 10), ('GtP ID', 8), ('GtP classification', 12),
-                                       ('Potency ranking', 9), ('Ligand modality', 15), ('Ligand chemotype', 18),
-                                       ('Type', 14), ('Sequence', 22), ('SMILES', 22), ('InChIKey', 16)]),
-            ('CLASSIFICATION DEBUG', [('Classified via', 26), ('Receptor modality', 16), ('Receptor chemotype', 22)]
-             + self.debug_columns()),
+                                       ('Potency ranking', 9), (COL_CATEGORY, 15), (COL_MODALITY, 24),
+                                       ('Review', 8), ('Sequence', 22), ('SMILES', 22), ('InChIKey', 16)]),
             ('AI SUGGESTION', self.ai_columns()),
             ('AI POLYPEPTIDE TERM', self.poly_columns()),
         ]
@@ -800,46 +857,36 @@ class Command(BaseCommand):
         for row in self.rows:
             ligand = self.ligands[row['ligand_id']]
             receptor = self.receptors[row['receptor_id']]
-            receptor_modalities = OrderedDict((t['modality'], None) for t in receptor['tags'])
             records.append([
                 receptor['class'], receptor['receptor_family'], receptor['uniprot'], receptor['iuphar'],
                 receptor['gene'], receptor['species'],
                 ligand['name'], ligand['id'], ligand['gtp_id'], row['status'], row['potency'],
-                ligand['modality'], ligand['chemotype'], ligand['type'],
-                ligand['sequence'], ligand['smiles'], ligand['inchikey'],
-                receptor['via'], '; '.join(receptor_modalities), format_tags(receptor['tags']) if receptor['tags'] else '',
-                ligand['basis'], ligand['rdkit_chemotype'], ligand['source'], ligand['votes'],
-                ', '.join(f for f in FLAGS if f in row['flags']), 'Y' if row['review'] else 'N',
+            ] + list(receptor_terms(ligand['modality'], ligand['chemotype'])) + [
+                row['review'], ligand['sequence'], ligand['smiles'], ligand['inchikey'],
             ] + self.ai_values(ligand) + self.poly_values(ligand))
-        self.write_table(sheet, sections, records, new_columns=('Ligand modality', 'Ligand chemotype'))
+        self.write_table(sheet, sections, records, new_columns=(COL_CATEGORY, COL_MODALITY))
         sheet.freeze_panes(2, 3)
 
     def write_ligands_sheet(self, workbook):
         sheet = workbook.add_worksheet('Ligands')
         sections = [
-            ('PHYSIOLOGICAL LIGANDS', [('Ligand', 30), ('GPCRdb ID', 10), ('GtP ID', 8), ('Ligand modality', 15),
-                                       ('Ligand chemotype', 18), ('Type', 14), ('Sequence length', 9),
+            ('PHYSIOLOGICAL LIGANDS', [('Ligand', 30), ('GPCRdb ID', 10), ('GtP ID', 8), (COL_CATEGORY, 15),
+                                       (COL_MODALITY, 24), ('Review', 8), ('Sequence length', 9),
                                        ('Sequence', 22), ('SMILES', 22), ('InChIKey', 16), ('Receptors', 40)]),
-            ('CLASSIFICATION DEBUG', self.debug_columns()),
             ('AI SUGGESTION', self.ai_columns()),
             ('AI POLYPEPTIDE TERM', self.poly_columns()),
         ]
-        row_flags = defaultdict(set)
-        for row in self.rows:
-            row_flags[row['ligand_id']] |= row['flags']
         records = []
         for ligand in sorted(self.ligands.values(), key=lambda l: l['name'].lower()):
-            flags = row_flags[ligand['id']] | ligand['flags']
             receptors = sorted({'%s (%s)' % (self.receptors[r]['uniprot'], self.receptors[r]['species'])
                                 for r in ligand['receptor_ids']})
             records.append([
-                ligand['name'], ligand['id'], ligand['gtp_id'], ligand['modality'], ligand['chemotype'],
-                ligand['type'], len(ligand['sequence']) or '', ligand['sequence'], ligand['smiles'],
+                ligand['name'], ligand['id'], ligand['gtp_id'],
+            ] + list(receptor_terms(ligand['modality'], ligand['chemotype'])) + [
+                self.review_mark(ligand), len(ligand['sequence']) or '', ligand['sequence'], ligand['smiles'],
                 ligand['inchikey'], ', '.join(receptors),
-                ligand['basis'], ligand['rdkit_chemotype'], ligand['source'], ligand['votes'],
-                ', '.join(f for f in FLAGS if f in flags), 'Y' if any(FLAGS[f][0] for f in flags) else 'N',
             ] + self.ai_values(ligand) + self.poly_values(ligand))
-        self.write_table(sheet, sections, records, new_columns=('Ligand modality', 'Ligand chemotype'))
+        self.write_table(sheet, sections, records, new_columns=(COL_CATEGORY, COL_MODALITY))
         sheet.freeze_panes(2, 1)
 
     def write_summary_sheet(self, workbook):
@@ -857,7 +904,10 @@ class Command(BaseCommand):
             ('Rows (ligand-receptor pairs)', len(self.rows)),
             ('Distinct ligands', len(self.ligands)),
             ('Distinct receptors', len(self.receptors)),
-            ('Rows needing review', sum(1 for row in self.rows if row['review'])),
+            ('Rows for review - red (differs from the AI suggestion)',
+             sum(1 for row in self.rows if row['review'] == REVIEW)),
+            ('Rows for review - orange (differs from the AI polypeptide term)',
+             sum(1 for row in self.rows if row['review'] == REVIEW_POLY)),
         ] + [('Rows - %s' % sp, n) for sp, n in species.most_common()] \
           + [('Receptors classified via %s' % v, n) for v, n in via.most_common()]
         for label, value in totals:
@@ -885,26 +935,13 @@ class Command(BaseCommand):
             r += 1
 
         r += 1
-        for c, header in enumerate(['Flag', 'Ligands', 'Rows', 'Review', 'Meaning']):
+        for c, header in enumerate(['%s / %s' % (COL_CATEGORY, COL_MODALITY), 'Ligands', 'Rows']):
             sheet.write_string(r, c, header, self.formats['header'])
         r += 1
-        for flag, (review, description) in FLAGS.items():
-            ligands = {row['ligand_id'] for row in self.rows if flag in row['flags']}
-            rows = sum(1 for row in self.rows if flag in row['flags'])
-            sheet.write_string(r, 0, flag)
-            sheet.write_number(r, 1, len(ligands))
-            sheet.write_number(r, 2, rows)
-            sheet.write_string(r, 3, 'Y' if review else 'N (info)')
-            sheet.write_string(r, 4, description)
-            r += 1
-
-        r += 1
-        for c, header in enumerate(['Ligand modality / chemotype', 'Ligands', 'Rows']):
-            sheet.write_string(r, c, header, self.formats['header'])
-        r += 1
-        ligand_counts = Counter((l['modality'] or '-', l['chemotype'] or '(unresolved)') for l in self.ligands.values())
-        row_counts = Counter((self.ligands[row['ligand_id']]['modality'] or '-',
-                              self.ligands[row['ligand_id']]['chemotype'] or '(unresolved)') for row in self.rows)
+        terms = {l['id']: tuple(t or '-' for t in receptor_terms(l['modality'], l['chemotype']))
+                 for l in self.ligands.values()}
+        ligand_counts = Counter(terms.values())
+        row_counts = Counter(terms[row['ligand_id']] for row in self.rows)
         for (modality, chemotype), n in sorted(ligand_counts.items(), key=lambda x: (x[0][0], -x[1])):
             sheet.write_string(r, 0, '%s / %s' % (modality, chemotype))
             sheet.write_number(r, 1, n)
@@ -942,15 +979,20 @@ class Command(BaseCommand):
             ('3. RDKit structural chemotype (ordered, first match wins)', None, bold),
         ] + [(chem, rule, None) for chem, rule in RDKIT_RULES_DOC] + [
             ('', None, None),
-            ('4. Curated Type -> compatible modality', None, bold),
-            ('Small molecule', 'Small molecule (an Ion is reported as TYPE≠MOD:ION - Type has no Ion entry)', None),
-            ('Lipid', 'Small molecule, chemotype Lipid or Steroid', None),
-            ('Peptide', 'Polypeptide (chemotype Protein only reported as info TYPE≠CHEM)', None),
-            ('Protein', 'Polypeptide, chemotype Protein (chemotype Peptide -> TYPE≠LEN)', None),
-            ('Unknown / None', 'Not checked', None),
+            ('4. Output terms: Modality category / Modality (receptor classification terminology)', None, bold),
+            ('Small molecule', 'Small mol – Monoamine (Aminergic), Small mol – Amino acid, Small mol – Lipid, Small mol – '
+                               'Monoatomic ion (Ion), Small mol – Other (any other chemotype: Nucleotide, Steroid, '
+                               'Melatonin, Alicarboxylic acid, ..., or unresolved)', None),
+            ('Polypeptide', 'Peptide, Protein', None),
+            (POLYSACCHARIDE, POLYSACCHARIDE, None),
             ('', None, None),
-            ('5. Vocabulary (modality -> chemotypes)', None, bold),
-        ] + [(modality, ', '.join(chems), None) for modality, chems in self.ai_vocabulary().items()]
+            ('5. Row colours (Review column)', None, bold),
+            ('Orange ("%s")' % REVIEW_POLY, 'Polypeptide with an AI polypeptide term: the Modality differs from it. '
+                                            'This term outranks the AI suggestion, which is then ignored', None),
+            ('Red ("%s")' % REVIEW, 'Any other ligand: its Modality category / Modality differs from the AI suggestion '
+                                    '(compared in the terms above), or the AI suggestion has no answer for it', None),
+            ('No colour ("%s")' % NO_REVIEW, 'Agrees with the AI annotation that applies', None),
+        ]
         for r, (label, text, cell_format) in enumerate(lines):
             if label:
                 sheet.write_string(r, 0, label, cell_format)

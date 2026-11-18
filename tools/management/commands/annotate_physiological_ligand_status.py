@@ -34,7 +34,7 @@ from common.models import WebLink
 from common.tools import get_or_create_url_cache
 from protein.models import Protein
 from tools.management.commands.export_physiological_ligands_classification import (
-    OUTPUT_XLSX as LIGAND_EXPORT_XLSX, LEGACY_COLUMN)
+    OUTPUT_XLSX as LIGAND_EXPORT_XLSX, LEGACY_COLUMN, COL_CATEGORY as EXPORT_CATEGORY, COL_MODALITY as EXPORT_MODALITY)
 
 from collections import Counter, OrderedDict, defaultdict
 from copy import copy
@@ -322,7 +322,7 @@ class Command(BaseCommand):
         rows = sheet.iter_rows(min_row=2, values_only=True)
         header = list(next(rows))
         try:
-            cols = [header.index(name) for name in ('GPCRdb ID', 'Ligand modality', 'Ligand chemotype', LEGACY_COLUMN)]
+            cols = [header.index(name) for name in ('GPCRdb ID', EXPORT_CATEGORY, EXPORT_MODALITY, LEGACY_COLUMN)]
         except ValueError as msg:
             raise CommandError("%s: unexpected Ligands sheet header (%s)" % (path, msg))
         terms = {}
